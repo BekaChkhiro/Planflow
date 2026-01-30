@@ -1,4 +1,0 @@
-[build]
-builder = "dockerfile"
-dockerfilePath = "Dockerfile.api"
-watchPatterns = ["/**"]

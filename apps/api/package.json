@@ -1,0 +1,48 @@
+{
+  "name": "@planflow/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "db:check": "tsx -e \"import('dotenv/config').then(() => import('./src/db/index.js').then(m => m.checkDbConnection().then(console.log)))\"",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "test:perf": "k6 run perf/scenarios/smoke.js",
+    "test:perf:load": "k6 run perf/scenarios/load.js",
+    "test:perf:stress": "k6 run perf/scenarios/stress.js",
+    "perf:seed": "tsx perf/scripts/seed.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@hono/swagger-ui": "^0.5.0",
+    "@neondatabase/serverless": "0.10.1",
+    "@planflow/shared": "workspace:*",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.38.0",
+    "hono": "^4.6.0",
+    "jsonwebtoken": "^9.0.3",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/k6": "^0.54.0",
+    "openapi-types": "^12.1.3",
+    "@types/bcrypt": "^6.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20.11.0",
+    "drizzle-kit": "^0.30.0",
+    "eslint": "^9.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "typescript-eslint": "^8.54.0"
+  }
+}

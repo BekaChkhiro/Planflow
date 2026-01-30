@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PlanFlow Demo Preview</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 2rem;
+      font-size: 2rem;
+      background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section {
+      margin-bottom: 3rem;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #334155;
+    }
+
+    .section h2 {
+      margin-bottom: 1rem;
+      color: #94a3b8;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .svg-container {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .svg-container svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .controls {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .controls button {
+      padding: 0.5rem 1rem;
+      background: #334155;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      color: #f8fafc;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .controls button:hover {
+      background: #475569;
+    }
+
+    .controls button.primary {
+      background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+      border: none;
+    }
+
+    .info {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #0f172a;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    .checklist {
+      margin-top: 2rem;
+    }
+
+    .checklist h3 {
+      margin-bottom: 1rem;
+      color: #f8fafc;
+    }
+
+    .checklist ul {
+      list-style: none;
+    }
+
+    .checklist li {
+      padding: 0.5rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      color: #94a3b8;
+    }
+
+    .checklist li::before {
+      content: '☐';
+      font-size: 1.25rem;
+    }
+
+    .checklist li.done::before {
+      content: '✅';
+    }
+
+    .files {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .file-card {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid #334155;
+    }
+
+    .file-card h4 {
+      color: #f8fafc;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .file-card p {
+      color: #64748b;
+      font-size: 0.75rem;
+    }
+
+    .badge {
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.625rem;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .badge.md { background: #3b82f6; }
+    .badge.svg { background: #f59e0b; }
+    .badge.tape { background: #22c55e; }
+    .badge.html { background: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PlanFlow Demo Assets Preview</h1>
+
+    <!-- SVG Animation Preview -->
+    <div class="section">
+      <h2>Hero Animation (SVG)</h2>
+      <div class="svg-container">
+        <object data="hero-animation.svg" type="image/svg+xml" width="800" height="500">
+          Your browser doesn't support SVG
+        </object>
+      </div>
+      <div class="controls">
+        <button class="primary" onclick="location.reload()">Restart Animation</button>
+        <button onclick="window.open('hero-animation.svg', '_blank')">Open Full Size</button>
+        <button onclick="downloadSVG()">Download SVG</button>
+      </div>
+      <div class="info">
+        <strong>Usage:</strong> This SVG can be embedded directly in HTML or converted to GIF/video.<br>
+        <strong>Size:</strong> ~8KB (vector, scales to any resolution)<br>
+        <strong>Animations:</strong> Progress bars, sync arrows, floating particles, cursor blink
+      </div>
+    </div>
+
+    <!-- Demo Files -->
+    <div class="section">
+      <h2>Demo Assets</h2>
+      <div class="files">
+        <div class="file-card">
+          <h4><span class="badge md">MD</span> DEMO_SCRIPT.md</h4>
+          <p>Complete storyboard with scene descriptions, timing, and dialogue</p>
+        </div>
+        <div class="file-card">
+          <h4><span class="badge md">MD</span> TERMINAL_SESSION.md</h4>
+          <p>Copy-paste terminal content for realistic MCP interactions</p>
+        </div>
+        <div class="file-card">
+          <h4><span class="badge md">MD</span> RECORDING_GUIDE.md</h4>
+          <p>Tools, settings, and workflow for creating professional demos</p>
+        </div>
+        <div class="file-card">
+          <h4><span class="badge svg">SVG</span> hero-animation.svg</h4>
+          <p>Animated hero graphic showing terminal + dashboard sync</p>
+        </div>
+        <div class="file-card">
+          <h4><span class="badge tape">TAPE</span> hero.tape</h4>
+          <p>VHS script to auto-generate terminal GIF</p>
+        </div>
+        <div class="file-card">
+          <h4><span class="badge html">HTML</span> preview.html</h4>
+          <p>This preview page</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Checklist -->
+    <div class="section checklist">
+      <h3>Demo Production Checklist</h3>
+      <ul>
+        <li>Review DEMO_SCRIPT.md storyboard</li>
+        <li>Set up terminal (font, theme, size)</li>
+        <li>Practice terminal flow from TERMINAL_SESSION.md</li>
+        <li>Record terminal scenes</li>
+        <li>Record browser/dashboard scenes</li>
+        <li>Generate GIF using hero.tape or manual recording</li>
+        <li>Edit full demo video</li>
+        <li>Export hero GIF (under 5MB)</li>
+        <li>Export full demo (MP4, 1080p)</li>
+        <li>Create social media clips</li>
+        <li>Upload to hosting/CDN</li>
+        <li>Add to landing page</li>
+      </ul>
+    </div>
+
+    <!-- Quick Commands -->
+    <div class="section">
+      <h2>Quick Commands</h2>
+      <div class="info">
+# Install VHS (terminal GIF generator)
+brew install vhs
+
+# Generate hero GIF from tape script
+vhs hero.tape
+
+# Convert SVG to PNG (requires Inkscape)
+inkscape hero-animation.svg --export-filename=hero.png --export-width=1600
+
+# Optimize GIF
+gifsicle -O3 --lossy=80 hero.gif -o hero-optimized.gif
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function downloadSVG() {
+      const link = document.createElement('a');
+      link.href = 'hero-animation.svg';
+      link.download = 'planflow-hero-animation.svg';
+      link.click();
+    }
+  </script>
+</body>
+</html>

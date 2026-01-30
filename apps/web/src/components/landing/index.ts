@@ -1,0 +1,7 @@
+export { Navbar } from "./navbar"
+export { Hero } from "./hero"
+export { Features } from "./features"
+export { Tutorials } from "./tutorials"
+export { Pricing } from "./pricing"
+export { Testimonials } from "./testimonials"
+export { FAQ } from "./faq"

@@ -44,7 +44,6 @@ e2e
 .gitignore
 
 # Docker
-Dockerfile*
 docker-compose*
 .docker*
 

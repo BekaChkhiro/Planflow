@@ -48,6 +48,7 @@ import {
   largeBodyLimit,
 } from './middleware/index.js'
 import { openApiSpec } from './openapi.js'
+import { parsePlanTasks } from './lib/task-parser.js'
 
 // Helper to generate secure random tokens
 function generateRefreshToken(): string {
@@ -1549,6 +1550,42 @@ app.put('/projects/:id/plan', largeBodyLimit, auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
+    // Parse tasks from plan content and sync to database
+    let tasksCount = 0
+    let completedCount = 0
+
+    if (body.plan) {
+      try {
+        const parsedTasks = parsePlanTasks(body.plan)
+        tasksCount = parsedTasks.length
+
+        if (parsedTasks.length > 0) {
+          // Delete existing tasks for this project
+          await db.delete(schema.tasks).where(eq(schema.tasks.projectId, projectId))
+
+          // Insert new tasks
+          const tasksToInsert = parsedTasks.map((task) => ({
+            projectId,
+            taskId: task.taskId,
+            name: task.name,
+            description: task.description,
+            status: task.status,
+            complexity: task.complexity,
+            estimatedHours: task.estimatedHours,
+            dependencies: task.dependencies,
+          }))
+
+          await db.insert(schema.tasks).values(tasksToInsert)
+
+          // Count completed tasks
+          completedCount = parsedTasks.filter((t) => t.status === 'DONE').length
+        }
+      } catch (parseError) {
+        console.error('Task parsing error (non-fatal):', parseError)
+        // Continue even if parsing fails - plan is still saved
+      }
+    }
+
     return c.json({
       success: true,
       data: {
@@ -1556,6 +1593,9 @@ app.put('/projects/:id/plan', largeBodyLimit, auth, async (c) => {
         projectName: updatedProject.name,
         plan: updatedProject.plan,
         updatedAt: updatedProject.updatedAt,
+        tasksCount,
+        completedCount,
+        progress: tasksCount > 0 ? Math.round((completedCount / tasksCount) * 100) : 0,
       },
     })
   } catch (error) {

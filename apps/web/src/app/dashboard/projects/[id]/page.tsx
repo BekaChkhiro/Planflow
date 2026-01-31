@@ -26,7 +26,7 @@ import {
   GripVertical,
 } from 'lucide-react'
 
-import { useProject, useDeleteProject, useUpdateProject } from '@/hooks/use-projects'
+import { useProject, useDeleteProject, useUpdateProject, useProjectTasks, type Task } from '@/hooks/use-projects'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -90,42 +90,11 @@ function formatRelativeTime(dateString: string): string {
   return formatDate(dateString)
 }
 
-// Parse plan content to extract task statistics
-function parseTaskStats(plan: string | null | undefined): {
-  total: number
-  done: number
-  inProgress: number
-  blocked: number
-  todo: number
-} {
-  if (!plan) return { total: 0, done: 0, inProgress: 0, blocked: 0, todo: 0 }
 
-  const stats = { total: 0, done: 0, inProgress: 0, blocked: 0, todo: 0 }
-
-  // Match task rows in markdown tables: | T1.1 | Task name | Complexity | Status | Dependencies |
-  const taskPattern = /\|\s*T\d+\.\d+\s*\|[^|]+\|[^|]+\|\s*(DONE|TODO|IN_PROGRESS|BLOCKED)[^|]*\|/gi
-  const matches = plan.match(taskPattern)
-
-  if (matches) {
-    stats.total = matches.length
-    matches.forEach((match) => {
-      const statusMatch = match.match(/\|\s*(DONE|TODO|IN_PROGRESS|BLOCKED)/i)
-      if (statusMatch && statusMatch[1]) {
-        const status = statusMatch[1].toUpperCase()
-        if (status === 'DONE') stats.done++
-        else if (status === 'IN_PROGRESS') stats.inProgress++
-        else if (status === 'BLOCKED') stats.blocked++
-        else stats.todo++
-      }
-    })
-  }
-
-  return stats
-}
-
-// Parse individual tasks from plan content
-interface ParsedTask {
+// Task display interface (extends API Task with computed phase)
+interface DisplayTask {
   id: string
+  taskId: string
   name: string
   complexity: 'Low' | 'Medium' | 'High'
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
@@ -133,42 +102,47 @@ interface ParsedTask {
   phase: number
 }
 
-function parseTasks(plan: string | null | undefined): ParsedTask[] {
-  if (!plan) return []
+// Convert API tasks to display tasks with computed phase
+function toDisplayTasks(tasks: Task[]): DisplayTask[] {
+  return tasks.map((task) => {
+    // Extract phase from taskId (T1.1 -> 1, T2.3 -> 2)
+    const phaseMatch = task.taskId.match(/T(\d+)\./)
+    const phase = phaseMatch && phaseMatch[1] ? parseInt(phaseMatch[1], 10) : 1
 
-  const tasks: ParsedTask[] = []
-
-  // Match task rows in markdown tables: | T1.1 | Task name | Complexity | Status | Dependencies |
-  const taskPattern = /\|\s*(T(\d+)\.\d+)\s*\|\s*([^|]+?)\s*\|\s*(Low|Medium|High)\s*\|\s*(DONE|TODO|IN_PROGRESS|BLOCKED)[^|]*\|\s*([^|]*)\|/gi
-  let match
-
-  while ((match = taskPattern.exec(plan)) !== null) {
-    const [, taskId, phaseNum, taskName, complexity, status, deps] = match
-
-    // Parse dependencies (e.g., "T1.1, T1.2" or "T1.1" or "-" or empty)
-    const dependencies: string[] = []
-    if (deps && deps.trim() !== '-' && deps.trim() !== '') {
-      const depMatches = deps.match(/T\d+\.\d+/g)
-      if (depMatches) {
-        dependencies.push(...depMatches)
-      }
+    return {
+      id: task.id,
+      taskId: task.taskId,
+      name: task.name,
+      complexity: task.complexity,
+      status: task.status,
+      dependencies: task.dependencies,
+      phase,
     }
+  })
+}
 
-    tasks.push({
-      id: taskId!,
-      name: taskName!.trim(),
-      complexity: complexity as 'Low' | 'Medium' | 'High',
-      status: status!.toUpperCase() as ParsedTask['status'],
-      dependencies,
-      phase: parseInt(phaseNum!, 10),
-    })
-  }
+// Compute task stats from API tasks
+function computeTaskStats(tasks: Task[]): {
+  total: number
+  done: number
+  inProgress: number
+  blocked: number
+  todo: number
+} {
+  const stats = { total: tasks.length, done: 0, inProgress: 0, blocked: 0, todo: 0 }
 
-  return tasks
+  tasks.forEach((task) => {
+    if (task.status === 'DONE') stats.done++
+    else if (task.status === 'IN_PROGRESS') stats.inProgress++
+    else if (task.status === 'BLOCKED') stats.blocked++
+    else stats.todo++
+  })
+
+  return stats
 }
 
 // Group tasks by phase number
-function groupTasksByPhase(tasks: ParsedTask[]): PhaseData[] {
+function groupTasksByPhase(tasks: DisplayTask[]): PhaseData[] {
   const phaseMap = new Map<number, { total: number; done: number; inProgress: number }>()
 
   tasks.forEach((task) => {
@@ -185,7 +159,7 @@ function groupTasksByPhase(tasks: ParsedTask[]): PhaseData[] {
 }
 
 // Count tasks by complexity
-function calculateComplexityDistribution(tasks: ParsedTask[]): { low: number; medium: number; high: number } {
+function calculateComplexityDistribution(tasks: DisplayTask[]): { low: number; medium: number; high: number } {
   return tasks.reduce(
     (acc, task) => {
       if (task.complexity === 'Low') acc.low++
@@ -231,7 +205,7 @@ const complexityConfig = {
   High: { color: 'bg-rose-100 text-rose-700', label: 'High' },
 }
 
-function TaskCard({ task, view }: { task: ParsedTask; view: 'kanban' | 'list' }) {
+function TaskCard({ task, view }: { task: DisplayTask; view: 'kanban' | 'list' }) {
   const StatusIcon = statusConfig[task.status].icon
 
   if (view === 'list') {
@@ -248,7 +222,7 @@ function TaskCard({ task, view }: { task: ParsedTask; view: 'kanban' | 'list' })
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-sm text-muted-foreground">{task.id}</span>
+            <span className="font-mono text-sm text-muted-foreground">{task.taskId}</span>
             <ChevronRight className="h-3 w-3 text-muted-foreground" />
             <span className="truncate font-medium">{task.name}</span>
           </div>
@@ -274,7 +248,7 @@ function TaskCard({ task, view }: { task: ParsedTask; view: 'kanban' | 'list' })
   return (
     <div className="group rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md">
       <div className="mb-2 flex items-start justify-between">
-        <span className="font-mono text-xs text-muted-foreground">{task.id}</span>
+        <span className="font-mono text-xs text-muted-foreground">{task.taskId}</span>
         <Badge variant="outline" className={`text-xs ${complexityConfig[task.complexity].color}`}>
           {task.complexity}
         </Badge>
@@ -298,8 +272,8 @@ function KanbanColumn({
   status,
   tasks,
 }: {
-  status: ParsedTask['status']
-  tasks: ParsedTask[]
+  status: DisplayTask['status']
+  tasks: DisplayTask[]
 }) {
   const config = statusConfig[status]
   const StatusIcon = config.icon
@@ -328,7 +302,7 @@ function KanbanColumn({
   )
 }
 
-function KanbanView({ tasks }: { tasks: ParsedTask[] }) {
+function KanbanView({ tasks }: { tasks: DisplayTask[] }) {
   const tasksByStatus = {
     TODO: tasks.filter((t) => t.status === 'TODO'),
     IN_PROGRESS: tasks.filter((t) => t.status === 'IN_PROGRESS'),
@@ -350,11 +324,11 @@ function ListView({
   tasks,
   groupBy,
 }: {
-  tasks: ParsedTask[]
+  tasks: DisplayTask[]
   groupBy: 'status' | 'phase'
 }) {
   if (groupBy === 'status') {
-    const statuses: ParsedTask['status'][] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE']
+    const statuses: DisplayTask['status'][] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE']
 
     return (
       <div className="space-y-6">
@@ -547,9 +521,9 @@ function ProgressBar({ progress }: { progress: number }) {
   )
 }
 
-function OverviewTab({ plan }: { plan: string | null | undefined }) {
-  const stats = parseTaskStats(plan)
-  const tasks = parseTasks(plan)
+function OverviewTab({ tasks: apiTasks }: { tasks: Task[] }) {
+  const stats = computeTaskStats(apiTasks)
+  const tasks = toDisplayTasks(apiTasks)
   const progress = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0
   const phases = groupTasksByPhase(tasks)
   const complexity = calculateComplexityDistribution(tasks)
@@ -696,14 +670,14 @@ function PlanTab({ plan }: { plan: string | null | undefined }) {
   )
 }
 
-function TasksTab({ plan }: { plan: string | null | undefined }) {
+function TasksTab({ tasks: apiTasks }: { tasks: Task[] }) {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
   const [groupBy, setGroupBy] = useState<'status' | 'phase'>('status')
-  const [filterStatus, setFilterStatus] = useState<ParsedTask['status'] | 'ALL'>('ALL')
+  const [filterStatus, setFilterStatus] = useState<DisplayTask['status'] | 'ALL'>('ALL')
   const [filterPhase, setFilterPhase] = useState<number | 'ALL'>('ALL')
 
-  const tasks = parseTasks(plan)
-  const stats = parseTaskStats(plan)
+  const tasks = toDisplayTasks(apiTasks)
+  const stats = computeTaskStats(apiTasks)
 
   if (stats.total === 0) {
     return (
@@ -792,7 +766,7 @@ function TasksTab({ plan }: { plan: string | null | undefined }) {
             <span className="text-sm text-muted-foreground">Filter:</span>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as ParsedTask['status'] | 'ALL')}
+              onChange={(e) => setFilterStatus(e.target.value as DisplayTask['status'] | 'ALL')}
               className="h-8 rounded-md border bg-background px-2 text-sm"
             >
               <option value="ALL">All Status</option>
@@ -960,6 +934,7 @@ export default function ProjectDetailPage() {
   const projectId = params['id'] as string
 
   const { data: project, isLoading, error, refetch } = useProject(projectId)
+  const { data: tasks = [], isLoading: tasksLoading } = useProjectTasks(projectId)
   const deleteProject = useDeleteProject()
   const updateProject = useUpdateProject()
 
@@ -984,7 +959,7 @@ export default function ProjectDetailPage() {
     }
   }
 
-  if (isLoading) {
+  if (isLoading || tasksLoading) {
     return <ProjectDetailSkeleton />
   }
 
@@ -1000,7 +975,7 @@ export default function ProjectDetailPage() {
     return <NotFoundState />
   }
 
-  const stats = parseTaskStats(project.plan)
+  const stats = computeTaskStats(tasks)
   const progress = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0
 
   return (
@@ -1094,7 +1069,7 @@ export default function ProjectDetailPage() {
         </TabsList>
 
         <TabsContent value="overview">
-          <OverviewTab plan={project.plan} />
+          <OverviewTab tasks={tasks} />
         </TabsContent>
 
         <TabsContent value="plan">
@@ -1102,7 +1077,7 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="tasks">
-          <TasksTab plan={project.plan} />
+          <TasksTab tasks={tasks} />
         </TabsContent>
       </Tabs>
 

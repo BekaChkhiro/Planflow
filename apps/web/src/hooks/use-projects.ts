@@ -202,3 +202,41 @@ export function useUpdateProject() {
     },
   })
 }
+
+// Task interface matching API response
+export interface Task {
+  id: string
+  taskId: string
+  name: string
+  description: string | null
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
+  complexity: 'Low' | 'Medium' | 'High'
+  estimatedHours: number | null
+  dependencies: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+interface TasksResponse {
+  success: boolean
+  data: {
+    projectId: string
+    projectName: string
+    tasks: Task[]
+  }
+}
+
+export function projectTasksQueryKey(projectId: string) {
+  return ['project', projectId, 'tasks']
+}
+
+export function useProjectTasks(projectId: string) {
+  return useQuery({
+    queryKey: projectTasksQueryKey(projectId),
+    queryFn: async () => {
+      const response = await authApi.get<TasksResponse>(`/projects/${projectId}/tasks`)
+      return response.data.tasks
+    },
+    enabled: !!projectId,
+  })
+}

@@ -114,7 +114,7 @@ You must be logged in first with planflow_login.`,
         '❌ Not logged in.\n\n' +
           'Please authenticate first using:\n' +
           '  planflow_login(token: "your-api-token")\n\n' +
-          'Get your token at: https://planflow.dev/settings/api-tokens'
+          'Get your token at: https://planflow.tools/settings/api-tokens'
       )
     }
 
@@ -214,7 +214,7 @@ You must be logged in first with planflow_login.`,
             'Please log out and log in again:\n' +
             '  1. planflow_logout()\n' +
             '  2. planflow_login(token: "your-new-token")\n\n' +
-            'Get a new token at: https://planflow.dev/settings/api-tokens'
+            'Get a new token at: https://planflow.tools/settings/api-tokens'
         )
       }
 

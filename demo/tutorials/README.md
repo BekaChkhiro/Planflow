@@ -74,7 +74,7 @@ See [../RECORDING_GUIDE.md](../RECORDING_GUIDE.md) for detailed setup instructio
 ## Hosting Plan
 
 **Primary:** YouTube (unlisted or public)
-**Embedded:** planflow.dev/tutorials
+**Embedded:** planflow.tools/tutorials
 **Social:** Twitter/X clips (under 2:20)
 
 ---

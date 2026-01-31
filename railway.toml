@@ -1,4 +1,0 @@
-# Railway configuration
-# Note: Dockerfile paths are configured per-service in Railway dashboard
-# API service: Dockerfile
-# Frontend service: Dockerfile.web

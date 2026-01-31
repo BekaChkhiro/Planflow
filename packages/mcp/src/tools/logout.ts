@@ -68,7 +68,7 @@ No parameters required.`,
           '🔐 Your API token has been removed from local storage.\n\n' +
           'To login again, use:\n' +
           '  planflow_login(token: "your-api-token")\n\n' +
-          'Get your token at: https://planflow.dev/settings/api-tokens'
+          'Get your token at: https://planflow.tools/settings/api-tokens'
       )
     } catch (error) {
       logger.error('Logout failed', { error: String(error) })

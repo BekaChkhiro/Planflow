@@ -11,11 +11,11 @@ const environments = {
     baseUrl: __ENV.API_URL || 'http://localhost:3001',
     // Test credentials (should be seeded before running tests)
     testUser: {
-      email: 'perf-test@planflow.dev',
+      email: 'perf-test@planflow.tools',
       password: 'PerfTest123!',
     },
     proUser: {
-      email: 'perf-pro@planflow.dev',
+      email: 'perf-pro@planflow.tools',
       password: 'PerfPro123!',
     },
     // Lower VU counts for local testing
@@ -25,13 +25,13 @@ const environments = {
   },
 
   staging: {
-    baseUrl: __ENV.API_URL || 'https://api-staging.planflow.dev',
+    baseUrl: __ENV.API_URL || 'https://api-staging.planflow.tools',
     testUser: {
-      email: 'perf-test@planflow.dev',
+      email: 'perf-test@planflow.tools',
       password: __ENV.PERF_TEST_PASSWORD || 'PerfTest123!',
     },
     proUser: {
-      email: 'perf-pro@planflow.dev',
+      email: 'perf-pro@planflow.tools',
       password: __ENV.PERF_PRO_PASSWORD || 'PerfPro123!',
     },
     // Higher limits for staging
@@ -40,13 +40,13 @@ const environments = {
   },
 
   production: {
-    baseUrl: __ENV.API_URL || 'https://api.planflow.dev',
+    baseUrl: __ENV.API_URL || 'https://api.planflow.tools',
     testUser: {
-      email: 'perf-test@planflow.dev',
+      email: 'perf-test@planflow.tools',
       password: __ENV.PERF_TEST_PASSWORD,
     },
     proUser: {
-      email: 'perf-pro@planflow.dev',
+      email: 'perf-pro@planflow.tools',
       password: __ENV.PERF_PRO_PASSWORD,
     },
     // Be conservative in production

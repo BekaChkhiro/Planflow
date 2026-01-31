@@ -18,13 +18,13 @@ import { getDbClient, schema } from '../../src/db/index.js';
 // Test user configuration
 const TEST_USERS = [
   {
-    email: 'perf-test@planflow.dev',
+    email: 'perf-test@planflow.tools',
     password: 'PerfTest123!',
     name: 'Perf Test User',
     tier: 'free' as const,
   },
   {
-    email: 'perf-pro@planflow.dev',
+    email: 'perf-pro@planflow.tools',
     password: 'PerfPro123!',
     name: 'Perf Pro User',
     tier: 'pro' as const,

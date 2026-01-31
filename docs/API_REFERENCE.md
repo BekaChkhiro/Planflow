@@ -3,7 +3,7 @@
 > Complete API documentation for PlanFlow - AI-Native Project Management for Claude Code
 
 **Version:** 0.0.1
-**Base URL:** `https://api.planflow.dev` (Production) | `http://localhost:3001` (Development)
+**Base URL:** `https://api.planflow.tools` (Production) | `http://localhost:3001` (Development)
 
 ---
 
@@ -39,12 +39,12 @@ Used by the web dashboard for user sessions.
 
 ```bash
 # Login and get tokens
-curl -X POST https://api.planflow.dev/auth/login \
+curl -X POST https://api.planflow.tools/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "yourpassword"}'
 
 # Use access token
-curl https://api.planflow.dev/projects \
+curl https://api.planflow.tools/projects \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -59,13 +59,13 @@ Used by the MCP server and CLI tools for programmatic access.
 
 ```bash
 # Create an API token (requires JWT auth)
-curl -X POST https://api.planflow.dev/api-tokens \
+curl -X POST https://api.planflow.tools/api-tokens \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{"name": "MCP Token"}'
 
 # Use API token
-curl https://api.planflow.dev/projects \
+curl https://api.planflow.tools/projects \
   -H "Authorization: Bearer pf_abc123..."
 ```
 
@@ -190,7 +190,7 @@ Returns basic API information and status.
 
 **Example**
 ```bash
-curl https://api.planflow.dev/
+curl https://api.planflow.tools/
 ```
 
 ---
@@ -211,7 +211,7 @@ Basic health check endpoint.
 
 **Example**
 ```bash
-curl https://api.planflow.dev/health
+curl https://api.planflow.tools/health
 ```
 
 ---
@@ -246,7 +246,7 @@ Check database connectivity and return connection info.
 
 **Example**
 ```bash
-curl https://api.planflow.dev/health/db
+curl https://api.planflow.tools/health/db
 ```
 
 ---
@@ -301,7 +301,7 @@ Create a new user account.
 
 **Example**
 ```bash
-curl -X POST https://api.planflow.dev/auth/register \
+curl -X POST https://api.planflow.tools/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -358,7 +358,7 @@ Authenticate and receive JWT + refresh tokens.
 
 **Example**
 ```bash
-curl -X POST https://api.planflow.dev/auth/login \
+curl -X POST https://api.planflow.tools/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
@@ -402,7 +402,7 @@ Use a refresh token to obtain a new access token.
 
 **Example**
 ```bash
-curl -X POST https://api.planflow.dev/auth/refresh \
+curl -X POST https://api.planflow.tools/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{
     "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -444,7 +444,7 @@ Revoke the refresh token.
 
 **Example**
 ```bash
-curl -X POST https://api.planflow.dev/auth/logout \
+curl -X POST https://api.planflow.tools/auth/logout \
   -H "Content-Type: application/json" \
   -d '{
     "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -481,7 +481,7 @@ Get the authenticated user's information.
 
 **Example**
 ```bash
-curl https://api.planflow.dev/auth/me \
+curl https://api.planflow.tools/auth/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -536,7 +536,7 @@ Create a new API token for MCP integration.
 
 **Example**
 ```bash
-curl -X POST https://api.planflow.dev/api-tokens \
+curl -X POST https://api.planflow.tools/api-tokens \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -579,7 +579,7 @@ List all non-revoked API tokens for the authenticated user.
 
 **Example**
 ```bash
-curl https://api.planflow.dev/api-tokens \
+curl https://api.planflow.tools/api-tokens \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -612,7 +612,7 @@ Revoke an API token.
 
 **Example**
 ```bash
-curl -X DELETE https://api.planflow.dev/api-tokens/660e8400-e29b-41d4-a716-446655440000 \
+curl -X DELETE https://api.planflow.tools/api-tokens/660e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -657,7 +657,7 @@ Verify an API token and get user information. Used by MCP server for authenticat
 
 **Example**
 ```bash
-curl -X POST https://api.planflow.dev/api-tokens/verify \
+curl -X POST https://api.planflow.tools/api-tokens/verify \
   -H "Content-Type: application/json" \
   -d '{
     "token": "pf_abc123def456ghi789..."
@@ -702,7 +702,7 @@ Get all projects for the authenticated user.
 
 **Example**
 ```bash
-curl https://api.planflow.dev/projects \
+curl https://api.planflow.tools/projects \
   -H "Authorization: Bearer pf_abc123..."
 ```
 
@@ -753,7 +753,7 @@ Create a new project.
 
 **Example**
 ```bash
-curl -X POST https://api.planflow.dev/projects \
+curl -X POST https://api.planflow.tools/projects \
   -H "Authorization: Bearer pf_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -814,7 +814,7 @@ Update a project (partial updates supported).
 
 **Example**
 ```bash
-curl -X PUT https://api.planflow.dev/projects/770e8400-e29b-41d4-a716-446655440000 \
+curl -X PUT https://api.planflow.tools/projects/770e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer pf_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -852,7 +852,7 @@ Delete a project and all its tasks.
 
 **Example**
 ```bash
-curl -X DELETE https://api.planflow.dev/projects/770e8400-e29b-41d4-a716-446655440000 \
+curl -X DELETE https://api.planflow.tools/projects/770e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer pf_abc123..."
 ```
 
@@ -889,7 +889,7 @@ Get the project plan content (markdown).
 
 **Example**
 ```bash
-curl https://api.planflow.dev/projects/770e8400-e29b-41d4-a716-446655440000/plan \
+curl https://api.planflow.tools/projects/770e8400-e29b-41d4-a716-446655440000/plan \
   -H "Authorization: Bearer pf_abc123..."
 ```
 
@@ -938,7 +938,7 @@ Update the project plan content.
 
 **Example**
 ```bash
-curl -X PUT https://api.planflow.dev/projects/770e8400-e29b-41d4-a716-446655440000/plan \
+curl -X PUT https://api.planflow.tools/projects/770e8400-e29b-41d4-a716-446655440000/plan \
   -H "Authorization: Bearer pf_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -1009,7 +1009,7 @@ Get all tasks for a project.
 
 **Example**
 ```bash
-curl https://api.planflow.dev/projects/770e8400-e29b-41d4-a716-446655440000/tasks \
+curl https://api.planflow.tools/projects/770e8400-e29b-41d4-a716-446655440000/tasks \
   -H "Authorization: Bearer pf_abc123..."
 ```
 
@@ -1091,7 +1091,7 @@ Update multiple tasks at once (partial updates supported).
 
 **Example**
 ```bash
-curl -X PUT https://api.planflow.dev/projects/770e8400-e29b-41d4-a716-446655440000/tasks \
+curl -X PUT https://api.planflow.tools/projects/770e8400-e29b-41d4-a716-446655440000/tasks \
   -H "Authorization: Bearer pf_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -1182,8 +1182,8 @@ interface ErrorResponse {
 
 For interactive API exploration, visit:
 
-- **Swagger UI:** `https://api.planflow.dev/docs`
-- **OpenAPI JSON:** `https://api.planflow.dev/openapi.json`
+- **Swagger UI:** `https://api.planflow.tools/docs`
+- **OpenAPI JSON:** `https://api.planflow.tools/openapi.json`
 
 ---
 
@@ -1202,13 +1202,13 @@ See [MCP Installation Guide](./MCP_INSTALLATION.md) for configuration.
 ### curl Examples
 
 All examples in this documentation use curl. Replace:
-- `https://api.planflow.dev` with `http://localhost:3001` for local development
+- `https://api.planflow.tools` with `http://localhost:3001` for local development
 - `Bearer pf_abc123...` with your actual API token
 
 ---
 
 ## Support
 
-- **Documentation:** [docs.planflow.dev](https://docs.planflow.dev)
+- **Documentation:** [docs.planflow.tools](https://docs.planflow.tools)
 - **GitHub Issues:** [github.com/planflow/planflow/issues](https://github.com/planflow/planflow/issues)
-- **Email:** support@planflow.dev
+- **Email:** support@planflow.tools

@@ -35,7 +35,7 @@ export const loginTool: ToolDefinition<LoginInput> = {
 
   description: `Authenticate with PlanFlow using an API token.
 
-Get your API token from the PlanFlow dashboard at https://planflow.dev/settings/api-tokens
+Get your API token from the PlanFlow dashboard at https://planflow.tools/settings/api-tokens
 
 Usage:
   planflow_login(token: "your-api-token")
@@ -104,7 +104,7 @@ After successful login, you can use other PlanFlow tools to manage your projects
         return createErrorResult(
           '❌ Authentication failed: Invalid or expired API token.\n\n' +
             'Please check your token and try again.\n' +
-            'Get a new token at: https://planflow.dev/settings/api-tokens'
+            'Get a new token at: https://planflow.tools/settings/api-tokens'
         )
       }
 

@@ -81,7 +81,7 @@ Returns:
         '❌ Not logged in.\n\n' +
           'Please authenticate first using:\n' +
           '  planflow_login(token: "your-api-token")\n\n' +
-          'Get your token at: https://planflow.dev/settings/api-tokens'
+          'Get your token at: https://planflow.tools/settings/api-tokens'
       )
     }
 
@@ -99,7 +99,7 @@ Returns:
             "You don't have any projects yet.\n\n" +
             '💡 Create your first project:\n' +
             '  planflow_create(name: "My Project", description: "Optional description")\n\n' +
-            'Or create one at: https://planflow.dev/projects/new'
+            'Or create one at: https://planflow.tools/projects/new'
         )
       }
 
@@ -136,7 +136,7 @@ Returns:
             'Please log out and log in again:\n' +
             '  1. planflow_logout()\n' +
             '  2. planflow_login(token: "your-new-token")\n\n' +
-            'Get a new token at: https://planflow.dev/settings/api-tokens'
+            'Get a new token at: https://planflow.tools/settings/api-tokens'
         )
       }
 

@@ -172,7 +172,7 @@ export function generateTasks(count, projectId) {
 export function generateUser(prefix = 'perfuser') {
   const suffix = randomString(8).toLowerCase();
   return {
-    email: `${prefix}-${suffix}@planflow.dev`,
+    email: `${prefix}-${suffix}@planflow.tools`,
     password: `PerfTest${randomString(8)}!`,
     name: `Perf User ${suffix}`,
   };

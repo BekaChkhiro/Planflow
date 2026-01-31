@@ -244,11 +244,11 @@ Web Dashboard:
 🎉 Tutorial Series Complete!
 
 Start using PlanFlow:
-planflow.dev
+planflow.tools
 ```
 
 **Voiceover:**
-> "Congratulations! You've completed the PlanFlow tutorial series. Head to planflow.dev to get started with your own projects. Happy planning!"
+> "Congratulations! You've completed the PlanFlow tutorial series. Head to planflow.tools to get started with your own projects. Happy planning!"
 
 ---
 

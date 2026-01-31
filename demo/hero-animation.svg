@@ -147,7 +147,7 @@
 
     <!-- URL bar -->
     <rect x="70" y="10" width="150" height="16" rx="4" fill="#e2e8f0"/>
-    <text x="82" y="22" fill="#64748b" font-family="system-ui, sans-serif" font-size="9">app.planflow.dev</text>
+    <text x="82" y="22" fill="#64748b" font-family="system-ui, sans-serif" font-size="9">app.planflow.tools</text>
 
     <!-- Dashboard content -->
     <g transform="translate(16, 48)">

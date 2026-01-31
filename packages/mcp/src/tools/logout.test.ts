@@ -84,7 +84,7 @@ describe('planflow_logout', () => {
       vi.mocked(isAuthenticated).mockReturnValue(true)
       vi.mocked(loadConfig).mockReturnValue({
         apiToken: 'mock-token',
-        apiUrl: 'https://api.planflow.dev',
+        apiUrl: 'https://api.planflow.tools',
         userId: fixtures.user().id,
         userEmail: fixtures.user().email,
       })
@@ -107,7 +107,7 @@ describe('planflow_logout', () => {
       vi.mocked(isAuthenticated).mockReturnValue(true)
       vi.mocked(loadConfig).mockReturnValue({
         apiToken: 'mock-token',
-        apiUrl: 'https://api.planflow.dev',
+        apiUrl: 'https://api.planflow.tools',
         userId: fixtures.user().id,
         userEmail: fixtures.user().email,
       })

@@ -164,7 +164,7 @@ $ code .claude/settings.json
     "planflow": {
       "command": "planflow-mcp",
       "env": {
-        "PLANFLOW_API_URL": "https://api.planflow.dev",
+        "PLANFLOW_API_URL": "https://api.planflow.tools",
         "PLANFLOW_DEBUG": "true"
       }
     }

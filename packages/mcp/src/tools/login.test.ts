@@ -74,7 +74,7 @@ describe('planflow_login', () => {
       vi.mocked(isAuthenticated).mockReturnValue(true)
       vi.mocked(loadConfig).mockReturnValue({
         apiToken: 'existing-token',
-        apiUrl: 'https://api.planflow.dev',
+        apiUrl: 'https://api.planflow.tools',
         userId: fixtures.user().id,
         userEmail: 'existing@example.com',
       })

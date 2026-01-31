@@ -34,8 +34,8 @@ Before installing the PlanFlow MCP server, ensure you have:
 
 ### Optional
 
-- **PlanFlow Account**: Required for cloud sync features. Sign up at [planflow.dev](https://planflow.dev)
-- **API Token**: Required for authentication. Generate at [planflow.dev/settings/api](https://planflow.dev/settings/api)
+- **PlanFlow Account**: Required for cloud sync features. Sign up at [planflow.tools](https://planflow.tools)
+- **API Token**: Required for authentication. Generate at [planflow.tools/settings/api](https://planflow.tools/settings/api)
 
 ### Verify Node.js Version
 
@@ -202,7 +202,7 @@ For Claude Code CLI, add the MCP server to your project's `.mcp.json` or global 
     "planflow": {
       "command": "planflow-mcp",
       "env": {
-        "PLANFLOW_API_URL": "https://api.planflow.dev",
+        "PLANFLOW_API_URL": "https://api.planflow.tools",
         "PLANFLOW_DEBUG": "false"
       }
     }
@@ -218,7 +218,7 @@ After installation and configuration, authenticate with your PlanFlow account.
 
 ### Step 1: Get Your API Token
 
-1. Go to [planflow.dev/settings/api](https://planflow.dev/settings/api)
+1. Go to [planflow.tools/settings/api](https://planflow.tools/settings/api)
 2. Click "Generate New Token"
 3. Copy the token (starts with `pf_`)
 
@@ -336,7 +336,7 @@ Create a new PlanFlow project called "Test Project"
 
 **Solutions:**
 
-1. **Verify token validity** at [planflow.dev/settings/api](https://planflow.dev/settings/api)
+1. **Verify token validity** at [planflow.tools/settings/api](https://planflow.tools/settings/api)
 
 2. **Re-login:**
    ```
@@ -366,7 +366,7 @@ Create a new PlanFlow project called "Test Project"
 
 2. **Verify API URL:**
    ```bash
-   curl https://api.planflow.dev/health
+   curl https://api.planflow.tools/health
    ```
 
 3. **Check for proxy/firewall issues**
@@ -523,16 +523,16 @@ Edit `~/.config/claude/claude_desktop_config.json` and remove the `planflow` ent
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PLANFLOW_API_URL` | PlanFlow API server URL | `https://api.planflow.dev` |
+| `PLANFLOW_API_URL` | PlanFlow API server URL | `https://api.planflow.tools` |
 | `PLANFLOW_DEBUG` | Enable debug logging (`true`/`false`) | `false` |
 
 ---
 
 ## Getting Help
 
-- **Documentation:** [docs.planflow.dev](https://docs.planflow.dev)
+- **Documentation:** [docs.planflow.tools](https://docs.planflow.tools)
 - **GitHub Issues:** [github.com/planflow/planflow/issues](https://github.com/planflow/planflow/issues)
-- **Email Support:** support@planflow.dev
+- **Email Support:** support@planflow.tools
 
 ---
 

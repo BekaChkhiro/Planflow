@@ -31,15 +31,15 @@ By the end of this tutorial, viewers will be able to:
 
 ### Part 1: Create Your Account (0:10 - 0:40)
 
-**Visual:** Browser showing planflow.dev
+**Visual:** Browser showing planflow.tools
 
 ```
-[Navigate to planflow.dev]
+[Navigate to planflow.tools]
 [Click "Sign Up" button]
 ```
 
 **Voiceover:**
-> "First, let's create your free PlanFlow account. Head to planflow.dev and click Sign Up."
+> "First, let's create your free PlanFlow account. Head to planflow.tools and click Sign Up."
 
 **Visual:** Sign up form
 

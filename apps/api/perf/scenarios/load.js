@@ -7,7 +7,7 @@
  *
  * Usage:
  *   k6 run perf/scenarios/load.js
- *   k6 run perf/scenarios/load.js --env API_URL=https://api-staging.planflow.dev
+ *   k6 run perf/scenarios/load.js --env API_URL=https://api-staging.planflow.tools
  */
 
 import http from 'k6/http';

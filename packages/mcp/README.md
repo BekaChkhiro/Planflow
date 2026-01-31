@@ -74,7 +74,7 @@ Or if installed locally in a project:
 
 Before using PlanFlow tools, authenticate with your API token:
 
-1. Get your API token from [planflow.dev/settings/api](https://planflow.dev/settings/api)
+1. Get your API token from [planflow.tools/settings/api](https://planflow.tools/settings/api)
 2. Use the `planflow_login` tool in Claude Code with your token
 
 ## Available Tools
@@ -128,7 +128,7 @@ What should I work on next?
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PLANFLOW_API_URL` | API server URL | `https://api.planflow.dev` |
+| `PLANFLOW_API_URL` | API server URL | `https://api.planflow.tools` |
 | `PLANFLOW_DEBUG` | Enable debug logging | `false` |
 
 ## Configuration Storage
@@ -137,7 +137,7 @@ Credentials are stored in `~/.config/planflow/config.json`:
 
 ```json
 {
-  "apiUrl": "https://api.planflow.dev",
+  "apiUrl": "https://api.planflow.tools",
   "token": "pf_...",
   "userId": "...",
   "email": "..."
@@ -177,7 +177,7 @@ MIT - see [LICENSE](./LICENSE) for details.
 - [Installation Guide](./INSTALLATION.md) - Detailed setup instructions
 - [Full MCP Documentation](../../docs/MCP_INSTALLATION.md) - Comprehensive docs site guide
 - [Getting Started](../../docs/GETTING_STARTED.md) - Complete onboarding guide
-- [PlanFlow Website](https://planflow.dev)
-- [Documentation](https://docs.planflow.dev)
+- [PlanFlow Website](https://planflow.tools)
+- [Documentation](https://docs.planflow.tools)
 - [GitHub Repository](https://github.com/planflow/planflow)
 - [Report Issues](https://github.com/planflow/planflow/issues)

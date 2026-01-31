@@ -419,9 +419,9 @@ After installation and configuration, you need to authenticate with your PlanFlo
 
 ### Step 1: Get Your API Token
 
-1. Log in to [planflow.dev](https://planflow.dev)
+1. Log in to [planflow.tools](https://planflow.tools)
 2. Navigate to **Settings** > **API Tokens**
-   - Direct link: [planflow.dev/dashboard/settings/tokens](https://planflow.dev/dashboard/settings/tokens)
+   - Direct link: [planflow.tools/dashboard/settings/tokens](https://planflow.tools/dashboard/settings/tokens)
 3. Click **Generate New Token**
 4. Enter a descriptive name (e.g., "MacBook Pro - Claude Desktop")
 5. Click **Create Token**
@@ -467,7 +467,7 @@ The config file contains:
 
 ```json
 {
-  "apiUrl": "https://api.planflow.dev",
+  "apiUrl": "https://api.planflow.tools",
   "apiToken": "pf_...",
   "userId": "user_...",
   "userEmail": "you@example.com"
@@ -525,7 +525,7 @@ List my PlanFlow projects
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PLANFLOW_API_URL` | API server URL | `https://api.planflow.dev` |
+| `PLANFLOW_API_URL` | API server URL | `https://api.planflow.tools` |
 | `PLANFLOW_DEBUG` | Enable debug logging | `false` |
 | `HTTPS_PROXY` | Proxy server for API requests | None |
 | `HTTP_PROXY` | Proxy server (HTTP) | None |
@@ -540,7 +540,7 @@ List my PlanFlow projects
       "command": "planflow-mcp",
       "env": {
         "PLANFLOW_DEBUG": "true",
-        "PLANFLOW_API_URL": "https://api.planflow.dev"
+        "PLANFLOW_API_URL": "https://api.planflow.tools"
       }
     }
   }
@@ -675,7 +675,7 @@ Debug logs are written to stderr and won't interfere with MCP communication.
 
 **Solutions:**
 
-1. Verify token at [planflow.dev/dashboard/settings/tokens](https://planflow.dev/dashboard/settings/tokens)
+1. Verify token at [planflow.tools/dashboard/settings/tokens](https://planflow.tools/dashboard/settings/tokens)
 
 2. Generate a new token and try again
 
@@ -695,7 +695,7 @@ Debug logs are written to stderr and won't interfere with MCP communication.
 
 1. Test API connectivity:
    ```bash
-   curl -I https://api.planflow.dev/health
+   curl -I https://api.planflow.tools/health
    ```
 
 2. Check firewall/VPN settings
@@ -767,7 +767,7 @@ If none of the above solutions work:
    - MCP server version (`planflow-mcp --version`)
    - Debug log output
    - Steps to reproduce
-4. **Email support:** [support@planflow.dev](mailto:support@planflow.dev)
+4. **Email support:** [support@planflow.tools](mailto:support@planflow.tools)
 
 ---
 
@@ -846,7 +846,7 @@ Edit your Claude config file and remove the `planflow` entry from `mcpServers`.
 
 If you suspect a token has been compromised:
 
-1. Go to [planflow.dev/dashboard/settings/tokens](https://planflow.dev/dashboard/settings/tokens)
+1. Go to [planflow.tools/dashboard/settings/tokens](https://planflow.tools/dashboard/settings/tokens)
 2. Find the compromised token
 3. Click **Revoke**
 4. Generate a new token
@@ -894,7 +894,7 @@ Now that you have the MCP server installed:
 
 1. **[Getting Started Guide](./GETTING_STARTED.md)** - Learn the core workflow
 2. **[API Reference](./API_REFERENCE.md)** - Detailed tool documentation
-3. **[Web Dashboard](https://planflow.dev/dashboard)** - Visual project management
+3. **[Web Dashboard](https://planflow.tools/dashboard)** - Visual project management
 
 ---
 
@@ -908,4 +908,4 @@ Now that you have the MCP server installed:
 
 ---
 
-*Need help? Contact us at [support@planflow.dev](mailto:support@planflow.dev) or join our [Discord community](https://discord.gg/planflow).*
+*Need help? Contact us at [support@planflow.tools](mailto:support@planflow.tools) or join our [Discord community](https://discord.gg/planflow).*

@@ -44,7 +44,7 @@ PlanFlow is an AI-native project management tool designed specifically for devel
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
 │   Claude Code   │ ←──→ │   MCP Server    │ ←──→ │  PlanFlow API   │
-│   (Your IDE)    │      │ (@planflow/mcp) │      │ (planflow.dev)  │
+│   (Your IDE)    │      │ (@planflow/mcp) │      │ (planflow.tools)  │
 └─────────────────┘      └─────────────────┘      └─────────────────┘
         ↑                                                  ↑
         │                                                  │
@@ -79,8 +79,8 @@ For experienced developers who want to get running fast:
 # 1. Install the MCP server globally
 npm install -g @planflow/mcp
 
-# 2. Sign up at planflow.dev and generate an API token
-#    Go to: https://planflow.dev/dashboard/settings/tokens
+# 2. Sign up at planflow.tools and generate an API token
+#    Go to: https://planflow.tools/dashboard/settings/tokens
 
 # 3. Add to your Claude config (~/.config/claude/claude_desktop_config.json):
 {
@@ -106,7 +106,7 @@ npm install -g @planflow/mcp
 
 ### 1. Create Your Account
 
-1. Visit [planflow.dev](https://planflow.dev)
+1. Visit [planflow.tools](https://planflow.tools)
 2. Click **Sign Up** in the top right
 3. Enter your details:
    - **Email** - Your email address
@@ -419,7 +419,7 @@ Show me the progress summary for my-saas-app
 
 ### 5. Use the Web Dashboard for Visualization
 
-While Claude Code is great for quick updates, the web dashboard at [planflow.dev](https://planflow.dev) offers:
+While Claude Code is great for quick updates, the web dashboard at [planflow.tools](https://planflow.tools) offers:
 
 - Kanban board view
 - Progress charts
@@ -449,7 +449,7 @@ npm install -g @planflow/mcp
 
 Your API token may be invalid or expired:
 
-1. Go to [planflow.dev/dashboard/settings/tokens](https://planflow.dev/dashboard/settings/tokens)
+1. Go to [planflow.tools/dashboard/settings/tokens](https://planflow.tools/dashboard/settings/tokens)
 2. Revoke the old token
 3. Generate a new token
 4. Login again with the new token
@@ -504,7 +504,7 @@ Now that you're set up with PlanFlow, here's what to explore next:
 - 📖 [MCP Installation Guide](./MCP_INSTALLATION.md) - Complete installation & configuration guide
 - 📖 [Package Installation](../packages/mcp/INSTALLATION.md) - Quick package setup
 - 📖 [API Reference](./API_REFERENCE.md) - Complete API documentation
-- 🎥 [Video Tutorials](https://planflow.dev/tutorials) - Watch PlanFlow in action
+- 🎥 [Video Tutorials](https://planflow.tools/tutorials) - Watch PlanFlow in action
 
 ### Upgrade Your Plan
 
@@ -513,13 +513,13 @@ Need more projects or team features?
 - **Pro** ($12/month) - Unlimited projects, GitHub integration
 - **Team** ($29/user/month) - Team management, code review, sprints
 
-Visit [planflow.dev/pricing](https://planflow.dev/pricing) to upgrade.
+Visit [planflow.tools/pricing](https://planflow.tools/pricing) to upgrade.
 
 ### Join the Community
 
 - 💬 [Discord Community](https://discord.gg/planflow) - Get help, share tips
 - 🐦 [Twitter @PlanFlowDev](https://twitter.com/planflowdev) - Updates and tips
-- 📧 [Newsletter](https://planflow.dev/newsletter) - Monthly product updates
+- 📧 [Newsletter](https://planflow.tools/newsletter) - Monthly product updates
 
 ### Contribute
 
@@ -574,4 +574,4 @@ PlanFlow is built for developers, by developers. We'd love your feedback:
 
 **Happy planning!** 🚀
 
-If you have questions, reach out at [support@planflow.dev](mailto:support@planflow.dev) or join our [Discord](https://discord.gg/planflow).
+If you have questions, reach out at [support@planflow.tools](mailto:support@planflow.tools) or join our [Discord](https://discord.gg/planflow).

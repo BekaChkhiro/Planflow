@@ -17,7 +17,7 @@ import { logger } from './logger.js'
  */
 const ConfigSchema = z.object({
   apiToken: z.string().optional(),
-  apiUrl: z.string().url().default('https://api.planflow.dev'),
+  apiUrl: z.string().url().default('https://api.planflow.tools'),
   userId: z.string().uuid().optional(),
   userEmail: z.string().email().optional(),
 })
@@ -28,7 +28,7 @@ export type Config = z.infer<typeof ConfigSchema>
  * Default configuration
  */
 const DEFAULT_CONFIG: Config = {
-  apiUrl: 'https://api.planflow.dev',
+  apiUrl: 'https://api.planflow.tools',
 }
 
 /**

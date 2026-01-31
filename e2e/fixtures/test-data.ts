@@ -4,18 +4,18 @@
 
 export const testUsers = {
   standard: {
-    email: 'test@planflow.dev',
+    email: 'test@planflow.tools',
     password: 'TestPassword123!',
     name: 'Test User',
   },
   proUser: {
-    email: 'pro@planflow.dev',
+    email: 'pro@planflow.tools',
     password: 'ProPassword123!',
     name: 'Pro User',
   },
   // For registration tests - unique email each time
   newUser: () => ({
-    email: `newuser-${Date.now()}@planflow.dev`,
+    email: `newuser-${Date.now()}@planflow.tools`,
     password: 'NewUserPassword123!',
     name: 'New Test User',
   }),

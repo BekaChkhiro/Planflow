@@ -40,12 +40,12 @@ async function globalSetup(config: FullConfig) {
 async function ensureTestUsersExist(apiUrl: string) {
   const testUsers = [
     {
-      email: 'test@planflow.dev',
+      email: 'test@planflow.tools',
       password: 'TestPassword123!',
       name: 'Test User',
     },
     {
-      email: 'pro@planflow.dev',
+      email: 'pro@planflow.tools',
       password: 'ProPassword123!',
       name: 'Pro User',
     },

@@ -2,7 +2,7 @@
   "name": "@planflow/mcp",
   "version": "0.1.0",
   "description": "PlanFlow MCP Server for Claude Code - AI-native project management from your terminal",
-  "author": "PlanFlow <hello@planflow.dev>",
+  "author": "PlanFlow <hello@planflow.tools>",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
   "bugs": {
     "url": "https://github.com/planflow/planflow/issues"
   },
-  "homepage": "https://planflow.dev",
+  "homepage": "https://planflow.tools",
   "engines": {
     "node": ">=20.0.0"
   },

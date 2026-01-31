@@ -123,7 +123,7 @@ export function FAQ() {
           <p className="text-muted-foreground">
             Still have questions?{" "}
             <a
-              href="mailto:support@planflow.dev"
+              href="mailto:support@planflow.tools"
               className="text-primary hover:underline font-medium"
             >
               Contact our support team

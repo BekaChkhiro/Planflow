@@ -153,7 +153,7 @@ export function createMockApiClient(options: MockApiClientOptions = {}): Partial
     loadToken: vi.fn().mockReturnValue(isAuthenticated),
     hasToken: vi.fn().mockReturnValue(isAuthenticated),
     isAuthenticated: vi.fn().mockReturnValue(isAuthenticated),
-    getBaseUrl: vi.fn().mockReturnValue('https://api.planflow.dev'),
+    getBaseUrl: vi.fn().mockReturnValue('https://api.planflow.tools'),
 
     getCurrentUser: vi.fn().mockImplementation(async () => {
       throwIfConfigured('getCurrentUser')
@@ -341,7 +341,7 @@ export function createMockConfig(options: { isAuthenticated?: boolean; user?: Mo
   return {
     loadConfig: vi.fn().mockReturnValue({
       apiToken: isAuthenticated ? 'mock-token-12345' : undefined,
-      apiUrl: 'https://api.planflow.dev',
+      apiUrl: 'https://api.planflow.tools',
       userId: isAuthenticated ? user.id : undefined,
       userEmail: isAuthenticated ? user.email : undefined,
     }),
@@ -354,7 +354,7 @@ export function createMockConfig(options: { isAuthenticated?: boolean; user?: Mo
       }
       return 'mock-token-12345'
     }),
-    getApiUrl: vi.fn().mockReturnValue('https://api.planflow.dev'),
+    getApiUrl: vi.fn().mockReturnValue('https://api.planflow.tools'),
   }
 }
 

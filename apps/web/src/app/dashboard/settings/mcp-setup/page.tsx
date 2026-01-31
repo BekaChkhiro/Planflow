@@ -361,7 +361,7 @@ export default function MCPSetupPage() {
               <p className="mt-1 text-sm text-gray-600">
                 Check our{' '}
                 <a
-                  href="https://docs.planflow.dev/mcp"
+                  href="https://docs.planflow.tools/mcp"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:underline"

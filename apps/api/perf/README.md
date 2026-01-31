@@ -93,11 +93,11 @@ k6 run perf/tests/critical/large-plan-updates.js
 k6 run perf/scenarios/smoke.js
 
 # Staging
-k6 run perf/scenarios/smoke.js --env API_URL=https://api-staging.planflow.dev --env PERF_ENV=staging
+k6 run perf/scenarios/smoke.js --env API_URL=https://api-staging.planflow.tools --env PERF_ENV=staging
 
 # With custom credentials
 k6 run perf/scenarios/load.js \
-  --env API_URL=https://api-staging.planflow.dev \
+  --env API_URL=https://api-staging.planflow.tools \
   --env PERF_TEST_PASSWORD=secret123
 ```
 
@@ -105,8 +105,8 @@ k6 run perf/scenarios/load.js \
 
 The seed script creates:
 - 2 test users:
-  - `perf-test@planflow.dev` / `PerfTest123!` (free tier)
-  - `perf-pro@planflow.dev` / `PerfPro123!` (pro tier)
+  - `perf-test@planflow.tools` / `PerfTest123!` (free tier)
+  - `perf-pro@planflow.tools` / `PerfPro123!` (pro tier)
 - 10 projects per user
 - 50 tasks per project
 

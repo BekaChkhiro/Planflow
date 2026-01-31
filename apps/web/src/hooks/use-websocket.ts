@@ -106,7 +106,6 @@ export function useProjectWebSocket({
     if (!token || authStore.isTokenExpired()) {
       const refreshed = await authStore.refreshAccessToken()
       if (!refreshed) {
-        console.warn('[WS] Failed to refresh token, cannot connect')
         setStatus('error')
         isConnectingRef.current = false
         return
@@ -115,7 +114,6 @@ export function useProjectWebSocket({
     }
 
     if (!token) {
-      console.warn('[WS] No token available, cannot connect')
       setStatus('error')
       isConnectingRef.current = false
       return
@@ -130,7 +128,6 @@ export function useProjectWebSocket({
       wsRef.current = ws
 
       ws.onopen = () => {
-        console.log('[WS] Connected to project:', projectId)
         setStatus('connected')
         isConnectingRef.current = false
         reconnectDelayRef.current = INITIAL_RECONNECT_DELAY // Reset reconnect delay
@@ -152,11 +149,10 @@ export function useProjectWebSocket({
 
           switch (message.type) {
             case 'connected':
-              console.log('[WS] Confirmed connected to project:', message.data?.['projectName'])
+              // Connection confirmed
               break
 
             case 'task_updated':
-              console.log('[WS] Task updated:', message.data?.['task'])
               // Invalidate tasks query to refetch
               queryClient.invalidateQueries({
                 queryKey: projectTasksQueryKey(projectId),
@@ -165,7 +161,6 @@ export function useProjectWebSocket({
               break
 
             case 'tasks_synced':
-              console.log('[WS] Tasks synced:', message.data)
               // Invalidate both tasks and project queries
               queryClient.invalidateQueries({
                 queryKey: projectTasksQueryKey(projectId),
@@ -177,7 +172,6 @@ export function useProjectWebSocket({
               break
 
             case 'project_updated':
-              console.log('[WS] Project updated:', message.data)
               // Invalidate project query
               queryClient.invalidateQueries({
                 queryKey: projectQueryKey(projectId),
@@ -187,17 +181,13 @@ export function useProjectWebSocket({
             case 'pong':
               // Server responded to ping, connection is alive
               break
-
-            default:
-              console.log('[WS] Unknown message type:', message.type)
           }
-        } catch (err) {
-          console.error('[WS] Failed to parse message:', err)
+        } catch {
+          // Ignore parse errors
         }
       }
 
       ws.onclose = (event) => {
-        console.log('[WS] Disconnected:', event.code, event.reason)
         cleanup()
         setStatus('disconnected')
         onDisconnected?.()
@@ -205,7 +195,6 @@ export function useProjectWebSocket({
         // Reconnect with exponential backoff if we should
         if (shouldReconnectRef.current && event.code !== 4001) {
           // 4001 is auth error
-          console.log(`[WS] Reconnecting in ${reconnectDelayRef.current}ms...`)
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 2, MAX_RECONNECT_DELAY)
             connect()
@@ -213,13 +202,11 @@ export function useProjectWebSocket({
         }
       }
 
-      ws.onerror = (error) => {
-        console.error('[WS] Error:', error)
+      ws.onerror = () => {
         setStatus('error')
         isConnectingRef.current = false
       }
-    } catch (err) {
-      console.error('[WS] Failed to create WebSocket:', err)
+    } catch {
       setStatus('error')
       isConnectingRef.current = false
     }

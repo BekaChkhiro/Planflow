@@ -49,6 +49,12 @@ import {
 } from './middleware/index.js'
 import { openApiSpec } from './openapi.js'
 import { parsePlanTasks } from './lib/task-parser.js'
+import {
+  setupWebSocketServer,
+  broadcastTaskUpdated,
+  broadcastTasksUpdated,
+  broadcastTasksSynced,
+} from './websocket/index.js'
 
 // Helper to generate secure random tokens
 function generateRefreshToken(): string {
@@ -1586,6 +1592,17 @@ app.put('/projects/:id/plan', largeBodyLimit, auth, async (c) => {
       }
     }
 
+    const progress = tasksCount > 0 ? Math.round((completedCount / tasksCount) * 100) : 0
+
+    // Broadcast tasks synced via WebSocket
+    if (tasksCount > 0) {
+      broadcastTasksSynced(projectId, {
+        tasksCount,
+        completedCount,
+        progress,
+      })
+    }
+
     return c.json({
       success: true,
       data: {
@@ -1595,7 +1612,7 @@ app.put('/projects/:id/plan', largeBodyLimit, auth, async (c) => {
         updatedAt: updatedProject.updatedAt,
         tasksCount,
         completedCount,
-        progress: tasksCount > 0 ? Math.round((completedCount / tasksCount) * 100) : 0,
+        progress,
       },
     })
   } catch (error) {
@@ -1765,6 +1782,25 @@ app.put('/projects/:id/tasks', auth, async (c) => {
       .set({ updatedAt: new Date() })
       .where(eq(schema.projects.id, projectId))
 
+    // Broadcast all task updates via WebSocket
+    if (updatedTasks.length > 0) {
+      broadcastTasksUpdated(
+        projectId,
+        updatedTasks.map((t) => ({
+          id: t.id,
+          taskId: t.taskId,
+          name: t.name,
+          description: t.description,
+          status: t.status,
+          complexity: t.complexity,
+          estimatedHours: t.estimatedHours,
+          dependencies: t.dependencies ?? [],
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        }))
+      )
+    }
+
     return c.json({
       success: true,
       data: {
@@ -1866,6 +1902,22 @@ app.patch('/projects/:id/tasks/:taskId', auth, async (c) => {
       .update(schema.projects)
       .set({ updatedAt: new Date() })
       .where(eq(schema.projects.id, projectId))
+
+    // Broadcast task update via WebSocket
+    if (updated) {
+      broadcastTaskUpdated(projectId, {
+        id: updated.id,
+        taskId: updated.taskId,
+        name: updated.name,
+        description: updated.description,
+        status: updated.status,
+        complexity: updated.complexity,
+        estimatedHours: updated.estimatedHours,
+        dependencies: updated.dependencies ?? [],
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      })
+    }
 
     return c.json({
       success: true,
@@ -2430,9 +2482,12 @@ const port = Number(process.env['PORT']) || 3001
 
 console.log(`🚀 PlanFlow API running on http://localhost:${port}`)
 
-serve({
+const server = serve({
   fetch: app.fetch,
   port,
 })
+
+// Setup WebSocket server
+setupWebSocketServer(server)
 
 export default app

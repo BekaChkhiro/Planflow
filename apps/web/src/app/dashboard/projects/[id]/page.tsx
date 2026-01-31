@@ -27,6 +27,8 @@ import {
 } from 'lucide-react'
 
 import { useProject, useDeleteProject, useUpdateProject, useProjectTasks, type Task } from '@/hooks/use-projects'
+import { useProjectWebSocket } from '@/hooks/use-websocket'
+import { ConnectionIndicator } from '@/components/ui/connection-indicator'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -941,6 +943,12 @@ export default function ProjectDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
 
+  // WebSocket for real-time updates
+  const { status: wsStatus } = useProjectWebSocket({
+    projectId,
+    enabled: !isLoading && !error && !!project,
+  })
+
   const handleDelete = async () => {
     try {
       await deleteProject.mutateAsync(projectId)
@@ -996,6 +1004,7 @@ export default function ProjectDetailPage() {
               {stats.total > 0 && (
                 <Badge variant={progress === 100 ? 'default' : 'secondary'}>{progress}%</Badge>
               )}
+              <ConnectionIndicator status={wsStatus} />
             </div>
             {project.description && (
               <p className="mt-1 text-sm text-gray-500">{project.description}</p>

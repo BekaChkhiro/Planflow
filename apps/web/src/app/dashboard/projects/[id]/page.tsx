@@ -307,14 +307,18 @@ function KanbanColumn({
 }
 
 function KanbanView({ tasks }: { tasks: DisplayTask[] }) {
+  // Helper to sort by taskId (T1.1, T1.2, T2.1, etc.)
+  const sortByTaskId = (a: DisplayTask, b: DisplayTask) => a.taskId.localeCompare(b.taskId, undefined, { numeric: true })
+  // Helper to sort by updatedAt descending (most recent first)
+  const sortByUpdatedAtDesc = (a: DisplayTask, b: DisplayTask) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+
   const tasksByStatus = {
-    TODO: tasks.filter((t) => t.status === 'TODO'),
-    IN_PROGRESS: tasks.filter((t) => t.status === 'IN_PROGRESS'),
-    BLOCKED: tasks.filter((t) => t.status === 'BLOCKED'),
-    // Sort DONE tasks by updatedAt descending (most recently completed first)
-    DONE: tasks
-      .filter((t) => t.status === 'DONE')
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    // TODO, IN_PROGRESS, BLOCKED - sort by taskId for logical order
+    TODO: tasks.filter((t) => t.status === 'TODO').sort(sortByTaskId),
+    IN_PROGRESS: tasks.filter((t) => t.status === 'IN_PROGRESS').sort(sortByTaskId),
+    BLOCKED: tasks.filter((t) => t.status === 'BLOCKED').sort(sortByTaskId),
+    // DONE - sort by updatedAt descending (most recently completed first)
+    DONE: tasks.filter((t) => t.status === 'DONE').sort(sortByUpdatedAtDesc),
   }
 
   return (

@@ -1645,7 +1645,7 @@ app.get('/projects/:id/tasks', auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    // Get all tasks for the project
+    // Get all tasks for the project, sorted by updatedAt DESC (most recently updated first)
     const tasks = await db
       .select({
         id: schema.tasks.id,
@@ -1661,7 +1661,7 @@ app.get('/projects/:id/tasks', auth, async (c) => {
       })
       .from(schema.tasks)
       .where(eq(schema.tasks.projectId, projectId))
-      .orderBy(schema.tasks.taskId)
+      .orderBy(desc(schema.tasks.updatedAt))
 
     return c.json({
       success: true,

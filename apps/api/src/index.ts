@@ -1780,6 +1780,107 @@ app.put('/projects/:id/tasks', auth, async (c) => {
   }
 })
 
+// PATCH /projects/:id/tasks/:taskId - Update a single task by taskId (e.g., T1.1)
+app.patch('/projects/:id/tasks/:taskId', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const taskIdParam = c.req.param('taskId') // e.g., "T1.1"
+
+    // Validate UUID format for project ID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Validate taskId format (e.g., T1.1, T2.10)
+    const taskIdRegex = /^T\d+\.\d+$/
+    if (!taskIdRegex.test(taskIdParam)) {
+      return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
+    }
+
+    const body = await c.req.json()
+
+    // Validate status if provided
+    const validStatuses = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED']
+    if (body.status && !validStatuses.includes(body.status)) {
+      return c.json(
+        { success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
+        400
+      )
+    }
+
+    const db = getDbClient()
+
+    // Verify the project exists and belongs to the user
+    const [project] = await db
+      .select({ id: schema.projects.id, name: schema.projects.name })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Find the task by taskId (e.g., T1.1)
+    const [existingTask] = await db
+      .select({ id: schema.tasks.id })
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
+
+    if (!existingTask) {
+      return c.json({ success: false, error: `Task ${taskIdParam} not found in this project` }, 404)
+    }
+
+    // Build update object with only provided fields
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+    }
+    if (body.name !== undefined) updateData['name'] = body.name
+    if (body.description !== undefined) updateData['description'] = body.description
+    if (body.status !== undefined) updateData['status'] = body.status
+    if (body.complexity !== undefined) updateData['complexity'] = body.complexity
+    if (body.estimatedHours !== undefined) updateData['estimatedHours'] = body.estimatedHours
+    if (body.dependencies !== undefined) updateData['dependencies'] = body.dependencies
+
+    // Update the task
+    const [updated] = await db
+      .update(schema.tasks)
+      .set(updateData)
+      .where(eq(schema.tasks.id, existingTask.id))
+      .returning({
+        id: schema.tasks.id,
+        taskId: schema.tasks.taskId,
+        name: schema.tasks.name,
+        description: schema.tasks.description,
+        status: schema.tasks.status,
+        complexity: schema.tasks.complexity,
+        estimatedHours: schema.tasks.estimatedHours,
+        dependencies: schema.tasks.dependencies,
+        createdAt: schema.tasks.createdAt,
+        updatedAt: schema.tasks.updatedAt,
+      })
+
+    // Update project's updatedAt timestamp
+    await db
+      .update(schema.projects)
+      .set({ updatedAt: new Date() })
+      .where(eq(schema.projects.id, projectId))
+
+    return c.json({
+      success: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        task: updated,
+      },
+    })
+  } catch (error) {
+    console.error('Update task error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
 // ============================================
 // Subscription Routes
 // ============================================

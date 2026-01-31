@@ -1,5 +1,4 @@
-[build]
-dockerfilePath = "Dockerfile"
-
-[deploy]
-startCommand = "node dist/index.js"
+# Railway configuration
+# Note: Dockerfile paths are configured per-service in Railway dashboard
+# API service: Dockerfile
+# Frontend service: Dockerfile.web

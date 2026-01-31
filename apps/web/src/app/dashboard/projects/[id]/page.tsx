@@ -1040,7 +1040,7 @@ export default function ProjectDetailPage() {
                 Edit project
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href={`/projects/${project.id}/settings`}>
+                <Link href={`/dashboard/projects/${project.id}/settings`}>
                   <Settings className="mr-2 h-4 w-4" />
                   Settings
                 </Link>

@@ -1317,6 +1317,45 @@ app.post('/projects', auth, async (c) => {
   }
 })
 
+// GET /projects/:id - Get a single project
+app.get('/projects/:id', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check if project exists and belongs to user
+    const [project] = await db
+      .select({
+        id: schema.projects.id,
+        name: schema.projects.name,
+        description: schema.projects.description,
+        plan: schema.projects.plan,
+        createdAt: schema.projects.createdAt,
+        updatedAt: schema.projects.updatedAt,
+      })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .limit(1)
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    return c.json({ success: true, data: { project } })
+  } catch (error) {
+    console.error('Get project error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
 // PUT /projects/:id - Update a project
 app.put('/projects/:id', auth, async (c) => {
   try {

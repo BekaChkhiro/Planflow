@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Menu, LayoutDashboard, User, Settings, LogOut } from "lucide-react"
+import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAuthStore } from "@/stores/auth-store"
+import { FeedbackDialog } from "@/components/feedback-dialog"
 
 function getInitials(name: string | undefined): string {
   if (!name) return 'U'
@@ -40,9 +41,11 @@ const navLinks = [
 
 export function Navbar() {
   const [isOpen, setIsOpen] = React.useState(false)
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false)
   const { user, isAuthenticated, isInitialized, logout } = useAuthStore()
 
   return (
+    <>
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
@@ -69,6 +72,16 @@ export function Navbar() {
         {/* Desktop Auth Buttons */}
         <div className="hidden md:flex md:items-center md:space-x-4">
           {isInitialized && isAuthenticated ? (
+            <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFeedbackOpen(true)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Feedback
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
@@ -117,6 +130,7 @@ export function Navbar() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </>
           ) : (
             <>
               <Button variant="ghost" asChild>
@@ -178,6 +192,17 @@ export function Navbar() {
                     </Button>
                     <Button
                       variant="ghost"
+                      className="justify-start"
+                      onClick={() => {
+                        setFeedbackOpen(true)
+                        setIsOpen(false)
+                      }}
+                    >
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Feedback
+                    </Button>
+                    <Button
+                      variant="ghost"
                       className="justify-start text-red-600 hover:text-red-600 hover:bg-red-50"
                       onClick={() => {
                         logout()
@@ -208,5 +233,7 @@ export function Navbar() {
         </Sheet>
       </div>
     </header>
+    <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+    </>
   )
 }

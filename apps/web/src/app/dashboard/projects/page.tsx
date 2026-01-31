@@ -150,7 +150,7 @@ function CreateProjectDialog({
       })
       form.reset()
       onOpenChange(false)
-      router.push(`/projects/${project.id}`)
+      router.push(`/dashboard/projects/${project.id}`)
     } catch (error) {
       if (error instanceof ProjectLimitError) {
         setApiError(error.message)
@@ -286,7 +286,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
       <Card className="transition-shadow hover:shadow-md">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
-            <Link href={`/projects/${project.id}`} className="flex-1">
+            <Link href={`/dashboard/projects/${project.id}`} className="flex-1">
               <CardTitle className="text-lg hover:text-primary">{project.name}</CardTitle>
             </Link>
             <DropdownMenu>
@@ -298,10 +298,10 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
-                  <Link href={`/projects/${project.id}`}>View project</Link>
+                  <Link href={`/dashboard/projects/${project.id}`}>View project</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href={`/projects/${project.id}/settings`}>Settings</Link>
+                  <Link href={`/dashboard/projects/${project.id}/settings`}>Settings</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-red-600 focus:bg-red-50 focus:text-red-600"

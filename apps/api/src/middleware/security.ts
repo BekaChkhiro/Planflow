@@ -62,7 +62,19 @@ export const secureCors = cors({
       }
     }
 
-    // Origin not allowed
+    // Allow Railway domains (*.up.railway.app)
+    if (origin.includes('.up.railway.app')) {
+      return origin
+    }
+
+    // Allow Vercel preview deployments
+    if (origin.includes('.vercel.app')) {
+      return origin
+    }
+
+    // Origin not allowed - log for debugging
+    console.log(`[CORS] Origin not allowed: ${origin}`)
+    console.log(`[CORS] Allowed origins: ${JSON.stringify(allowedOrigins)}`)
     return null
   },
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

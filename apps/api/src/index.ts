@@ -243,7 +243,7 @@ app.use('*', defaultBodyLimit)
 app.get('/', (c) => {
   return c.json({
     name: 'PlanFlow API',
-    version: '0.0.1',
+    version: '0.0.2',
     status: 'ok',
   })
 })

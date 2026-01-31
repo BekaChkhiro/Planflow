@@ -20,7 +20,7 @@ jobs:
 
       - name: Link and Deploy API
         run: |
-          railway link ff19bdac-1e5c-44b5-8b12-6bb855b65a0a -e production -s api
+          railway link -p ff19bdac-1e5c-44b5-8b12-6bb855b65a0a -e production -s api
           railway up --detach
 
   deploy-frontend:
@@ -42,5 +42,5 @@ jobs:
 
       - name: Link and Deploy Frontend
         run: |
-          railway link ff19bdac-1e5c-44b5-8b12-6bb855b65a0a -e production -s frontend
+          railway link -p ff19bdac-1e5c-44b5-8b12-6bb855b65a0a -e production -s frontend
           railway up --detach

@@ -15,7 +15,7 @@ import {
   ExternalLink,
 } from "lucide-react"
 
-import { Navbar } from "@/components/landing"
+import { Navbar, Footer } from "@/components/landing"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -154,10 +154,10 @@ export default function TutorialsPage() {
   const completedCount = 0 // This would come from user state
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
 
-      <main className="container mx-auto px-4 py-12">
+      <main className="flex-1 container mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-8">
           <Button variant="ghost" size="sm" asChild className="mb-4">
@@ -332,25 +332,7 @@ export default function TutorialsPage() {
           </CardContent>
         </Card>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t py-8 mt-16">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>
-            Need help?{" "}
-            <Link href="/docs" className="underline hover:text-foreground">
-              Check the documentation
-            </Link>
-            {" "}or{" "}
-            <a
-              href="mailto:support@planflow.dev"
-              className="underline hover:text-foreground"
-            >
-              contact support
-            </a>
-          </p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

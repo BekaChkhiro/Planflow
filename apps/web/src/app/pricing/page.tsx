@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Navbar, Footer } from "@/components/landing"
 import { useAuthStore } from "@/stores/auth-store"
 import { useCreateCheckout } from "@/hooks/use-subscription"
 
@@ -155,7 +156,9 @@ export default function PricingPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <div className="min-h-screen flex flex-col bg-background">
+      <Navbar />
+      <main className="flex-1">
       {/* Header */}
       <section className="py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
@@ -241,6 +244,8 @@ export default function PricingPage() {
           </p>
         </div>
       </section>
-    </main>
+      </main>
+      <Footer />
+    </div>
   )
 }

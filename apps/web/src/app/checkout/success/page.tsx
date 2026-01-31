@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Navbar, Footer } from '@/components/landing'
 import { useInvalidateSubscription } from '@/hooks/use-subscription'
 
 export default function CheckoutSuccessPage() {
@@ -25,7 +26,9 @@ export default function CheckoutSuccessPage() {
   }, [invalidateSubscription])
 
   return (
-    <main className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col bg-background">
+      <Navbar />
+      <main className="flex-1 flex items-center justify-center p-4">
       <Card className="w-full max-w-md text-center">
         <CardHeader className="pb-4">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
@@ -58,6 +61,8 @@ export default function CheckoutSuccessPage() {
           </Button>
         </CardFooter>
       </Card>
-    </main>
+      </main>
+      <Footer />
+    </div>
   )
 }

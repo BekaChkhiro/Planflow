@@ -102,6 +102,7 @@ interface DisplayTask {
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
   dependencies: string[]
   phase: number
+  updatedAt: string
 }
 
 // Convert API tasks to display tasks with computed phase
@@ -119,6 +120,7 @@ function toDisplayTasks(tasks: Task[]): DisplayTask[] {
       status: task.status,
       dependencies: task.dependencies,
       phase,
+      updatedAt: task.updatedAt,
     }
   })
 }
@@ -309,7 +311,10 @@ function KanbanView({ tasks }: { tasks: DisplayTask[] }) {
     TODO: tasks.filter((t) => t.status === 'TODO'),
     IN_PROGRESS: tasks.filter((t) => t.status === 'IN_PROGRESS'),
     BLOCKED: tasks.filter((t) => t.status === 'BLOCKED'),
-    DONE: tasks.filter((t) => t.status === 'DONE'),
+    // Sort DONE tasks by updatedAt descending (most recently completed first)
+    DONE: tasks
+      .filter((t) => t.status === 'DONE')
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
   }
 
   return (

@@ -5,13 +5,12 @@ on:
     branches:
       - master
 
-env:
-  RAILWAY_PROJECT_ID: ff19bdac-1e5c-44b5-8b12-6bb855b65a0a
-
 jobs:
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,14 +18,16 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Deploy API
-        run: railway up -s api -e production --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      - name: Link and Deploy API
+        run: |
+          railway link ff19bdac-1e5c-44b5-8b12-6bb855b65a0a -e production -s api
+          railway up --detach
 
   deploy-frontend:
     name: Deploy Frontend
     runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +40,7 @@ jobs:
           cp Dockerfile Dockerfile.api.temp
           cp Dockerfile.web Dockerfile
 
-      - name: Deploy Frontend
-        run: railway up -s frontend -e production --detach
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      - name: Link and Deploy Frontend
+        run: |
+          railway link ff19bdac-1e5c-44b5-8b12-6bb855b65a0a -e production -s frontend
+          railway up --detach

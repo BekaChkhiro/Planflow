@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Menu } from "lucide-react"
+import { Menu, LayoutDashboard } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -11,6 +11,7 @@ import {
   SheetTrigger,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { useAuthStore } from "@/stores/auth-store"
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -20,6 +21,7 @@ const navLinks = [
 
 export function Navbar() {
   const [isOpen, setIsOpen] = React.useState(false)
+  const { isAuthenticated, isInitialized } = useAuthStore()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -47,12 +49,23 @@ export function Navbar() {
 
         {/* Desktop Auth Buttons */}
         <div className="hidden md:flex md:items-center md:space-x-4">
-          <Button variant="ghost" asChild>
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button asChild>
-            <Link href="/register">Get Started</Link>
-          </Button>
+          {isInitialized && isAuthenticated ? (
+            <Button asChild>
+              <Link href="/dashboard">
+                <LayoutDashboard className="mr-2 h-4 w-4" />
+                Dashboard
+              </Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+              <Button asChild>
+                <Link href="/register">Get Started</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu */}
@@ -77,16 +90,27 @@ export function Navbar() {
                 </Link>
               ))}
               <div className="flex flex-col space-y-2 pt-4 border-t">
-                <Button variant="ghost" asChild className="justify-start">
-                  <Link href="/login" onClick={() => setIsOpen(false)}>
-                    Sign In
-                  </Link>
-                </Button>
-                <Button asChild>
-                  <Link href="/register" onClick={() => setIsOpen(false)}>
-                    Get Started
-                  </Link>
-                </Button>
+                {isInitialized && isAuthenticated ? (
+                  <Button asChild>
+                    <Link href="/dashboard" onClick={() => setIsOpen(false)}>
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Dashboard
+                    </Link>
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="ghost" asChild className="justify-start">
+                      <Link href="/login" onClick={() => setIsOpen(false)}>
+                        Sign In
+                      </Link>
+                    </Button>
+                    <Button asChild>
+                      <Link href="/register" onClick={() => setIsOpen(false)}>
+                        Get Started
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </div>
             </nav>
           </SheetContent>

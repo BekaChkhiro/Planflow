@@ -38,4 +38,4 @@ COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 
 ENV NODE_ENV=production
 WORKDIR /app/apps/api
-CMD ["node", "dist/index.js"]
+CMD node dist/index.js

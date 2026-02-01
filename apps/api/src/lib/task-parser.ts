@@ -394,21 +394,46 @@ export function parsePlanTasks(planContent: string): ParsedTask[] {
 /**
  * Extract task order from task ID (T1.1 -> 11, T2.3 -> 23)
  */
+/**
+ * Extract task order from task ID
+ * T1.1 -> 11, T2.3 -> 23, T5A.1 -> 51, T8B.2 -> 82
+ */
 export function getTaskOrder(taskId: string): number {
-  const match = taskId.match(/T(\d+)\.(\d+)/)
+  // Match T followed by phase number, optional sub-phase letter, dot, task number
+  const match = taskId.match(/T(\d+)([A-Za-z])?\.(\d+)/)
   if (match) {
-    return parseInt(match[1], 10) * 10 + parseInt(match[2], 10)
+    const phase = parseInt(match[1], 10)
+    const subPhase = match[2] ? match[2].toUpperCase().charCodeAt(0) - 64 : 0 // A=1, B=2, etc.
+    const taskNum = parseInt(match[3], 10)
+    // Create order: phase * 1000 + subPhase * 100 + taskNum
+    // T5A.1 -> 5*1000 + 1*100 + 1 = 5101
+    // T5B.2 -> 5*1000 + 2*100 + 2 = 5202
+    return phase * 1000 + subPhase * 100 + taskNum
   }
   return 0
 }
 
 /**
- * Extract phase number from task ID (T1.1 -> 1, T2.3 -> 2)
+ * Extract phase number from task ID
+ * T1.1 -> 1, T2.3 -> 2, T5A.1 -> 5, T8B.2 -> 8
  */
 export function getTaskPhase(taskId: string): number {
-  const match = taskId.match(/T(\d+)\./)
+  // Match T followed by phase number (digits), then optional letter or dot
+  const match = taskId.match(/T(\d+)/)
   if (match) {
     return parseInt(match[1], 10)
   }
   return 0
+}
+
+/**
+ * Extract sub-phase letter from task ID (if exists)
+ * T1.1 -> null, T5A.1 -> 'A', T8B.2 -> 'B'
+ */
+export function getTaskSubPhase(taskId: string): string | null {
+  const match = taskId.match(/T\d+([A-Za-z])\./)
+  if (match) {
+    return match[1].toUpperCase()
+  }
+  return null
 }

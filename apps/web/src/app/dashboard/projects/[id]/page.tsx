@@ -108,8 +108,9 @@ interface DisplayTask {
 // Convert API tasks to display tasks with computed phase
 function toDisplayTasks(tasks: Task[]): DisplayTask[] {
   return tasks.map((task) => {
-    // Extract phase from taskId (T1.1 -> 1, T2.3 -> 2)
-    const phaseMatch = task.taskId.match(/T(\d+)\./)
+    // Extract phase from taskId (T1.1 -> 1, T2.3 -> 2, T5A.1 -> 5, T8B.2 -> 8)
+    // Updated regex to handle sub-phase letters (T5A, T8B, etc.)
+    const phaseMatch = task.taskId.match(/T(\d+)/)
     const phase = phaseMatch && phaseMatch[1] ? parseInt(phaseMatch[1], 10) : 1
 
     return {

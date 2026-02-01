@@ -40,14 +40,20 @@
 
 ## Progress
 
-**Overall:** 91% complete
+**Overall:** 68% complete (Phases 1-4) | Phase 5 planned
 
-| Phase                    | Status      | Progress |
-| ------------------------ | ----------- | -------- |
-| Phase 1: Foundation      | DONE        | 100%     |
-| Phase 2: MCP Server      | DONE        | 100%     |
-| Phase 3: Web Dashboard   | DONE        | 100%     |
-| Phase 4: Polish & Launch | IN_PROGRESS | 65%      |
+| Phase                       | Status      | Progress | Tasks |
+| --------------------------- | ----------- | -------- | ----- |
+| Phase 1: Foundation         | DONE        | 100%     | 19/19 |
+| Phase 2: MCP Server         | DONE        | 100%     | 17/17 |
+| Phase 3: Web Dashboard      | DONE        | 100%     | 20/20 |
+| Phase 4: Polish & Launch    | IN_PROGRESS | 65%      | 13/20 |
+| Phase 5: Team Collaboration | PLANNED     | 0%       | 0/54  |
+
+### Current Focus
+📍 **Current**: Phase 4 completion (T4.13-T4.20)
+🎯 **Next**: Phase 5 - Team Collaboration (54 tasks)
+📊 **Total Tasks**: 130 (76 existing + 54 new)
 
 ---
 
@@ -168,6 +174,329 @@
 | T4.18 | Prepare Product Hunt submission       | Medium     | TODO   | T4.17        |
 | T4.19 | Create social media announcements     | Low        | TODO   | T4.18        |
 | T4.20 | Launch!                               | Low        | TODO   | T4.19        |
+
+---
+
+## Phase 5: Team Collaboration (Sprint 5-6)
+
+**Goal:** Full team collaboration features - real-time sync, permissions, notifications, integrations
+
+**Sub-phases:**
+- 5A: Backend Infrastructure (API, WebSockets, Permissions)
+- 5B: Plugin Commands (/team, /invite, /activity)
+- 5C: Real-time Features (Presence, Live Updates)
+- 5D: Web Dashboard (Team UI, Admin Panel)
+- 5E: External Integrations (GitHub, Slack, Discord)
+
+---
+
+### Phase 5A: Backend Infrastructure
+
+**Goal:** API endpoints და WebSocket infrastructure გუნდური ფუნქციებისთვის
+
+| ID     | Task                                          | Complexity | Status | Dependencies |
+| ------ | --------------------------------------------- | ---------- | ------ | ------------ |
+| T5A.1  | Create organizations CRUD endpoints           | Medium     | TODO   | T1.14        |
+| T5A.2  | Implement team invitations API                | Medium     | TODO   | T5A.1        |
+| T5A.3  | Create roles/permissions system (Owner/Admin/Editor/Viewer) | High | TODO | T5A.1 |
+| T5A.4  | Implement task assignment endpoints           | Medium     | TODO   | T5A.3        |
+| T5A.5  | Create comments API (CRUD + threads)          | Medium     | TODO   | T1.18        |
+| T5A.6  | Implement activity log endpoints              | Medium     | TODO   | T5A.1        |
+| T5A.7  | Set up WebSocket server (Socket.io/ws)        | High       | TODO   | T1.1         |
+| T5A.8  | Implement real-time task updates via WS       | High       | TODO   | T5A.7        |
+| T5A.9  | Create presence system (who's online)         | Medium     | TODO   | T5A.7        |
+| T5A.10 | Implement notifications table + API           | Medium     | TODO   | T5A.1        |
+| T5A.11 | Create email notification service (Resend)    | Medium     | TODO   | T5A.10       |
+| T5A.12 | Implement @mentions parsing and notifications | Medium     | TODO   | T5A.5, T5A.10|
+
+**Database Schema Additions:**
+
+```sql
+-- Team Invitations
+CREATE TABLE team_invitations (
+  id UUID PRIMARY KEY,
+  organization_id UUID REFERENCES organizations(id),
+  email VARCHAR(255) NOT NULL,
+  role VARCHAR(50) DEFAULT 'editor',
+  invited_by UUID REFERENCES users(id),
+  token VARCHAR(255) UNIQUE,
+  expires_at TIMESTAMP,
+  accepted_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Notifications
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY,
+  user_id UUID REFERENCES users(id),
+  type VARCHAR(50) NOT NULL, -- 'mention', 'assignment', 'comment', 'status_change'
+  title VARCHAR(255) NOT NULL,
+  body TEXT,
+  link VARCHAR(500),
+  read_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Task Assignments
+ALTER TABLE tasks ADD COLUMN assignee_id UUID REFERENCES users(id);
+ALTER TABLE tasks ADD COLUMN assigned_by UUID REFERENCES users(id);
+ALTER TABLE tasks ADD COLUMN assigned_at TIMESTAMP;
+
+-- Task Comments (enhance existing)
+ALTER TABLE comments ADD COLUMN parent_id UUID REFERENCES comments(id); -- for threads
+ALTER TABLE comments ADD COLUMN mentions UUID[]; -- mentioned user IDs
+```
+
+---
+
+### Phase 5B: Plugin Commands
+
+**Goal:** Claude Code პლაგინში გუნდური ბრძანებების დამატება
+
+| ID     | Task                                          | Complexity | Status | Dependencies |
+| ------ | --------------------------------------------- | ---------- | ------ | ------------ |
+| T5B.1  | Create /team command (list members, roles)    | Medium     | TODO   | T5A.1        |
+| T5B.2  | Create /invite command (email + role)         | Medium     | TODO   | T5A.2        |
+| T5B.3  | Create /assign command (assign task to user)  | Medium     | TODO   | T5A.4        |
+| T5B.4  | Create /activity command (show recent activity) | Low      | TODO   | T5A.6        |
+| T5B.5  | Create /comment command (add comment to task) | Medium     | TODO   | T5A.5        |
+| T5B.6  | Create /notifications command (view/clear)    | Low        | TODO   | T5A.10       |
+| T5B.7  | Add @mention support in task descriptions     | Medium     | TODO   | T5A.12       |
+| T5B.8  | Add assignee display in /next output          | Low        | TODO   | T5B.3        |
+| T5B.9  | Create /workload command (team capacity view) | Medium     | TODO   | T5B.3        |
+| T5B.10 | Add MCP tools for team commands               | High       | TODO   | T5B.1-9      |
+
+**New Commands Preview:**
+
+```bash
+# Team Management
+/team                        # List team members and roles
+/team add john@email.com     # Invite with default role (editor)
+/team add john@email.com admin  # Invite as admin
+/team remove john@email.com  # Remove from team
+/team role john@email.com viewer  # Change role
+
+# Task Assignment
+/assign T1.1 john@email.com  # Assign task
+/assign T1.1 me              # Assign to self
+/unassign T1.1               # Remove assignment
+/my-tasks                    # Show my assigned tasks
+/workload                    # Show team workload
+
+# Activity & Comments
+/activity                    # Recent activity feed
+/activity T1.1               # Activity for specific task
+/comment T1.1 "Great progress!"  # Add comment
+/comments T1.1               # View task comments
+
+# Notifications
+/notifications               # View unread notifications
+/notifications clear         # Mark all as read
+```
+
+---
+
+### Phase 5C: Real-time Features
+
+**Goal:** Live presence, instant updates, collaborative editing
+
+| ID     | Task                                          | Complexity | Status | Dependencies |
+| ------ | --------------------------------------------- | ---------- | ------ | ------------ |
+| T5C.1  | Implement "Currently Working On" status       | Medium     | TODO   | T5A.9        |
+| T5C.2  | Auto-update status from Claude Code activity  | High       | TODO   | T5C.1        |
+| T5C.3  | Create live activity feed component           | Medium     | TODO   | T5A.8        |
+| T5C.4  | Implement task update broadcasting            | Medium     | TODO   | T5A.8        |
+| T5C.5  | Add typing indicators for comments            | Low        | TODO   | T5A.7        |
+| T5C.6  | Implement conflict prevention (task locking)  | High       | TODO   | T5C.4        |
+| T5C.7  | Create notification toast system              | Low        | TODO   | T5A.8        |
+| T5C.8  | Add browser push notifications                | Medium     | TODO   | T5C.7        |
+
+**Real-time Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         PlanFlow Real-time                           │
+└─────────────────────────────────────────────────────────────────────┘
+
+  Claude Code (User A)              Claude Code (User B)
+         │                                   │
+         │  WebSocket                        │  WebSocket
+         ▼                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                        WebSocket Server                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │
+│  │  Presence   │  │  Task Sync  │  │ Notifications│                 │
+│  │  Channel    │  │  Channel    │  │  Channel     │                 │
+│  └─────────────┘  └─────────────┘  └─────────────┘                 │
+└─────────────────────────────────────────────────────────────────────┘
+         │                                   │
+         ▼                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Redis Pub/Sub (scaling)                          │
+└─────────────────────────────────────────────────────────────────────┘
+
+Events:
+• user:online / user:offline
+• user:working_on {taskId, projectId}
+• task:updated {taskId, changes, userId}
+• task:assigned {taskId, assigneeId, assignerId}
+• comment:created {taskId, commentId, userId}
+• notification:new {userId, notification}
+```
+
+---
+
+### Phase 5D: Web Dashboard Team UI
+
+**Goal:** ვებ ინტერფეისი გუნდის მართვისთვის
+
+| ID     | Task                                          | Complexity | Status | Dependencies |
+| ------ | --------------------------------------------- | ---------- | ------ | ------------ |
+| T5D.1  | Create team members page                      | Medium     | TODO   | T5A.1        |
+| T5D.2  | Implement invite modal with role selection    | Medium     | TODO   | T5A.2        |
+| T5D.3  | Create role management UI                     | Medium     | TODO   | T5A.3        |
+| T5D.4  | Add assignee selector to task cards           | Low        | TODO   | T5A.4        |
+| T5D.5  | Create comments section in task detail        | Medium     | TODO   | T5A.5        |
+| T5D.6  | Implement threaded comments UI                | Medium     | TODO   | T5D.5        |
+| T5D.7  | Create activity feed sidebar                  | Medium     | TODO   | T5A.6        |
+| T5D.8  | Add online presence indicators (avatars)      | Low        | TODO   | T5C.1        |
+| T5D.9  | Create workload/capacity dashboard            | High       | TODO   | T5B.9        |
+| T5D.10 | Implement notification center (bell icon)     | Medium     | TODO   | T5A.10       |
+| T5D.11 | Create team analytics page                    | High       | TODO   | T5A.6        |
+| T5D.12 | Add @mention autocomplete in comment input    | Medium     | TODO   | T5A.12       |
+
+**UI Mockups:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  PlanFlow  │  Projects  │  Team  │  Analytics  │      🔔 3  👤 John │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Team Members                                        [+ Invite]      │
+│  ────────────────────────────────────────────────────────────────   │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ 🟢 John Doe          john@company.com       Owner      ⚙️    │   │
+│  │    Currently working on: T2.3 - API Integration              │   │
+│  ├──────────────────────────────────────────────────────────────┤   │
+│  │ 🟢 Jane Smith        jane@company.com       Admin      ⚙️    │   │
+│  │    Currently working on: T3.1 - Dashboard UI                 │   │
+│  ├──────────────────────────────────────────────────────────────┤   │
+│  │ 🔴 Bob Wilson        bob@company.com        Editor     ⚙️    │   │
+│  │    Last seen: 2 hours ago                                    │   │
+│  ├──────────────────────────────────────────────────────────────┤   │
+│  │ ⏳ alice@company.com (Pending Invitation)   Editor     ❌    │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│  Workload Overview                                                   │
+│  ────────────────────────────────────────────────────────────────   │
+│  John  ████████░░  8 tasks                                          │
+│  Jane  ██████░░░░  6 tasks                                          │
+│  Bob   ████░░░░░░  4 tasks                                          │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Phase 5E: External Integrations
+
+**Goal:** GitHub, Slack, Discord ინტეგრაციები
+
+| ID     | Task                                          | Complexity | Status | Dependencies |
+| ------ | --------------------------------------------- | ---------- | ------ | ------------ |
+| T5E.1  | Create integrations settings page             | Medium     | TODO   | T3.13        |
+| T5E.2  | Implement GitHub OAuth flow                   | High       | TODO   | T5E.1        |
+| T5E.3  | Link tasks to GitHub issues                   | Medium     | TODO   | T5E.2        |
+| T5E.4  | Link tasks to Pull Requests                   | Medium     | TODO   | T5E.2        |
+| T5E.5  | Auto-update task status on PR merge           | High       | TODO   | T5E.4        |
+| T5E.6  | Generate branch names from tasks              | Low        | TODO   | T5E.2        |
+| T5E.7  | Implement Slack webhook integration           | Medium     | TODO   | T5E.1        |
+| T5E.8  | Create Slack notification preferences         | Low        | TODO   | T5E.7        |
+| T5E.9  | Implement Discord webhook integration         | Medium     | TODO   | T5E.1        |
+| T5E.10 | Create /github command in plugin              | Medium     | TODO   | T5E.2        |
+| T5E.11 | Add "Create PR" button in task detail         | Medium     | TODO   | T5E.4        |
+| T5E.12 | Implement daily/weekly digest emails          | Medium     | TODO   | T5A.11       |
+
+**GitHub Integration Flow:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      GitHub Integration                              │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. Link Repository
+   /github link owner/repo
+
+2. Task → Branch (automatic naming)
+   Task T2.1: "Implement login"
+   → Branch: feature/T2.1-implement-login
+
+3. Task → Issue
+   /github issue T2.1
+   → Creates GitHub Issue with task details
+   → Links issue URL back to task
+
+4. Task → PR
+   /github pr T2.1
+   → Opens PR creation with pre-filled template
+
+5. PR Merge → Task Done (webhook)
+   PR #123 merged (mentions T2.1)
+   → Task T2.1 status → DONE ✅
+   → Activity log: "T2.1 completed via PR #123"
+   → Notification to assignee
+```
+
+**Slack/Discord Notifications:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ 📋 PlanFlow                                              just now   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ ✅ Task Completed                                                   │
+│                                                                      │
+│ *T2.1: Implement user login*                                        │
+│ Completed by: John Doe                                              │
+│ Project: E-commerce App                                             │
+│                                                                      │
+│ [View Task] [View Project]                                          │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Phase 5 Summary
+
+| Sub-phase | Tasks | Focus Area |
+| --------- | ----- | ---------- |
+| 5A: Backend Infrastructure | 12 | API, WebSocket, Permissions |
+| 5B: Plugin Commands | 10 | CLI team features |
+| 5C: Real-time Features | 8 | Live presence, instant sync |
+| 5D: Web Dashboard | 12 | Team UI, notifications |
+| 5E: External Integrations | 12 | GitHub, Slack, Discord |
+| **Total** | **54** | |
+
+**Estimated Duration:** 4-6 weeks (2-3 sprints)
+
+**Priority Order:**
+1. 5A (Backend) - Foundation for everything
+2. 5B (Plugin) + 5D (Web) - Parallel development
+3. 5C (Real-time) - After basic team features work
+4. 5E (Integrations) - Can be partially parallel
+
+**Success Criteria:**
+- [ ] Users can create and manage teams
+- [ ] Team members can be invited with specific roles
+- [ ] Tasks can be assigned to team members
+- [ ] Comments and discussions work on tasks
+- [ ] Real-time presence shows who's online
+- [ ] Task updates sync instantly to all team members
+- [ ] GitHub integration auto-updates task status
+- [ ] Slack/Discord notifications work
+- [ ] All features work via CLI and Web
 
 ---
 

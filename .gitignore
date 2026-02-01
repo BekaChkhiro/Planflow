@@ -45,3 +45,4 @@ playwright/.cache/
 
 # Misc
 *.tsbuildinfo
+.plan-config.json

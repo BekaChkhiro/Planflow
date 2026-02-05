@@ -4,7 +4,7 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { Hono } from 'hono'
 // Note: Using custom secureCors from middleware/security.ts instead of hono/cors
 import { logger } from 'hono/logger'
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq, ne } from 'drizzle-orm'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
@@ -20,6 +20,8 @@ import {
   ChangePasswordRequestSchema,
   CreateCheckoutRequestSchema,
   CreateFeedbackRequestSchema,
+  CreateOrganizationRequestSchema,
+  UpdateOrganizationRequestSchema,
   type SubscriptionTier,
   type SubscriptionStatus,
   type ProjectLimits,
@@ -96,6 +98,15 @@ function extractBearerToken(authHeader: string | undefined): string | null {
     return null
   }
   return authHeader.slice(7)
+}
+
+// Helper to generate a URL-friendly slug from a name
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 // Project limits by subscription tier (-1 = unlimited)
@@ -2473,6 +2484,427 @@ app.get('/feedback', auth, async (c) => {
     })
   } catch (error) {
     console.error('Get feedback error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ============================================
+// Organization Routes
+// ============================================
+
+// POST /organizations - Create a new organization
+app.post('/organizations', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+
+    const body = await c.req.json()
+    const validation = CreateOrganizationRequestSchema.safeParse(body)
+
+    if (!validation.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.flatten().fieldErrors,
+        },
+        400
+      )
+    }
+
+    const { name, slug: providedSlug, description } = validation.data
+    const slug = providedSlug || generateSlug(name)
+    const db = getDbClient()
+
+    // Check if slug is already taken
+    const [existingOrg] = await db
+      .select({ id: schema.organizations.id })
+      .from(schema.organizations)
+      .where(eq(schema.organizations.slug, slug))
+      .limit(1)
+
+    if (existingOrg) {
+      return c.json(
+        {
+          success: false,
+          error: 'An organization with this slug already exists',
+        },
+        409
+      )
+    }
+
+    // Insert organization
+    const [newOrg] = await db
+      .insert(schema.organizations)
+      .values({
+        name,
+        slug,
+        description: description ?? null,
+        createdBy: user.id,
+      })
+      .returning({
+        id: schema.organizations.id,
+        name: schema.organizations.name,
+        slug: schema.organizations.slug,
+        description: schema.organizations.description,
+        createdBy: schema.organizations.createdBy,
+        createdAt: schema.organizations.createdAt,
+        updatedAt: schema.organizations.updatedAt,
+      })
+
+    if (!newOrg) {
+      return c.json(
+        {
+          success: false,
+          error: 'Failed to create organization',
+        },
+        500
+      )
+    }
+
+    // Add creator as owner member
+    try {
+      await db.insert(schema.organizationMembers).values({
+        organizationId: newOrg.id,
+        userId: user.id,
+        role: 'owner',
+      })
+    } catch (memberError) {
+      // If member insert fails, delete the org to avoid orphaned orgs
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, newOrg.id))
+      console.error('Failed to add owner member, rolled back org creation:', memberError)
+      return c.json(
+        {
+          success: false,
+          error: 'Failed to create organization',
+        },
+        500
+      )
+    }
+
+    return c.json(
+      {
+        success: true,
+        data: { organization: newOrg },
+      },
+      201
+    )
+  } catch (error) {
+    console.error('Create organization error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// GET /organizations - List user's organizations
+app.get('/organizations', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const db = getDbClient()
+
+    const orgs = await db
+      .select({
+        id: schema.organizations.id,
+        name: schema.organizations.name,
+        slug: schema.organizations.slug,
+        description: schema.organizations.description,
+        createdBy: schema.organizations.createdBy,
+        createdAt: schema.organizations.createdAt,
+        updatedAt: schema.organizations.updatedAt,
+        role: schema.organizationMembers.role,
+      })
+      .from(schema.organizationMembers)
+      .innerJoin(
+        schema.organizations,
+        eq(schema.organizationMembers.organizationId, schema.organizations.id)
+      )
+      .where(eq(schema.organizationMembers.userId, user.id))
+      .orderBy(desc(schema.organizations.updatedAt))
+
+    return c.json({
+      success: true,
+      data: { organizations: orgs },
+    })
+  } catch (error) {
+    console.error('List organizations error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// GET /organizations/:id - Get organization details
+app.get('/organizations/:id', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const orgId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(orgId)) {
+      return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Get org + user's membership in a single query
+    const [result] = await db
+      .select({
+        id: schema.organizations.id,
+        name: schema.organizations.name,
+        slug: schema.organizations.slug,
+        description: schema.organizations.description,
+        createdBy: schema.organizations.createdBy,
+        createdAt: schema.organizations.createdAt,
+        updatedAt: schema.organizations.updatedAt,
+        role: schema.organizationMembers.role,
+      })
+      .from(schema.organizationMembers)
+      .innerJoin(
+        schema.organizations,
+        eq(schema.organizationMembers.organizationId, schema.organizations.id)
+      )
+      .where(
+        and(
+          eq(schema.organizationMembers.userId, user.id),
+          eq(schema.organizations.id, orgId)
+        )
+      )
+      .limit(1)
+
+    if (!result) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    return c.json({
+      success: true,
+      data: { organization: result },
+    })
+  } catch (error) {
+    console.error('Get organization error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// PUT /organizations/:id - Update organization
+app.put('/organizations/:id', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const orgId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(orgId)) {
+      return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
+    }
+
+    const body = await c.req.json()
+    const validation = UpdateOrganizationRequestSchema.safeParse(body)
+
+    if (!validation.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.flatten().fieldErrors,
+        },
+        400
+      )
+    }
+
+    const { name, slug, description } = validation.data
+
+    // Check if at least one field is provided
+    if (name === undefined && slug === undefined && description === undefined) {
+      return c.json(
+        {
+          success: false,
+          error: 'At least one field (name, slug, or description) must be provided',
+        },
+        400
+      )
+    }
+
+    const db = getDbClient()
+
+    // Check membership and role (must be owner or admin)
+    const [membership] = await db
+      .select({ role: schema.organizationMembers.role })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, orgId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    if (membership.role !== 'owner' && membership.role !== 'admin') {
+      return c.json({ success: false, error: 'Only owners and admins can update the organization' }, 403)
+    }
+
+    // If slug is being changed, check uniqueness
+    if (slug) {
+      const [existingOrg] = await db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .where(
+          and(
+            eq(schema.organizations.slug, slug),
+            ne(schema.organizations.id, orgId)
+          )
+        )
+        .limit(1)
+
+      if (existingOrg) {
+        return c.json(
+          {
+            success: false,
+            error: 'An organization with this slug already exists',
+          },
+          409
+        )
+      }
+    }
+
+    // Build update object with only provided fields
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+    }
+    if (name !== undefined) updateData['name'] = name
+    if (slug !== undefined) updateData['slug'] = slug
+    if (description !== undefined) updateData['description'] = description
+
+    const [updatedOrg] = await db
+      .update(schema.organizations)
+      .set(updateData)
+      .where(eq(schema.organizations.id, orgId))
+      .returning({
+        id: schema.organizations.id,
+        name: schema.organizations.name,
+        slug: schema.organizations.slug,
+        description: schema.organizations.description,
+        createdBy: schema.organizations.createdBy,
+        createdAt: schema.organizations.createdAt,
+        updatedAt: schema.organizations.updatedAt,
+      })
+
+    if (!updatedOrg) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    return c.json({ success: true, data: { organization: updatedOrg } })
+  } catch (error) {
+    console.error('Update organization error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// DELETE /organizations/:id - Delete organization
+app.delete('/organizations/:id', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const orgId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(orgId)) {
+      return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check membership and role (must be owner)
+    const [membership] = await db
+      .select({ role: schema.organizationMembers.role })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, orgId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    if (membership.role !== 'owner') {
+      return c.json({ success: false, error: 'Only the owner can delete the organization' }, 403)
+    }
+
+    const [deletedOrg] = await db
+      .delete(schema.organizations)
+      .where(eq(schema.organizations.id, orgId))
+      .returning({ id: schema.organizations.id })
+
+    if (!deletedOrg) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    return c.json({ success: true, data: { message: 'Organization deleted successfully' } })
+  } catch (error) {
+    console.error('Delete organization error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// GET /organizations/:id/members - List organization members
+app.get('/organizations/:id/members', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const orgId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(orgId)) {
+      return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check if user is a member of this organization
+    const [membership] = await db
+      .select({ role: schema.organizationMembers.role })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, orgId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    // Get all members with user info
+    const members = await db
+      .select({
+        id: schema.organizationMembers.id,
+        organizationId: schema.organizationMembers.organizationId,
+        userId: schema.organizationMembers.userId,
+        role: schema.organizationMembers.role,
+        createdAt: schema.organizationMembers.createdAt,
+        updatedAt: schema.organizationMembers.updatedAt,
+        userName: schema.users.name,
+        userEmail: schema.users.email,
+      })
+      .from(schema.organizationMembers)
+      .innerJoin(schema.users, eq(schema.organizationMembers.userId, schema.users.id))
+      .where(eq(schema.organizationMembers.organizationId, orgId))
+      .orderBy(schema.organizationMembers.createdAt)
+
+    return c.json({
+      success: true,
+      data: { members },
+    })
+  } catch (error) {
+    console.error('List organization members error:', error)
     return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
   }
 })

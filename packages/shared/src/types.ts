@@ -326,3 +326,70 @@ export const CreateFeedbackRequestSchema = z.object({
 })
 
 export type CreateFeedbackRequest = z.infer<typeof CreateFeedbackRequestSchema>
+
+// Organization types
+export const OrgMemberRoleSchema = z.enum(['owner', 'admin', 'editor', 'viewer'])
+export type OrgMemberRole = z.infer<typeof OrgMemberRoleSchema>
+
+export const OrganizationSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  description: z.string().nullable().optional(),
+  createdBy: z.string().uuid(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+})
+
+export type Organization = z.infer<typeof OrganizationSchema>
+
+export const OrganizationMemberSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  userId: z.string().uuid(),
+  role: OrgMemberRoleSchema,
+  createdAt: z.date(),
+  updatedAt: z.date(),
+})
+
+export type OrganizationMember = z.infer<typeof OrganizationMemberSchema>
+
+// Create organization request schema
+export const CreateOrganizationRequestSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Organization name is required')
+    .max(255, 'Organization name must be at most 255 characters'),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase alphanumeric with hyphens')
+    .max(255, 'Slug must be at most 255 characters')
+    .optional(),
+  description: z
+    .string()
+    .max(2000, 'Description must be at most 2000 characters')
+    .optional(),
+})
+
+export type CreateOrganizationRequest = z.infer<typeof CreateOrganizationRequestSchema>
+
+// Update organization request schema
+export const UpdateOrganizationRequestSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Organization name cannot be empty')
+    .max(255, 'Organization name must be at most 255 characters')
+    .optional(),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be lowercase alphanumeric with hyphens')
+    .max(255, 'Slug must be at most 255 characters')
+    .optional(),
+  description: z
+    .string()
+    .max(2000, 'Description must be at most 2000 characters')
+    .nullable()
+    .optional(),
+})
+
+export type UpdateOrganizationRequest = z.infer<typeof UpdateOrganizationRequestSchema>

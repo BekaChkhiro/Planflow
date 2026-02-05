@@ -393,3 +393,25 @@ export const UpdateOrganizationRequestSchema = z.object({
 })
 
 export type UpdateOrganizationRequest = z.infer<typeof UpdateOrganizationRequestSchema>
+
+// Team invitation types
+export const CreateInvitationRequestSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  role: z.enum(['admin', 'editor', 'viewer']).optional().default('editor'),
+})
+
+export type CreateInvitationRequest = z.infer<typeof CreateInvitationRequestSchema>
+
+export const InvitationSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  email: z.string().email(),
+  role: OrgMemberRoleSchema,
+  invitedBy: z.string().uuid(),
+  token: z.string(),
+  expiresAt: z.date(),
+  acceptedAt: z.date().nullable(),
+  createdAt: z.date(),
+})
+
+export type Invitation = z.infer<typeof InvitationSchema>

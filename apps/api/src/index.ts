@@ -4,7 +4,7 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { Hono } from 'hono'
 // Note: Using custom secureCors from middleware/security.ts instead of hono/cors
 import { logger } from 'hono/logger'
-import { and, count, desc, eq, ne } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNull, ne } from 'drizzle-orm'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
@@ -22,6 +22,7 @@ import {
   CreateFeedbackRequestSchema,
   CreateOrganizationRequestSchema,
   UpdateOrganizationRequestSchema,
+  CreateInvitationRequestSchema,
   type SubscriptionTier,
   type SubscriptionStatus,
   type ProjectLimits,
@@ -2905,6 +2906,370 @@ app.get('/organizations/:id/members', auth, async (c) => {
     })
   } catch (error) {
     console.error('List organization members error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// POST /organizations/:id/invitations - Create invitation
+app.post('/organizations/:id/invitations', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const orgId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(orgId)) {
+      return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
+    }
+
+    const body = await c.req.json()
+    const validation = CreateInvitationRequestSchema.safeParse(body)
+
+    if (!validation.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.flatten().fieldErrors,
+        },
+        400
+      )
+    }
+
+    const { email, role } = validation.data
+    const db = getDbClient()
+
+    // Check membership and role (must be owner or admin)
+    const [membership] = await db
+      .select({ role: schema.organizationMembers.role })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, orgId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    if (membership.role !== 'owner' && membership.role !== 'admin') {
+      return c.json({ success: false, error: 'Only owners and admins can invite members' }, 403)
+    }
+
+    // Check if the email is already an org member
+    const [existingMember] = await db
+      .select({ id: schema.organizationMembers.id })
+      .from(schema.organizationMembers)
+      .innerJoin(schema.users, eq(schema.organizationMembers.userId, schema.users.id))
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, orgId),
+          eq(schema.users.email, email)
+        )
+      )
+      .limit(1)
+
+    if (existingMember) {
+      return c.json({ success: false, error: 'User is already a member of this organization' }, 409)
+    }
+
+    // Check for duplicate pending invitation (same org + email + not accepted)
+    const [existingInvitation] = await db
+      .select({ id: schema.teamInvitations.id })
+      .from(schema.teamInvitations)
+      .where(
+        and(
+          eq(schema.teamInvitations.organizationId, orgId),
+          eq(schema.teamInvitations.email, email),
+          isNull(schema.teamInvitations.acceptedAt),
+          gt(schema.teamInvitations.expiresAt, new Date())
+        )
+      )
+      .limit(1)
+
+    if (existingInvitation) {
+      return c.json({ success: false, error: 'A pending invitation already exists for this email' }, 409)
+    }
+
+    // Generate secure token and set expiry (7 days)
+    const token = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+    const [invitation] = await db
+      .insert(schema.teamInvitations)
+      .values({
+        organizationId: orgId,
+        email,
+        role,
+        invitedBy: user.id,
+        token,
+        expiresAt,
+      })
+      .returning({
+        id: schema.teamInvitations.id,
+        organizationId: schema.teamInvitations.organizationId,
+        email: schema.teamInvitations.email,
+        role: schema.teamInvitations.role,
+        invitedBy: schema.teamInvitations.invitedBy,
+        token: schema.teamInvitations.token,
+        expiresAt: schema.teamInvitations.expiresAt,
+        acceptedAt: schema.teamInvitations.acceptedAt,
+        createdAt: schema.teamInvitations.createdAt,
+      })
+
+    if (!invitation) {
+      return c.json({ success: false, error: 'Failed to create invitation' }, 500)
+    }
+
+    return c.json(
+      {
+        success: true,
+        data: { invitation },
+      },
+      201
+    )
+  } catch (error) {
+    console.error('Create invitation error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// GET /organizations/:id/invitations - List pending invitations
+app.get('/organizations/:id/invitations', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const orgId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(orgId)) {
+      return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check if user is a member of this organization
+    const [membership] = await db
+      .select({ role: schema.organizationMembers.role })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, orgId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    // Get pending invitations (not accepted, not expired) with inviter info
+    const invitations = await db
+      .select({
+        id: schema.teamInvitations.id,
+        organizationId: schema.teamInvitations.organizationId,
+        email: schema.teamInvitations.email,
+        role: schema.teamInvitations.role,
+        invitedBy: schema.teamInvitations.invitedBy,
+        token: schema.teamInvitations.token,
+        expiresAt: schema.teamInvitations.expiresAt,
+        acceptedAt: schema.teamInvitations.acceptedAt,
+        createdAt: schema.teamInvitations.createdAt,
+        inviterName: schema.users.name,
+      })
+      .from(schema.teamInvitations)
+      .innerJoin(schema.users, eq(schema.teamInvitations.invitedBy, schema.users.id))
+      .where(
+        and(
+          eq(schema.teamInvitations.organizationId, orgId),
+          isNull(schema.teamInvitations.acceptedAt),
+          gt(schema.teamInvitations.expiresAt, new Date())
+        )
+      )
+      .orderBy(desc(schema.teamInvitations.createdAt))
+
+    return c.json({
+      success: true,
+      data: { invitations },
+    })
+  } catch (error) {
+    console.error('List invitations error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// POST /invitations/:token/accept - Accept invitation
+app.post('/invitations/:token/accept', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const token = c.req.param('token')
+    const db = getDbClient()
+
+    // Find invitation by token
+    const [invitation] = await db
+      .select({
+        id: schema.teamInvitations.id,
+        organizationId: schema.teamInvitations.organizationId,
+        email: schema.teamInvitations.email,
+        role: schema.teamInvitations.role,
+        expiresAt: schema.teamInvitations.expiresAt,
+        acceptedAt: schema.teamInvitations.acceptedAt,
+      })
+      .from(schema.teamInvitations)
+      .where(eq(schema.teamInvitations.token, token))
+      .limit(1)
+
+    if (!invitation) {
+      return c.json({ success: false, error: 'Invitation not found' }, 404)
+    }
+
+    if (invitation.acceptedAt) {
+      return c.json({ success: false, error: 'Invitation has already been accepted' }, 409)
+    }
+
+    if (new Date() > invitation.expiresAt) {
+      return c.json({ success: false, error: 'Invitation has expired' }, 410)
+    }
+
+    // Check invitee email matches authenticated user
+    if (invitation.email !== user.email) {
+      return c.json({ success: false, error: 'This invitation was sent to a different email address' }, 403)
+    }
+
+    // Add user to org_members with invitation's role
+    await db.insert(schema.organizationMembers).values({
+      organizationId: invitation.organizationId,
+      userId: user.id,
+      role: invitation.role,
+    })
+
+    // Mark invitation as accepted
+    await db
+      .update(schema.teamInvitations)
+      .set({ acceptedAt: new Date() })
+      .where(eq(schema.teamInvitations.id, invitation.id))
+
+    // Fetch the organization data to return
+    const [org] = await db
+      .select({
+        id: schema.organizations.id,
+        name: schema.organizations.name,
+        slug: schema.organizations.slug,
+        description: schema.organizations.description,
+        createdBy: schema.organizations.createdBy,
+        createdAt: schema.organizations.createdAt,
+        updatedAt: schema.organizations.updatedAt,
+      })
+      .from(schema.organizations)
+      .where(eq(schema.organizations.id, invitation.organizationId))
+      .limit(1)
+
+    return c.json({
+      success: true,
+      data: { organization: org },
+    })
+  } catch (error) {
+    console.error('Accept invitation error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// DELETE /organizations/:id/invitations/:invitationId - Revoke invitation
+app.delete('/organizations/:id/invitations/:invitationId', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const orgId = c.req.param('id')
+    const invitationId = c.req.param('invitationId')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(orgId) || !uuidRegex.test(invitationId)) {
+      return c.json({ success: false, error: 'Invalid ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check membership and role (must be owner or admin)
+    const [membership] = await db
+      .select({ role: schema.organizationMembers.role })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, orgId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    if (membership.role !== 'owner' && membership.role !== 'admin') {
+      return c.json({ success: false, error: 'Only owners and admins can revoke invitations' }, 403)
+    }
+
+    // Delete the invitation (only if not yet accepted)
+    const [deleted] = await db
+      .delete(schema.teamInvitations)
+      .where(
+        and(
+          eq(schema.teamInvitations.id, invitationId),
+          eq(schema.teamInvitations.organizationId, orgId),
+          isNull(schema.teamInvitations.acceptedAt)
+        )
+      )
+      .returning({ id: schema.teamInvitations.id })
+
+    if (!deleted) {
+      return c.json({ success: false, error: 'Invitation not found or already accepted' }, 404)
+    }
+
+    return c.json({ success: true, data: { message: 'Invitation revoked successfully' } })
+  } catch (error) {
+    console.error('Revoke invitation error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// POST /invitations/:token/decline - Decline invitation
+app.post('/invitations/:token/decline', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const token = c.req.param('token')
+    const db = getDbClient()
+
+    // Find invitation by token
+    const [invitation] = await db
+      .select({
+        id: schema.teamInvitations.id,
+        email: schema.teamInvitations.email,
+      })
+      .from(schema.teamInvitations)
+      .where(eq(schema.teamInvitations.token, token))
+      .limit(1)
+
+    if (!invitation) {
+      return c.json({ success: false, error: 'Invitation not found' }, 404)
+    }
+
+    // Check email matches user
+    if (invitation.email !== user.email) {
+      return c.json({ success: false, error: 'This invitation was sent to a different email address' }, 403)
+    }
+
+    // Delete the invitation
+    await db
+      .delete(schema.teamInvitations)
+      .where(eq(schema.teamInvitations.id, invitation.id))
+
+    return c.json({ success: true, data: { message: 'Invitation declined successfully' } })
+  } catch (error) {
+    console.error('Decline invitation error:', error)
     return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
   }
 })

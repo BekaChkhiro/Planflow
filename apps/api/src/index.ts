@@ -1627,13 +1627,15 @@ app.put('/projects/:id/plan', largeBodyLimit, auth, async (c) => {
 
     const progress = tasksCount > 0 ? Math.round((completedCount / tasksCount) * 100) : 0
 
-    // Broadcast tasks synced via WebSocket (exclude sender)
+    // Broadcast tasks synced via WebSocket
+    // Don't exclude sender - HTTP API clients (like CLI) aren't on WebSocket,
+    // so the same user on web should receive the update
     if (tasksCount > 0) {
       broadcastTasksSynced(projectId, {
         tasksCount,
         completedCount,
         progress,
-      }, user.id)
+      })
     }
 
     return c.json({
@@ -1847,7 +1849,8 @@ app.put('/projects/:id/tasks', auth, async (c) => {
       .set({ updatedAt: new Date() })
       .where(eq(schema.projects.id, projectId))
 
-    // Broadcast all task updates via WebSocket (exclude sender)
+    // Broadcast all task updates via WebSocket
+    // Don't exclude sender - HTTP API clients aren't on WebSocket
     if (updatedTasks.length > 0) {
       broadcastTasksUpdated(
         projectId,
@@ -1862,8 +1865,7 @@ app.put('/projects/:id/tasks', auth, async (c) => {
           dependencies: t.dependencies ?? [],
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
-        })),
-        user.id
+        }))
       )
     }
 
@@ -1976,7 +1978,8 @@ app.patch('/projects/:id/tasks/:taskId', auth, async (c) => {
       return c.json({ success: false, error: 'Failed to update task' }, 500)
     }
 
-    // Broadcast task update via WebSocket (exclude sender to avoid echo)
+    // Broadcast task update via WebSocket
+    // Don't exclude sender - HTTP API clients aren't on WebSocket
     broadcastTaskUpdated(projectId, {
       id: updated.id,
       taskId: updated.taskId,
@@ -1991,7 +1994,7 @@ app.patch('/projects/:id/tasks/:taskId', auth, async (c) => {
       assignedAt: updated.assignedAt,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
-    }, user.id)
+    })
 
     // Get assignee info if task is assigned
     let assignee = null
@@ -2127,7 +2130,7 @@ app.post('/projects/:id/tasks/:taskId/assign', auth, async (c) => {
       .from(schema.users)
       .where(eq(schema.users.id, user.id))
 
-    // Broadcast task assignment via WebSocket (exclude sender)
+    // Broadcast task assignment via WebSocket
     broadcastTaskAssigned(
       projectId,
       {
@@ -2156,8 +2159,7 @@ app.post('/projects/:id/tasks/:taskId/assign', auth, async (c) => {
           email: assigner.email,
           name: assigner.name,
         } : { id: user.id, email: user.email, name: null },
-      },
-      user.id
+      }
     )
 
     // Create notification and send email to assignee (if not self-assignment)
@@ -2288,7 +2290,7 @@ app.delete('/projects/:id/tasks/:taskId/assign', auth, async (c) => {
       .from(schema.users)
       .where(eq(schema.users.id, user.id))
 
-    // Broadcast task unassignment via WebSocket (exclude sender)
+    // Broadcast task unassignment via WebSocket
     broadcastTaskUnassigned(
       projectId,
       {
@@ -2313,8 +2315,7 @@ app.delete('/projects/:id/tasks/:taskId/assign', auth, async (c) => {
           email: unassigner.email,
           name: unassigner.name,
         } : { id: user.id, email: user.email, name: null },
-      },
-      user.id
+      }
     )
 
     return c.json({

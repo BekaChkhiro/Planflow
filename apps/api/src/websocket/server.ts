@@ -44,6 +44,9 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
     const token = url.searchParams.get('token')
     const projectId = url.searchParams.get('projectId')
 
+    // Debug logging
+    console.log(`[WS] Connection attempt: projectId=${projectId}, hasToken=${!!token}`)
+
     // Authenticate the connection
     const auth = await authenticateWebSocket(token, projectId)
 

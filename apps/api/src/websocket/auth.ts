@@ -37,10 +37,12 @@ export function verifyToken(token: string): AuthResult | AuthError {
       email: decoded.email,
     }
   } catch (err) {
-    if (err instanceof jwt.TokenExpiredError) {
+    // Check error name instead of instanceof (ESM bundling issue with jsonwebtoken)
+    const errorName = err instanceof Error ? err.name : ''
+    if (errorName === 'TokenExpiredError') {
       return { success: false, error: 'Token expired' }
     }
-    if (err instanceof jwt.JsonWebTokenError) {
+    if (errorName === 'JsonWebTokenError') {
       return { success: false, error: 'Invalid token' }
     }
     return { success: false, error: 'Token verification failed' }

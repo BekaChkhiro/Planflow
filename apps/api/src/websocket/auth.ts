@@ -1,4 +1,4 @@
-import * as jwt from 'jsonwebtoken'
+import jwt from 'jsonwebtoken'
 import { and, eq } from 'drizzle-orm'
 import { getDbClient, schema } from '../db/index.js'
 

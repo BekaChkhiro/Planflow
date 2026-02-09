@@ -57,6 +57,8 @@ All endpoints return a consistent JSON structure:
     { name: 'API Tokens', description: 'API token management for MCP integration' },
     { name: 'Projects', description: 'Project CRUD operations' },
     { name: 'Tasks', description: 'Task management endpoints' },
+    { name: 'Notifications', description: 'User notification management' },
+    { name: 'Mentions', description: '@mention parsing and user search for autocomplete' },
   ],
   components: {
     securitySchemes: {
@@ -265,6 +267,48 @@ All endpoints return a consistent JSON structure:
           },
         },
         required: ['tasks'],
+      },
+
+      // Notification schemas (T5.10)
+      Notification: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          userId: { type: 'string', format: 'uuid' },
+          type: {
+            type: 'string',
+            enum: ['mention', 'assignment', 'unassignment', 'comment', 'comment_reply', 'status_change', 'task_created', 'task_deleted', 'invitation', 'member_joined', 'member_removed', 'role_changed'],
+          },
+          title: { type: 'string', maxLength: 255 },
+          body: { type: 'string', nullable: true },
+          link: { type: 'string', maxLength: 500, nullable: true },
+          projectId: { type: 'string', format: 'uuid', nullable: true },
+          organizationId: { type: 'string', format: 'uuid', nullable: true },
+          actorId: { type: 'string', format: 'uuid', nullable: true },
+          taskId: { type: 'string', nullable: true, description: 'Human-readable task ID' },
+          readAt: { type: 'string', format: 'date-time', nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          actor: {
+            type: 'object',
+            nullable: true,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              email: { type: 'string', format: 'email' },
+              name: { type: 'string', nullable: true },
+            },
+          },
+        },
+        required: ['id', 'userId', 'type', 'title', 'createdAt'],
+      },
+
+      Pagination: {
+        type: 'object',
+        properties: {
+          total: { type: 'integer' },
+          limit: { type: 'integer' },
+          offset: { type: 'integer' },
+          hasMore: { type: 'boolean' },
+        },
       },
     },
   },
@@ -1138,6 +1182,461 @@ All endpoints return a consistent JSON structure:
             description: 'Project not found',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
           },
+        },
+      },
+    },
+
+    // Notifications endpoints (T5.10)
+    '/notifications': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Get user notifications',
+        description: 'Get all notifications for the authenticated user with pagination and filtering',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+          { name: 'unreadOnly', in: 'query', schema: { type: 'boolean', default: false } },
+          { name: 'type', in: 'query', schema: { type: 'string', enum: ['mention', 'assignment', 'unassignment', 'comment', 'comment_reply', 'status_change', 'task_created', 'task_deleted', 'invitation', 'member_joined', 'member_removed', 'role_changed'] } },
+          { name: 'projectId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: {
+          '200': {
+            description: 'List of notifications',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        notifications: { type: 'array', items: { $ref: '#/components/schemas/Notification' } },
+                        unreadCount: { type: 'integer' },
+                        pagination: { $ref: '#/components/schemas/Pagination' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      delete: {
+        tags: ['Notifications'],
+        summary: 'Delete all notifications',
+        description: 'Delete all notifications for the authenticated user. Use readOnly=true to only delete read notifications.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'readOnly', in: 'query', schema: { type: 'boolean', default: false }, description: 'Only delete read notifications' },
+        ],
+        responses: {
+          '200': {
+            description: 'Notifications deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object', properties: { deletedCount: { type: 'integer' } } },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    '/notifications/unread-count': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Get unread notification count',
+        description: 'Get the count of unread notifications for the authenticated user',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Unread count',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object', properties: { unreadCount: { type: 'integer' } } },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    '/notifications/{id}': {
+      get: {
+        tags: ['Notifications'],
+        summary: 'Get a notification',
+        description: 'Get a specific notification by ID',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Notification details',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object', properties: { notification: { $ref: '#/components/schemas/Notification' } } },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Notification not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      delete: {
+        tags: ['Notifications'],
+        summary: 'Delete a notification',
+        description: 'Delete a specific notification',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Notification deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object', properties: { deleted: { type: 'boolean' } } },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Notification not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    '/notifications/{id}/read': {
+      patch: {
+        tags: ['Notifications'],
+        summary: 'Mark notification as read',
+        description: 'Mark a specific notification as read',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Notification marked as read',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object', properties: { notification: { $ref: '#/components/schemas/Notification' } } },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Notification not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    '/notifications/mark-read': {
+      post: {
+        tags: ['Notifications'],
+        summary: 'Mark multiple notifications as read',
+        description: 'Mark multiple notifications as read by providing their IDs',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['notificationIds'],
+                properties: {
+                  notificationIds: { type: 'array', items: { type: 'string', format: 'uuid' }, minItems: 1, maxItems: 100 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Notifications marked as read',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object', properties: { markedCount: { type: 'integer' } } },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    '/notifications/mark-all-read': {
+      post: {
+        tags: ['Notifications'],
+        summary: 'Mark all notifications as read',
+        description: 'Mark all unread notifications as read for the authenticated user',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'All notifications marked as read',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { type: 'object', properties: { markedCount: { type: 'integer' } } },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // Mentions Routes
+    '/projects/{id}/mentions/search': {
+      get: {
+        tags: ['Mentions'],
+        summary: 'Search for users to mention',
+        description: 'Search for users by email or name for @mention autocomplete. Returns users that can be mentioned in comments.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Project ID',
+            schema: { type: 'string', format: 'uuid' },
+          },
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            description: 'Search query (partial email or name, min 1 character)',
+            schema: { type: 'string', minLength: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Maximum results to return (1-20, default 10)',
+            schema: { type: 'integer', minimum: 1, maximum: 20, default: 10 },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Matching users',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        users: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', format: 'uuid' },
+                              email: { type: 'string', format: 'email' },
+                              name: { type: 'string', nullable: true },
+                              mention: { type: 'string', description: 'Formatted mention string (e.g., @john.doe)' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Project not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/mentions/search': {
+      get: {
+        tags: ['Mentions'],
+        summary: 'Search for organization members to mention',
+        description: 'Search for organization members by email or name for @mention autocomplete. Only returns members of the specified organization.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Organization ID',
+            schema: { type: 'string', format: 'uuid' },
+          },
+          {
+            name: 'q',
+            in: 'query',
+            required: true,
+            description: 'Search query (partial email or name, min 1 character)',
+            schema: { type: 'string', minLength: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            required: false,
+            description: 'Maximum results to return (1-20, default 10)',
+            schema: { type: 'integer', minimum: 1, maximum: 20, default: 10 },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Matching organization members',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        users: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              id: { type: 'string', format: 'uuid' },
+                              email: { type: 'string', format: 'email' },
+                              name: { type: 'string', nullable: true },
+                              role: { type: 'string', enum: ['owner', 'admin', 'editor', 'viewer'] },
+                              mention: { type: 'string', description: 'Formatted mention string (e.g., @john.doe)' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found or access denied', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/mentions/parse': {
+      post: {
+        tags: ['Mentions'],
+        summary: 'Parse @mentions from text',
+        description: 'Parse @mentions from text content and resolve them to user IDs. Supports @email and @name formats.',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  content: { type: 'string', description: 'Text content containing @mentions', maxLength: 10000 },
+                  organizationId: { type: 'string', format: 'uuid', description: 'Optional organization ID to scope mention resolution' },
+                },
+                required: ['content'],
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Parsed and resolved mentions',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        mentions: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              raw: { type: 'string', description: 'The raw mention text (without @)' },
+                              isEmail: { type: 'boolean', description: 'Whether the mention is an email format' },
+                              startIndex: { type: 'integer', description: 'Start position in original text' },
+                              endIndex: { type: 'integer', description: 'End position in original text' },
+                              resolved: { type: 'boolean', description: 'Whether the mention was resolved to a user' },
+                              user: {
+                                type: 'object',
+                                nullable: true,
+                                properties: {
+                                  id: { type: 'string', format: 'uuid' },
+                                  email: { type: 'string', format: 'email' },
+                                  name: { type: 'string', nullable: true },
+                                },
+                              },
+                            },
+                          },
+                        },
+                        userIds: {
+                          type: 'array',
+                          items: { type: 'string', format: 'uuid' },
+                          description: 'List of resolved user IDs (for use in mentions array)',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found or access denied', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },

@@ -7,6 +7,14 @@ export {
   getOptionalAuth,
   type AuthUser,
   type AuthContext,
+  // RBAC helpers
+  hasMinimumRole,
+  canModifyRole,
+  canRemoveMember,
+  hasPermission,
+  getRolePermissions,
+  type OrgRole,
+  type OrgPermission,
 } from './auth.js'
 
 export {

@@ -1,10 +1,26 @@
 import type { WebSocket } from 'ws'
 
+export type PresenceStatus = 'online' | 'idle' | 'away'
+
 export interface Client {
   ws: WebSocket
   userId: string
   projectId: string
   connectedAt: Date
+  // Presence data (T5.9)
+  email: string
+  name: string | null
+  status: PresenceStatus
+  lastActiveAt: Date
+}
+
+export interface UserPresence {
+  userId: string
+  email: string
+  name: string | null
+  status: PresenceStatus
+  connectedAt: string
+  lastActiveAt: string
 }
 
 export interface WebSocketMessage {
@@ -108,6 +124,157 @@ class ConnectionManager {
    */
   getActiveProjectIds(): string[] {
     return Array.from(this.connections.keys())
+  }
+
+  // ============================================
+  // Presence Methods (T5.9)
+  // ============================================
+
+  /**
+   * Get deduplicated list of online users for a project
+   * Multiple connections from the same user are merged into a single presence
+   */
+  getProjectPresence(projectId: string): UserPresence[] {
+    const clients = this.connections.get(projectId)
+    if (!clients || clients.size === 0) {
+      return []
+    }
+
+    // Deduplicate by userId, keeping the most recent connection info
+    const userMap = new Map<string, UserPresence>()
+
+    for (const client of clients) {
+      const existing = userMap.get(client.userId)
+
+      // Keep the entry with earliest connectedAt and most recent lastActiveAt
+      if (!existing) {
+        userMap.set(client.userId, {
+          userId: client.userId,
+          email: client.email,
+          name: client.name,
+          status: client.status,
+          connectedAt: client.connectedAt.toISOString(),
+          lastActiveAt: client.lastActiveAt.toISOString(),
+        })
+      } else {
+        // Update if this connection has more recent activity
+        const existingLastActive = new Date(existing.lastActiveAt)
+        if (client.lastActiveAt > existingLastActive) {
+          userMap.set(client.userId, {
+            ...existing,
+            status: client.status,
+            lastActiveAt: client.lastActiveAt.toISOString(),
+          })
+        }
+        // Keep earlier connectedAt
+        const existingConnected = new Date(existing.connectedAt)
+        if (client.connectedAt < existingConnected) {
+          userMap.set(client.userId, {
+            ...userMap.get(client.userId)!,
+            connectedAt: client.connectedAt.toISOString(),
+          })
+        }
+      }
+    }
+
+    return Array.from(userMap.values())
+  }
+
+  /**
+   * Get count of unique online users for a project
+   */
+  getUniqueUserCount(projectId: string): number {
+    const clients = this.connections.get(projectId)
+    if (!clients || clients.size === 0) {
+      return 0
+    }
+
+    const uniqueUsers = new Set<string>()
+    for (const client of clients) {
+      uniqueUsers.add(client.userId)
+    }
+    return uniqueUsers.size
+  }
+
+  /**
+   * Update presence status for a user's connections
+   */
+  updateClientStatus(projectId: string, userId: string, status: PresenceStatus): void {
+    const clients = this.connections.get(projectId)
+    if (!clients) return
+
+    const now = new Date()
+    for (const client of clients) {
+      if (client.userId === userId) {
+        client.status = status
+        client.lastActiveAt = now
+      }
+    }
+  }
+
+  /**
+   * Touch client to update lastActiveAt on activity
+   */
+  touchClient(projectId: string, userId: string): void {
+    const clients = this.connections.get(projectId)
+    if (!clients) return
+
+    const now = new Date()
+    for (const client of clients) {
+      if (client.userId === userId) {
+        client.lastActiveAt = now
+      }
+    }
+  }
+
+  /**
+   * Check if this is the first connection for a user in a project
+   * Used to determine if we should broadcast presence_joined
+   */
+  isFirstConnection(projectId: string, userId: string): boolean {
+    const clients = this.connections.get(projectId)
+    if (!clients) return true
+
+    let count = 0
+    for (const client of clients) {
+      if (client.userId === userId) {
+        count++
+        if (count > 1) return false
+      }
+    }
+    return count === 1
+  }
+
+  /**
+   * Check if this would be the last connection for a user in a project
+   * Call this BEFORE removing the client to determine if we should broadcast presence_left
+   */
+  isLastConnection(projectId: string, userId: string): boolean {
+    const clients = this.connections.get(projectId)
+    if (!clients) return true
+
+    let count = 0
+    for (const client of clients) {
+      if (client.userId === userId) {
+        count++
+        if (count > 1) return false
+      }
+    }
+    return count === 1
+  }
+
+  /**
+   * Get a single client's info for presence events
+   */
+  getClientPresence(client: Client): UserPresence {
+    return {
+      userId: client.userId,
+      email: client.email,
+      name: client.name,
+      status: client.status,
+      connectedAt: client.connectedAt.toISOString(),
+      lastActiveAt: client.lastActiveAt.toISOString(),
+    }
   }
 }
 

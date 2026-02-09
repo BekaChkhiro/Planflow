@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken'
+import * as jwt from 'jsonwebtoken'
 import { and, eq } from 'drizzle-orm'
 import { getDbClient, schema } from '../db/index.js'
 
@@ -92,7 +92,7 @@ export async function authenticateWebSocket(
   token: string | null,
   projectId: string | null
 ): Promise<
-  | { success: true; userId: string; email: string; projectId: string; projectName: string }
+  | { success: true; userId: string; email: string; name: string | null; projectId: string; projectName: string }
   | { success: false; error: string }
 > {
   if (!token) {
@@ -106,19 +106,35 @@ export async function authenticateWebSocket(
   // Verify JWT token
   const authResult = verifyToken(token)
   if (!authResult.success) {
-    return { success: false, error: authResult.error }
+    return { success: false, error: (authResult as AuthError).error }
   }
 
   // Verify project access
   const accessResult = await verifyProjectAccess(authResult.userId, projectId)
   if (!accessResult.hasAccess) {
-    return { success: false, error: accessResult.error }
+    return { success: false, error: (accessResult as { hasAccess: false; error: string }).error }
+  }
+
+  // Fetch user name for presence (T5.9)
+  let userName: string | null = null
+  try {
+    const db = getDbClient()
+    const [user] = await db
+      .select({ name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, authResult.userId))
+      .limit(1)
+    userName = user?.name ?? null
+  } catch (err) {
+    console.error('[WS Auth] Error fetching user name:', err)
+    // Non-fatal: continue with null name
   }
 
   return {
     success: true,
     userId: authResult.userId,
     email: authResult.email,
+    name: userName,
     projectId,
     projectName: accessResult.projectName,
   }

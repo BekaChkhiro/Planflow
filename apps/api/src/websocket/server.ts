@@ -3,7 +3,13 @@ import type { Server as HttpServer } from 'http'
 import type { Http2SecureServer, Http2Server } from 'http2'
 import { URL } from 'url'
 import { authenticateWebSocket } from './auth.js'
-import { connectionManager, type Client, type WebSocketMessage } from './connection-manager.js'
+import { connectionManager, type Client, type WebSocketMessage, type PresenceStatus } from './connection-manager.js'
+import {
+  broadcastPresenceJoined,
+  broadcastPresenceLeft,
+  broadcastPresenceUpdated,
+  sendPresenceList,
+} from './broadcast.js'
 
 // Ping interval (25 seconds - below typical 30s timeout)
 const PING_INTERVAL_MS = 25000
@@ -42,21 +48,40 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
     const auth = await authenticateWebSocket(token, projectId)
 
     if (!auth.success) {
-      console.warn(`[WS] Connection rejected: ${auth.error}`)
-      ws.close(4001, auth.error)
+      const error = (auth as { success: false; error: string }).error
+      console.warn(`[WS] Connection rejected: ${error}`)
+      ws.close(4001, error)
       return
     }
 
-    // Create client object
+    // Create client object with presence data (T5.9)
+    const now = new Date()
     const client: Client = {
       ws,
       userId: auth.userId,
       projectId: auth.projectId,
-      connectedAt: new Date(),
+      connectedAt: now,
+      email: auth.email,
+      name: auth.name,
+      status: 'online',
+      lastActiveAt: now,
     }
+
+    // Check if this is the first connection for this user (before adding)
+    const isFirstConn = connectionManager.getUniqueUserCount(auth.projectId) === 0 ||
+      !connectionManager.getProjectPresence(auth.projectId).some(p => p.userId === auth.userId)
 
     // Add to connection manager
     connectionManager.addClient(auth.projectId, client)
+
+    // Send presence list to new client (T5.9)
+    sendPresenceList(auth.projectId, client)
+
+    // If first connection for this user, broadcast presence_joined to others
+    if (isFirstConn) {
+      const userPresence = connectionManager.getClientPresence(client)
+      broadcastPresenceJoined(auth.projectId, userPresence, auth.userId)
+    }
 
     // Send connected confirmation
     const connectedMessage: WebSocketMessage = {
@@ -84,7 +109,25 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
 
         // Handle ping from client
         if (message.type === 'ping') {
+          // Touch client on ping to update lastActiveAt (T5.9)
+          connectionManager.touchClient(auth.projectId, auth.userId)
           ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
+          return
+        }
+
+        // Handle presence_update from client (T5.9)
+        if (message.type === 'presence_update') {
+          const status = message.status as PresenceStatus
+          if (status && ['online', 'idle', 'away'].includes(status)) {
+            connectionManager.updateClientStatus(auth.projectId, auth.userId, status)
+            broadcastPresenceUpdated(
+              auth.projectId,
+              auth.userId,
+              status,
+              new Date().toISOString(),
+              auth.userId // Exclude sender
+            )
+          }
           return
         }
 
@@ -98,7 +141,16 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
     // Handle client disconnect
     ws.on('close', (code, reason) => {
       console.log(`[WS] Client disconnected: code=${code}, reason=${reason.toString() || 'none'}`)
+
+      // Check if this is the last connection for the user BEFORE removing (T5.9)
+      const isLastConn = connectionManager.isLastConnection(auth.projectId, auth.userId)
+
       connectionManager.removeClient(auth.projectId, client)
+
+      // If last connection for this user, broadcast presence_left to others (T5.9)
+      if (isLastConn) {
+        broadcastPresenceLeft(auth.projectId, auth.userId)
+      }
 
       // Clear ping interval if exists
       if (ws.pingInterval) {

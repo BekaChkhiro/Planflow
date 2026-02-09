@@ -29,10 +29,6 @@ export function verifyToken(token: string): AuthResult | AuthError {
     return { success: false, error: 'Server configuration error' }
   }
 
-  // Debug: log token prefix to help diagnose issues
-  const tokenPreview = token ? `${token.substring(0, 20)}...` : '(empty)'
-  console.log(`[WS Auth] Verifying token: ${tokenPreview}`)
-
   try {
     const decoded = jwt.verify(token, jwtSecret) as JwtPayload
     return {
@@ -43,8 +39,6 @@ export function verifyToken(token: string): AuthResult | AuthError {
   } catch (err) {
     // Check error name instead of instanceof (ESM bundling issue with jsonwebtoken)
     const errorName = err instanceof Error ? err.name : ''
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    console.error(`[WS Auth] Token verification error: ${errorName} - ${errorMessage}`)
     if (errorName === 'TokenExpiredError') {
       return { success: false, error: 'Token expired' }
     }

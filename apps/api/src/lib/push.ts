@@ -1,6 +1,9 @@
 import webpush from 'web-push'
-import { db } from '../db/index.js'
+import { getDbClient } from '../db/index.js'
 import * as schema from '../db/schema/index.js'
+
+// Get Drizzle client
+const db = getDbClient()
 import { eq, and } from 'drizzle-orm'
 
 // Initialize VAPID keys from environment variables

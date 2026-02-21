@@ -8194,9 +8194,9 @@ app.get('/integrations', jwtAuth, async (c) => {
       connectedAt: integration.createdAt?.toISOString() || null,
       enabledEvents: integration.enabledEvents || [],
       metadata: {
-        workspace: (integration.config as Record<string, unknown>)?.workspace || null,
-        channel: (integration.config as Record<string, unknown>)?.channel || null,
-        server: (integration.config as Record<string, unknown>)?.server || null,
+        workspace: (integration.config as Record<string, unknown>)?.['workspace'] || null,
+        channel: (integration.config as Record<string, unknown>)?.['channel'] || null,
+        server: (integration.config as Record<string, unknown>)?.['server'] || null,
         webhookConfigured: !!integration.webhookUrl,
       },
     }))
@@ -8270,7 +8270,7 @@ app.post('/integrations/:type/webhook', jwtAuth, async (c) => {
       'member_joined',
     ]
 
-    let integration
+    let integration: typeof schema.integrations.$inferSelect | undefined
     if (existing) {
       // Update existing
       const [updated] = await db
@@ -8302,6 +8302,10 @@ app.post('/integrations/:type/webhook', jwtAuth, async (c) => {
       integration = created
     }
 
+    if (!integration) {
+      return c.json({ success: false, error: 'Failed to save integration' }, 500)
+    }
+
     return c.json({
       success: true,
       data: {
@@ -8312,7 +8316,7 @@ app.post('/integrations/:type/webhook', jwtAuth, async (c) => {
           connectedAt: integration.createdAt?.toISOString() || null,
           enabledEvents: integration.enabledEvents || defaultEvents,
           metadata: {
-            channel: (integration.config as Record<string, unknown>)?.channel || null,
+            channel: (integration.config as Record<string, unknown>)?.['channel'] || null,
             webhookConfigured: true,
           },
         },
@@ -8406,19 +8410,19 @@ app.patch('/integrations/:type/:id', jwtAuth, async (c) => {
     }
 
     if (enabledEvents !== undefined) {
-      updateData.enabledEvents = enabledEvents
+      updateData['enabledEvents'] = enabledEvents
     }
     if (active !== undefined) {
-      updateData.active = active
+      updateData['active'] = active
     }
     if (name !== undefined) {
-      updateData.name = name
+      updateData['name'] = name
     }
     if (webhookUrl !== undefined) {
-      updateData.webhookUrl = webhookUrl
+      updateData['webhookUrl'] = webhookUrl
     }
     if (config !== undefined) {
-      updateData.config = { ...integration.config as Record<string, unknown>, ...config }
+      updateData['config'] = { ...integration.config as Record<string, unknown>, ...config }
     }
 
     // Update integration
@@ -8427,6 +8431,10 @@ app.patch('/integrations/:type/:id', jwtAuth, async (c) => {
       .set(updateData)
       .where(eq(schema.integrations.id, integrationId))
       .returning()
+
+    if (!updated) {
+      return c.json({ success: false, error: 'Failed to update integration' }, 500)
+    }
 
     return c.json({
       success: true,
@@ -8438,7 +8446,7 @@ app.patch('/integrations/:type/:id', jwtAuth, async (c) => {
           connectedAt: updated.createdAt?.toISOString() || null,
           enabledEvents: updated.enabledEvents || [],
           metadata: {
-            channel: (updated.config as Record<string, unknown>)?.channel || null,
+            channel: (updated.config as Record<string, unknown>)?.['channel'] || null,
             webhookConfigured: !!updated.webhookUrl,
           },
         },

@@ -73,6 +73,7 @@ import {
 
 import {
   useOrganizations,
+  useCreateOrganization,
   useTeamMembers,
   useTeamInvitations,
   useInviteMember,
@@ -98,6 +99,20 @@ const inviteFormSchema = z.object({
 })
 
 type InviteFormData = z.infer<typeof inviteFormSchema>
+
+// Create organization form schema
+const createOrgFormSchema = z.object({
+  name: z.string().min(1, 'Organization name is required').max(255),
+  slug: z
+    .string()
+    .max(255)
+    .regex(/^[a-z0-9-]*$/, 'Slug must contain only lowercase letters, numbers, and hyphens')
+    .optional()
+    .or(z.literal('')),
+  description: z.string().max(2000).optional().or(z.literal('')),
+})
+
+type CreateOrgFormData = z.infer<typeof createOrgFormSchema>
 
 // Role icon component
 function RoleIcon({ role, className }: { role: MemberRole; className?: string }) {
@@ -406,6 +421,118 @@ function InviteMemberDialog({
   )
 }
 
+// Create Organization Dialog
+function CreateOrganizationDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const createOrg = useCreateOrganization()
+
+  const form = useForm<CreateOrgFormData>({
+    resolver: zodResolver(createOrgFormSchema),
+    defaultValues: {
+      name: '',
+      slug: '',
+      description: '',
+    },
+  })
+
+  const onSubmit = async (data: CreateOrgFormData) => {
+    try {
+      await createOrg.mutateAsync({
+        name: data.name,
+        slug: data.slug || undefined,
+        description: data.description || undefined,
+      })
+      form.reset()
+      onOpenChange(false)
+    } catch (error) {
+      console.error('Failed to create organization:', error)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Create Organization</DialogTitle>
+          <DialogDescription>
+            Create a new organization to collaborate with your team.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Organization Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="My Organization" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="slug"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Slug (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="my-organization" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="A brief description of your organization" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createOrg.isPending}>
+                {createOrg.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Building2 className="mr-2 h-4 w-4" />
+                    Create Organization
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // Loading skeleton
 function TeamPageSkeleton() {
   return (
@@ -442,7 +569,7 @@ function TeamPageSkeleton() {
 }
 
 // Empty state
-function EmptyState() {
+function EmptyState({ onCreateOrg }: { onCreateOrg: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="rounded-full bg-gray-100 p-4">
@@ -453,7 +580,7 @@ function EmptyState() {
         You&apos;re not a member of any organizations. Create one to start collaborating with your
         team.
       </p>
-      <Button className="mt-6">
+      <Button className="mt-6" onClick={onCreateOrg}>
         <Building2 className="mr-2 h-4 w-4" />
         Create Organization
       </Button>
@@ -466,6 +593,7 @@ export default function TeamPage() {
   const { user } = useAuth()
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [createOrgDialogOpen, setCreateOrgDialogOpen] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
   const [memberToManageRole, setMemberToManageRole] = useState<TeamMember | null>(null)
 
@@ -525,7 +653,15 @@ export default function TeamPage() {
 
   // Empty state - no organizations
   if (!organizations || organizations.length === 0) {
-    return <EmptyState />
+    return (
+      <>
+        <EmptyState onCreateOrg={() => setCreateOrgDialogOpen(true)} />
+        <CreateOrganizationDialog
+          open={createOrgDialogOpen}
+          onOpenChange={setCreateOrgDialogOpen}
+        />
+      </>
+    )
   }
 
   const pendingInvitations = invitations?.filter((inv) => !inv.acceptedAt) || []

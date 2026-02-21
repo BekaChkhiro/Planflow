@@ -84,6 +84,13 @@ interface RemoveMemberResponse {
   }
 }
 
+interface CreateOrganizationResponse {
+  success: boolean
+  data: {
+    organization: Organization
+  }
+}
+
 // Query keys
 export const organizationsQueryKey = ['organizations']
 export const membersQueryKey = (orgId: string) => ['organizations', orgId, 'members']
@@ -100,6 +107,23 @@ export function useOrganizations() {
     queryFn: async () => {
       const response = await authApi.get<OrganizationsResponse>('/organizations')
       return response.data.organizations
+    },
+  })
+}
+
+/**
+ * Create a new organization
+ */
+export function useCreateOrganization() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: { name: string; slug?: string; description?: string }) => {
+      const response = await authApi.post<CreateOrganizationResponse>('/organizations', data)
+      return response.data.organization
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: organizationsQueryKey })
     },
   })
 }

@@ -3,7 +3,7 @@
 > AI-Native Project Management for Claude Code
 
 **Created:** 2026-01-28
-**Last Updated:** 2026-02-09
+**Last Updated:** 2026-02-21
 **Status:** In Progress
 **Plugin Version:** 1.1.1
 
@@ -40,7 +40,7 @@
 
 ## Progress
 
-**Overall:** 63% complete (82/130 tasks)
+**Overall:** 78% complete (94/120 tasks)
 
 | Phase                          | Status      | Progress | Tasks |
 | ------------------------------ | ----------- | -------- | ----- |
@@ -49,16 +49,17 @@
 | Phase 3: Web Dashboard         | DONE        | 100%     | 20/20 |
 | Phase 4: Polish & Content      | DONE        | 100%     | 13/13 |
 | Phase 5: Backend Infrastructure| DONE        | 100%     | 12/12 ✅ |
-| Phase 6: Plugin Commands       | PLANNED     | 0%       | 0/10  |
-| Phase 7: Real-time Features    | PLANNED     | 0%       | 0/8   |
-| Phase 8: Web Dashboard Team UI | PLANNED     | 0%       | 0/12  |
-| Phase 9: External Integrations | PLANNED     | 0%       | 0/12  |
-| Phase 10: Production & Launch  | IN_PROGRESS | 14%      | 1/7   |
+| Phase 6: Real-time Features    | IN_PROGRESS | 88%      | 7/8   🔄 |
+| Phase 7: Web Dashboard Team UI | IN_PROGRESS | 50%      | 6/12  🔄 |
+| Phase 8: External Integrations | IN_PROGRESS | 0%       | 0/11  🔄 |
+| Phase 9: Production & Launch   | IN_PROGRESS | 14%      | 1/7   |
 
 ### Current Focus
-📍 **Current**: Phase 6 (Plugin Commands)
-🎯 **Next**: T6.1 - Create /team command (list members, roles)
-📊 **Total Tasks**: 130 (Phase 4 done tasks moved to Phase 10)
+📍 **Current**: Phase 6 (Real-time Features) + Phase 7 (Web Dashboard Team UI)
+🔄 **Current Tasks**: T6.8 (Browser push notifications), T7.8 (Online presence indicators), T7.9 (Workload dashboard), T7.11 (Team analytics), T7.12 (@mention autocomplete), T8.1 (Integrations settings page) - IN_PROGRESS 🔄
+✅ **Completed**: T6.5 (Typing indicators), T6.6 (Conflict prevention), T6.7 (Notification toast), T7.1 (Team members page), T7.2 (Invite modal), T7.3 (Role management UI), T7.4 (Assignee selector), T7.5 (Comments section), T7.6 (Threaded comments UI), T7.7 (Activity feed sidebar), T7.10 (Notification center)
+📋 **Next Task**: T8.2 (GitHub OAuth flow)
+📊 **Total Tasks**: 120 (Plugin commands moved to claude-plan-plugin)
 
 ---
 
@@ -238,56 +239,7 @@ ALTER TABLE comments ADD COLUMN mentions UUID[]; -- mentioned user IDs
 
 ---
 
-## Phase 6: Plugin Commands (Sprint 5)
-
-**Goal:** Claude Code პლაგინში გუნდური ბრძანებების დამატება
-
-### Tasks
-
-| ID    | Task                                          | Complexity | Status | Dependencies |
-| ----- | --------------------------------------------- | ---------- | ------ | ------------ |
-| T6.1  | Create /team command (list members, roles)    | Medium     | TODO   | T5.1         |
-| T6.2  | Create /invite command (email + role)         | Medium     | TODO   | T5.2         |
-| T6.3  | Create /assign command (assign task to user)  | Medium     | TODO   | T5.4         |
-| T6.4  | Create /activity command (show recent activity) | Low      | TODO   | T5.6         |
-| T6.5  | Create /comment command (add comment to task) | Medium     | TODO   | T5.5         |
-| T6.6  | Create /notifications command (view/clear)    | Low        | TODO   | T5.10        |
-| T6.7  | Add @mention support in task descriptions     | Medium     | TODO   | T5.12        |
-| T6.8  | Add assignee display in /next output          | Low        | TODO   | T6.3         |
-| T6.9  | Create /workload command (team capacity view) | Medium     | TODO   | T6.3         |
-| T6.10 | Add MCP tools for team commands               | High       | TODO   | T6.1-9       |
-
-**New Commands Preview:**
-
-```bash
-# Team Management
-/team                        # List team members and roles
-/team add john@email.com     # Invite with default role (editor)
-/team add john@email.com admin  # Invite as admin
-/team remove john@email.com  # Remove from team
-/team role john@email.com viewer  # Change role
-
-# Task Assignment
-/assign T1.1 john@email.com  # Assign task
-/assign T1.1 me              # Assign to self
-/unassign T1.1               # Remove assignment
-/my-tasks                    # Show my assigned tasks
-/workload                    # Show team workload
-
-# Activity & Comments
-/activity                    # Recent activity feed
-/activity T1.1               # Activity for specific task
-/comment T1.1 "Great progress!"  # Add comment
-/comments T1.1               # View task comments
-
-# Notifications
-/notifications               # View unread notifications
-/notifications clear         # Mark all as read
-```
-
----
-
-## Phase 7: Real-time Features (Sprint 6)
+## Phase 6: Real-time Features (Sprint 6)
 
 **Goal:** Live presence, instant updates, collaborative editing
 
@@ -295,14 +247,14 @@ ALTER TABLE comments ADD COLUMN mentions UUID[]; -- mentioned user IDs
 
 | ID    | Task                                          | Complexity | Status | Dependencies |
 | ----- | --------------------------------------------- | ---------- | ------ | ------------ |
-| T7.1  | Implement "Currently Working On" status       | Medium     | TODO   | T5.9         |
-| T7.2  | Auto-update status from Claude Code activity  | High       | TODO   | T7.1         |
-| T7.3  | Create live activity feed component           | Medium     | TODO   | T5.8         |
-| T7.4  | Implement task update broadcasting            | Medium     | TODO   | T5.8         |
-| T7.5  | Add typing indicators for comments            | Low        | TODO   | T5.7         |
-| T7.6  | Implement conflict prevention (task locking)  | High       | TODO   | T7.4         |
-| T7.7  | Create notification toast system              | Low        | TODO   | T5.8         |
-| T7.8  | Add browser push notifications                | Medium     | TODO   | T7.7         |
+| T6.1  | Implement "Currently Working On" status       | Medium     | DONE ✅ | T5.9         |
+| T6.2  | Auto-update status from Claude Code activity  | High       | DONE ✅ | T6.1         |
+| T6.3  | Create live activity feed component           | Medium     | DONE ✅ | T5.8         |
+| T6.4  | Implement task update broadcasting            | Medium     | DONE ✅ | T5.8         |
+| T6.5  | Add typing indicators for comments            | Low        | DONE ✅ | T5.7         |
+| T6.6  | Implement conflict prevention (task locking)  | High       | DONE ✅ | T6.4         |
+| T6.7  | Create notification toast system              | Low        | DONE ✅ | T5.8         |
+| T6.8  | Add browser push notifications                | Medium     | IN_PROGRESS 🔄 | T6.7         |
 
 **Real-time Architecture:**
 
@@ -339,7 +291,7 @@ Events:
 
 ---
 
-## Phase 8: Web Dashboard Team UI (Sprint 7)
+## Phase 7: Web Dashboard Team UI (Sprint 7)
 
 **Goal:** ვებ ინტერფეისი გუნდის მართვისთვის
 
@@ -347,18 +299,18 @@ Events:
 
 | ID    | Task                                          | Complexity | Status | Dependencies |
 | ----- | --------------------------------------------- | ---------- | ------ | ------------ |
-| T8.1  | Create team members page                      | Medium     | TODO   | T5.1         |
-| T8.2  | Implement invite modal with role selection    | Medium     | TODO   | T5.2         |
-| T8.3  | Create role management UI                     | Medium     | TODO   | T5.3         |
-| T8.4  | Add assignee selector to task cards           | Low        | TODO   | T5.4         |
-| T8.5  | Create comments section in task detail        | Medium     | TODO   | T5.5         |
-| T8.6  | Implement threaded comments UI                | Medium     | TODO   | T8.5         |
-| T8.7  | Create activity feed sidebar                  | Medium     | TODO   | T5.6         |
-| T8.8  | Add online presence indicators (avatars)      | Low        | TODO   | T7.1         |
-| T8.9  | Create workload/capacity dashboard            | High       | TODO   | T6.9         |
-| T8.10 | Implement notification center (bell icon)     | Medium     | TODO   | T5.10        |
-| T8.11 | Create team analytics page                    | High       | TODO   | T5.6         |
-| T8.12 | Add @mention autocomplete in comment input    | Medium     | TODO   | T5.12        |
+| T7.1  | Create team members page                      | Medium     | DONE ✅ | T5.1         |
+| T7.2  | Implement invite modal with role selection    | Medium     | DONE ✅ | T5.2         |
+| T7.3  | Create role management UI                     | Medium     | DONE ✅ | T5.3         |
+| T7.4  | Add assignee selector to task cards           | Low        | DONE ✅ | T5.4         |
+| T7.5  | Create comments section in task detail        | Medium     | DONE ✅ | T5.5         |
+| T7.6  | Implement threaded comments UI                | Medium     | DONE ✅ | T7.5         |
+| T7.7  | Create activity feed sidebar                  | Medium     | DONE ✅ | T5.6         |
+| T7.8  | Add online presence indicators (avatars)      | Low        | IN_PROGRESS 🔄 | T6.1         |
+| T7.9  | Create workload/capacity dashboard            | High       | IN_PROGRESS 🔄 | T5.4         |
+| T7.10 | Implement notification center (bell icon)     | Medium     | DONE ✅ | T5.10        |
+| T7.11 | Create team analytics page                    | High       | IN_PROGRESS 🔄 | T5.6         |
+| T7.12 | Add @mention autocomplete in comment input    | Medium     | IN_PROGRESS 🔄 | T5.12        |
 
 **UI Mockups:**
 
@@ -394,7 +346,7 @@ Events:
 
 ---
 
-## Phase 9: External Integrations (Sprint 8)
+## Phase 8: External Integrations (Sprint 8)
 
 **Goal:** GitHub, Slack, Discord ინტეგრაციები
 
@@ -402,18 +354,17 @@ Events:
 
 | ID    | Task                                          | Complexity | Status | Dependencies |
 | ----- | --------------------------------------------- | ---------- | ------ | ------------ |
-| T9.1  | Create integrations settings page             | Medium     | TODO   | T3.13        |
-| T9.2  | Implement GitHub OAuth flow                   | High       | TODO   | T9.1         |
-| T9.3  | Link tasks to GitHub issues                   | Medium     | TODO   | T9.2         |
-| T9.4  | Link tasks to Pull Requests                   | Medium     | TODO   | T9.2         |
-| T9.5  | Auto-update task status on PR merge           | High       | TODO   | T9.4         |
-| T9.6  | Generate branch names from tasks              | Low        | TODO   | T9.2         |
-| T9.7  | Implement Slack webhook integration           | Medium     | TODO   | T9.1         |
-| T9.8  | Create Slack notification preferences         | Low        | TODO   | T9.7         |
-| T9.9  | Implement Discord webhook integration         | Medium     | TODO   | T9.1         |
-| T9.10 | Create /github command in plugin              | Medium     | TODO   | T9.2         |
-| T9.11 | Add "Create PR" button in task detail         | Medium     | TODO   | T9.4         |
-| T9.12 | Implement daily/weekly digest emails          | Medium     | TODO   | T5.11        |
+| T8.1  | Create integrations settings page             | Medium     | IN_PROGRESS 🔄 | T3.13        |
+| T8.2  | Implement GitHub OAuth flow                   | High       | IN_PROGRESS 🔄 | T8.1         |
+| T8.3  | Link tasks to GitHub issues                   | Medium     | TODO   | T8.2         |
+| T8.4  | Link tasks to Pull Requests                   | Medium     | TODO   | T8.2         |
+| T8.5  | Auto-update task status on PR merge           | High       | TODO   | T8.4         |
+| T8.6  | Generate branch names from tasks              | Low        | TODO   | T8.2         |
+| T8.7  | Implement Slack webhook integration           | Medium     | IN_PROGRESS 🔄 | T8.1         |
+| T8.8  | Create Slack notification preferences         | Low        | TODO   | T8.7         |
+| T8.9  | Implement Discord webhook integration         | Medium     | TODO   | T8.1         |
+| T8.10 | Add "Create PR" button in task detail         | Medium     | TODO   | T8.4         |
+| T8.11 | Implement daily/weekly digest emails          | Medium     | TODO   | T5.11        |
 
 **GitHub Integration Flow:**
 
@@ -470,19 +421,19 @@ Events:
 | Phase | Tasks | Focus Area |
 | ----- | ----- | ---------- |
 | Phase 5: Backend Infrastructure | 12 | API, WebSocket, Permissions |
-| Phase 6: Plugin Commands | 10 | CLI team features |
-| Phase 7: Real-time Features | 8 | Live presence, instant sync |
-| Phase 8: Web Dashboard | 12 | Team UI, notifications |
-| Phase 9: External Integrations | 12 | GitHub, Slack, Discord |
-| Phase 10: Production & Launch | 7 | Deployment, monitoring, launch |
-| **Total** | **61** | |
+| Phase 6: Real-time Features | 8 | Live presence, instant sync |
+| Phase 7: Web Dashboard Team UI | 12 | Team UI, notifications |
+| Phase 8: External Integrations | 11 | GitHub, Slack, Discord |
+| Phase 9: Production & Launch | 7 | Deployment, monitoring, launch |
+| **Total** | **50** | |
+
+> **Note:** Plugin commands (/team, /assign, /comment, etc.) are tracked in claude-plan-plugin repository.
 
 **Priority Order:**
 1. Phase 5 (Backend) - Foundation for everything
-2. Phase 6 (Plugin) + Phase 8 (Web) - Parallel development
-3. Phase 7 (Real-time) - After basic team features work
-4. Phase 9 (Integrations) - Can be partially parallel
-5. Phase 10 (Launch) - Final production deployment
+2. Phase 6 (Real-time) + Phase 7 (Web) - Parallel development
+3. Phase 8 (Integrations) - Can be partially parallel
+4. Phase 9 (Launch) - Final production deployment
 
 **Success Criteria:**
 - [ ] Users can create and manage teams
@@ -497,21 +448,21 @@ Events:
 
 ---
 
-## Phase 10: Production & Launch (Sprint 9)
+## Phase 9: Production & Launch (Sprint 9)
 
 **Goal:** Production deployment, monitoring, and public launch
 
 ### Tasks
 
-| ID     | Task                                  | Complexity | Status         | Dependencies |
-| ------ | ------------------------------------- | ---------- | -------------- | ------------ |
-| T10.1  | Run performance testing               | Medium     | DONE ✅         | T4.11        |
-| T10.2  | Configure production deployment       | Medium     | TODO           | T4.14        |
-| T10.3  | Set up monitoring (Sentry)            | Medium     | TODO           | T10.2        |
-| T10.4  | Set up analytics (Plausible/PostHog)  | Medium     | TODO           | T10.2        |
-| T10.5  | Prepare Product Hunt submission       | Medium     | TODO           | T10.4        |
-| T10.6  | Create social media announcements     | Low        | TODO           | T10.5        |
-| T10.7  | Launch!                               | Low        | TODO           | T10.6        |
+| ID    | Task                                  | Complexity | Status         | Dependencies |
+| ----- | ------------------------------------- | ---------- | -------------- | ------------ |
+| T9.1  | Run performance testing               | Medium     | DONE ✅         | T4.11        |
+| T9.2  | Configure production deployment       | Medium     | TODO           | T4.14        |
+| T9.3  | Set up monitoring (Sentry)            | Medium     | TODO           | T9.2         |
+| T9.4  | Set up analytics (Plausible/PostHog)  | Medium     | TODO           | T9.2         |
+| T9.5  | Prepare Product Hunt submission       | Medium     | TODO           | T9.4         |
+| T9.6  | Create social media announcements     | Low        | TODO           | T9.5         |
+| T9.7  | Launch!                               | Low        | TODO           | T9.6         |
 
 > **Note:** ეს თასქები Phase 4-დან გადმოვიტანეთ (T4.13, T4.15-T4.20) რადგან launch-ისთვის მოსამზადებელი სამუშაოები ცალკე ფაზად გამოვყავით.
 
@@ -590,8 +541,8 @@ Events:
 ## Notes
 
 - MVP Timeline: 8 weeks (4 sprints of 2 weeks each)
-- Total Tasks: 130 (Core Phases 1-4: 69, Team Collaboration Phases 5-9: 54, Production & Launch Phase 10: 7)
-- Critical Path: T1.1 → T1.3 → T1.5 → T1.11 → T1.14 → T1.15 → T2.4 → T2.10 → T3.7 → T10.7
+- Total Tasks: 120 (Core Phases 1-4: 69, Team Collaboration Phases 5-8: 43, Production & Launch Phase 9: 7)
+- Critical Path: T1.1 → T1.3 → T1.5 → T1.11 → T1.14 → T1.15 → T2.4 → T2.10 → T3.7 → T9.7
 
 ---
 

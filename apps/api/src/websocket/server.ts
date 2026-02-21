@@ -8,7 +8,19 @@ import {
   broadcastPresenceJoined,
   broadcastPresenceLeft,
   broadcastPresenceUpdated,
+  broadcastWorkingOnChanged,
+  broadcastTypingStart,
+  broadcastTypingStop,
   sendPresenceList,
+  // Task locking (T6.6)
+  broadcastTaskLocked,
+  broadcastTaskUnlocked,
+  broadcastTaskLockExtended,
+  sendLocksList,
+  acquireTaskLock,
+  releaseTaskLock,
+  extendTaskLock,
+  releaseUserLocks,
 } from './broadcast.js'
 
 // Ping interval (25 seconds - below typical 30s timeout)
@@ -54,7 +66,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
       return
     }
 
-    // Create client object with presence data (T5.9)
+    // Create client object with presence data (T5.9), workingOn (T6.1), and typing (T6.5)
     const now = new Date()
     const client: Client = {
       ws,
@@ -65,6 +77,15 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
       name: auth.name,
       status: 'online',
       lastActiveAt: now,
+      // Working on data (T6.1) - initialized to null
+      workingOnTaskId: null,
+      workingOnTaskUuid: null,
+      workingOnTaskName: null,
+      workingOnStartedAt: null,
+      // Typing indicator data (T6.5) - initialized to null
+      typingOnTaskId: null,
+      typingOnTaskDisplayId: null,
+      typingStartedAt: null,
     }
 
     // Check if this is the first connection for this user (before adding)
@@ -76,6 +97,9 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
 
     // Send presence list to new client (T5.9)
     sendPresenceList(auth.projectId, client)
+
+    // Send locks list to new client (T6.6)
+    sendLocksList(auth.projectId, client)
 
     // If first connection for this user, broadcast presence_joined to others
     if (isFirstConn) {
@@ -131,6 +155,185 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
           return
         }
 
+        // Handle working_on_start from client (T6.1)
+        if (message.type === 'working_on_start') {
+          const { taskId, taskUuid, taskName } = message
+          if (taskId && taskUuid && taskName) {
+            const startedAt = connectionManager.setWorkingOn(auth.projectId, auth.userId, {
+              taskId,
+              taskUuid,
+              taskName,
+            })
+            broadcastWorkingOnChanged(
+              auth.projectId,
+              auth.userId,
+              {
+                taskId,
+                taskUuid,
+                taskName,
+                startedAt: startedAt.toISOString(),
+              }
+            )
+            console.log(`[WS] User ${auth.userId} started working on ${taskId}`)
+          }
+          return
+        }
+
+        // Handle working_on_stop from client (T6.1)
+        if (message.type === 'working_on_stop') {
+          connectionManager.clearWorkingOn(auth.projectId, auth.userId)
+          broadcastWorkingOnChanged(
+            auth.projectId,
+            auth.userId,
+            null
+          )
+          console.log(`[WS] User ${auth.userId} stopped working`)
+          return
+        }
+
+        // Handle comment_typing_start from client (T6.5)
+        if (message.type === 'comment_typing_start') {
+          const { taskId, taskDisplayId } = message
+          if (taskId && taskDisplayId) {
+            const startedAt = connectionManager.setTyping(auth.projectId, auth.userId, taskId, taskDisplayId)
+            const typingData = {
+              userId: auth.userId,
+              email: auth.email,
+              name: auth.name,
+              taskId,
+              taskDisplayId,
+              startedAt: startedAt.toISOString(),
+            }
+            broadcastTypingStart(auth.projectId, typingData, auth.userId)
+            console.log(`[WS] User ${auth.userId} started typing on ${taskDisplayId}`)
+          }
+          return
+        }
+
+        // Handle comment_typing_stop from client (T6.5)
+        if (message.type === 'comment_typing_stop') {
+          const typingInfo = connectionManager.getTypingInfo(auth.projectId, auth.userId)
+          if (typingInfo) {
+            connectionManager.clearTyping(auth.projectId, auth.userId)
+            broadcastTypingStop(
+              auth.projectId,
+              {
+                userId: auth.userId,
+                taskId: typingInfo.taskId,
+                taskDisplayId: typingInfo.taskDisplayId,
+              },
+              auth.userId
+            )
+            console.log(`[WS] User ${auth.userId} stopped typing`)
+          }
+          return
+        }
+
+        // Handle task_lock from client (T6.6)
+        if (message.type === 'task_lock') {
+          const { taskId, taskUuid, taskName } = message
+          if (taskId && taskUuid) {
+            const result = acquireTaskLock(
+              auth.projectId,
+              taskId,
+              taskUuid,
+              auth.userId,
+              auth.email,
+              auth.name
+            )
+
+            // Send result back to requesting client
+            const responseMessage: WebSocketMessage = {
+              type: 'task_lock_result',
+              projectId: auth.projectId,
+              timestamp: new Date().toISOString(),
+              data: {
+                success: result.success,
+                lock: result.lock,
+                isOwnLock: result.isOwnLock || false,
+                taskName: taskName || null,
+              },
+            }
+            ws.send(JSON.stringify(responseMessage))
+
+            // If lock acquired (new or extended), broadcast to others
+            if (result.success) {
+              if (result.isOwnLock) {
+                broadcastTaskLockExtended(auth.projectId, result.lock, auth.userId)
+              } else {
+                broadcastTaskLocked(auth.projectId, result.lock, auth.userId)
+              }
+              console.log(`[WS] User ${auth.userId} locked task ${taskId}`)
+            }
+          }
+          return
+        }
+
+        // Handle task_unlock from client (T6.6)
+        if (message.type === 'task_unlock') {
+          const { taskId, taskUuid } = message
+          if (taskId) {
+            const released = releaseTaskLock(auth.projectId, taskId, auth.userId)
+
+            if (released) {
+              broadcastTaskUnlocked(
+                auth.projectId,
+                {
+                  taskId,
+                  taskUuid: taskUuid || '',
+                  unlockedBy: {
+                    id: auth.userId,
+                    email: auth.email,
+                    name: auth.name,
+                  },
+                }
+              )
+              console.log(`[WS] User ${auth.userId} unlocked task ${taskId}`)
+            }
+
+            // Send result back to requesting client
+            const responseMessage: WebSocketMessage = {
+              type: 'task_unlock_result',
+              projectId: auth.projectId,
+              timestamp: new Date().toISOString(),
+              data: {
+                success: released,
+                taskId,
+              },
+            }
+            ws.send(JSON.stringify(responseMessage))
+          }
+          return
+        }
+
+        // Handle task_lock_extend from client (T6.6)
+        if (message.type === 'task_lock_extend') {
+          const { taskId } = message
+          if (taskId) {
+            const extended = extendTaskLock(auth.projectId, taskId, auth.userId)
+
+            if (extended) {
+              const lock = connectionManager.getLock(auth.projectId, taskId)
+              if (lock) {
+                broadcastTaskLockExtended(auth.projectId, lock)
+              }
+            }
+
+            // Send result back to requesting client
+            const responseMessage: WebSocketMessage = {
+              type: 'task_lock_extend_result',
+              projectId: auth.projectId,
+              timestamp: new Date().toISOString(),
+              data: {
+                success: extended,
+                taskId,
+              },
+            }
+            ws.send(JSON.stringify(responseMessage))
+          }
+          return
+        }
+
         // Log other messages for debugging
         console.log(`[WS] Received message from ${auth.userId}:`, message.type)
       } catch (err) {
@@ -145,11 +348,43 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
       // Check if this is the last connection for the user BEFORE removing (T5.9)
       const isLastConn = connectionManager.isLastConnection(auth.projectId, auth.userId)
 
+      // Get workingOn status before removing (T6.1)
+      const hadWorkingOn = connectionManager.getWorkingOn(auth.projectId, auth.userId) !== null
+
+      // Get typing status before removing (T6.5)
+      const typingInfo = connectionManager.getTypingInfo(auth.projectId, auth.userId)
+
       connectionManager.removeClient(auth.projectId, client)
 
-      // If last connection for this user, broadcast presence_left to others (T5.9)
+      // If last connection for this user
       if (isLastConn) {
+        // Broadcast presence_left to others (T5.9)
         broadcastPresenceLeft(auth.projectId, auth.userId)
+
+        // If they were working on something, broadcast that they stopped (T6.1)
+        if (hadWorkingOn) {
+          broadcastWorkingOnChanged(auth.projectId, auth.userId, null)
+        }
+
+        // If they were typing, broadcast that they stopped (T6.5)
+        if (typingInfo) {
+          broadcastTypingStop(auth.projectId, {
+            userId: auth.userId,
+            taskId: typingInfo.taskId,
+            taskDisplayId: typingInfo.taskDisplayId,
+          })
+        }
+
+        // Release any locks held by this user (T6.6)
+        const releasedLocks = releaseUserLocks(auth.projectId, auth.userId)
+        for (const taskId of releasedLocks) {
+          broadcastTaskUnlocked(auth.projectId, {
+            taskId,
+            taskUuid: '', // UUID not available here, but taskId is sufficient
+            unlockedBy: null, // null indicates auto-release due to disconnect
+          })
+          console.log(`[WS] Auto-released lock on ${taskId} due to user disconnect`)
+        }
       }
 
       // Clear ping interval if exists

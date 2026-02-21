@@ -203,6 +203,13 @@ export function useUpdateProject() {
   })
 }
 
+// Assignee info returned from API
+export interface TaskAssignee {
+  id: string
+  email: string
+  name: string | null
+}
+
 // Task interface matching API response
 export interface Task {
   id: string
@@ -213,6 +220,10 @@ export interface Task {
   complexity: 'Low' | 'Medium' | 'High'
   estimatedHours: number | null
   dependencies: string[]
+  assigneeId: string | null
+  assignedBy: string | null
+  assignedAt: string | null
+  assignee: TaskAssignee | null
   createdAt: string
   updatedAt: string
 }
@@ -238,5 +249,31 @@ export function useProjectTasks(projectId: string) {
       return response.data.tasks
     },
     enabled: !!projectId,
+  })
+}
+
+// Assign task mutation
+interface AssignTaskResponse {
+  success: boolean
+  data: {
+    task: Task
+  }
+}
+
+export function useAssignTask(projectId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ taskId, assigneeId }: { taskId: string; assigneeId: string | null }) => {
+      const response = await authApi.post<AssignTaskResponse>(
+        `/projects/${projectId}/tasks/${taskId}/assign`,
+        { assigneeId }
+      )
+      return response.data.task
+    },
+    onSuccess: () => {
+      // Invalidate tasks query to refetch with updated assignee
+      queryClient.invalidateQueries({ queryKey: projectTasksQueryKey(projectId) })
+    },
   })
 }

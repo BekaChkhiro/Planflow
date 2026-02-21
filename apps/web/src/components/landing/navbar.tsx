@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare } from "lucide-react"
+import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare, Users, Bell } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +22,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAuthStore } from "@/stores/auth-store"
 import { FeedbackDialog } from "@/components/feedback-dialog"
+import { NotificationCenter } from "@/components/notifications"
 
 function getInitials(name: string | undefined): string {
   if (!name) return 'U'
@@ -82,6 +83,7 @@ export function Navbar() {
               <MessageSquare className="mr-2 h-4 w-4" />
               Feedback
             </Button>
+            <NotificationCenter />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
@@ -106,6 +108,18 @@ export function Navbar() {
                   <Link href="/dashboard" className="flex items-center">
                     <LayoutDashboard className="mr-2 h-4 w-4" />
                     Dashboard
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/team" className="flex items-center">
+                    <Users className="mr-2 h-4 w-4" />
+                    Team
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/notifications" className="flex items-center">
+                    <Bell className="mr-2 h-4 w-4" />
+                    Notifications
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
@@ -182,6 +196,18 @@ export function Navbar() {
                       <Link href="/dashboard" onClick={() => setIsOpen(false)}>
                         <LayoutDashboard className="mr-2 h-4 w-4" />
                         Dashboard
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" asChild className="justify-start">
+                      <Link href="/dashboard/team" onClick={() => setIsOpen(false)}>
+                        <Users className="mr-2 h-4 w-4" />
+                        Team
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" asChild className="justify-start">
+                      <Link href="/dashboard/notifications" onClick={() => setIsOpen(false)}>
+                        <Bell className="mr-2 h-4 w-4" />
+                        Notifications
                       </Link>
                     </Button>
                     <Button variant="ghost" asChild className="justify-start">

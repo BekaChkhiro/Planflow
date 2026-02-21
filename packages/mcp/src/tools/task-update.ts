@@ -134,6 +134,24 @@ You must be logged in first with planflow_login.`,
         newStatus: input.status,
       })
 
+      // Auto-update working on status based on status change (T6.1)
+      try {
+        if (input.status === 'IN_PROGRESS') {
+          // Auto-start working on this task
+          await client.startWorkingOn(input.projectId, input.taskId)
+          logger.debug('Auto-started working on task', { taskId: input.taskId })
+        } else if (input.status === 'DONE') {
+          // Auto-stop working on (clears current task)
+          await client.stopWorkingOn(input.projectId)
+          logger.debug('Auto-stopped working on task', { taskId: input.taskId })
+        }
+      } catch (workingOnError) {
+        // Non-fatal: log but don't fail the status update
+        logger.debug('Failed to update working on status (non-fatal)', {
+          error: String(workingOnError),
+        })
+      }
+
       // Build success output
       const statusEmoji = getStatusEmoji(updatedTask.status)
       const complexityIndicator = getComplexityIndicator(updatedTask.complexity)

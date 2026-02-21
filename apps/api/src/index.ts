@@ -78,6 +78,24 @@ import {
   broadcastTasksSynced,
   broadcastTaskAssigned,
   broadcastTaskUnassigned,
+  // Activity broadcasts (T6.3)
+  broadcastActivityCreated,
+  // Comment broadcasts (T6.4)
+  broadcastCommentCreated,
+  broadcastCommentUpdated,
+  broadcastCommentDeleted,
+  // Notification broadcasts (T6.4)
+  sendNotificationToUser,
+  type NotificationData,
+  type CommentData,
+  // Task locking (T6.6)
+  getTaskLock,
+  getProjectLocks,
+  acquireTaskLock,
+  releaseTaskLock,
+  broadcastTaskLocked,
+  broadcastTaskUnlocked,
+  type TaskLockInfo,
 } from './websocket/index.js'
 
 // Helper to generate secure random tokens
@@ -1849,7 +1867,14 @@ app.put('/projects/:id/tasks', auth, async (c) => {
       .set({ updatedAt: new Date() })
       .where(eq(schema.projects.id, projectId))
 
-    // Broadcast all task updates via WebSocket
+    // Get user info for broadcast (T6.4)
+    const [updaterUser] = await db
+      .select({ email: schema.users.email, name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+      .limit(1)
+
+    // Broadcast all task updates via WebSocket (T6.4 - enhanced with updatedBy)
     // Don't exclude sender - HTTP API clients aren't on WebSocket
     if (updatedTasks.length > 0) {
       broadcastTasksUpdated(
@@ -1865,7 +1890,12 @@ app.put('/projects/:id/tasks', auth, async (c) => {
           dependencies: t.dependencies ?? [],
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
-        }))
+        })),
+        {
+          id: user.id,
+          email: updaterUser?.email || user.email,
+          name: updaterUser?.name || null,
+        }
       )
     }
 
@@ -1936,6 +1966,22 @@ app.patch('/projects/:id/tasks/:taskId', auth, async (c) => {
       return c.json({ success: false, error: `Task ${taskIdParam} not found in this project` }, 404)
     }
 
+    // Check if task is locked by another user (T6.6)
+    const lock = getTaskLock(projectId, taskIdParam)
+    if (lock && lock.lockedBy.userId !== user.id) {
+      return c.json({
+        success: false,
+        error: `Task ${taskIdParam} is currently being edited by ${lock.lockedBy.name || lock.lockedBy.email}`,
+        code: 'TASK_LOCKED',
+        lock: {
+          taskId: lock.taskId,
+          lockedBy: lock.lockedBy,
+          lockedAt: lock.lockedAt,
+          expiresAt: lock.expiresAt,
+        },
+      }, 423) // 423 Locked
+    }
+
     // Build update object with only provided fields
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -1978,23 +2024,38 @@ app.patch('/projects/:id/tasks/:taskId', auth, async (c) => {
       return c.json({ success: false, error: 'Failed to update task' }, 500)
     }
 
-    // Broadcast task update via WebSocket
+    // Get user info for broadcast (T6.4)
+    const [updaterUser] = await db
+      .select({ email: schema.users.email, name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+      .limit(1)
+
+    // Broadcast task update via WebSocket (T6.4 - enhanced with updatedBy)
     // Don't exclude sender - HTTP API clients aren't on WebSocket
-    broadcastTaskUpdated(projectId, {
-      id: updated.id,
-      taskId: updated.taskId,
-      name: updated.name,
-      description: updated.description,
-      status: updated.status,
-      complexity: updated.complexity,
-      estimatedHours: updated.estimatedHours,
-      dependencies: updated.dependencies ?? [],
-      assigneeId: updated.assigneeId,
-      assignedBy: updated.assignedBy,
-      assignedAt: updated.assignedAt,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
-    })
+    broadcastTaskUpdated(
+      projectId,
+      {
+        id: updated.id,
+        taskId: updated.taskId,
+        name: updated.name,
+        description: updated.description,
+        status: updated.status,
+        complexity: updated.complexity,
+        estimatedHours: updated.estimatedHours,
+        dependencies: updated.dependencies ?? [],
+        assigneeId: updated.assigneeId,
+        assignedBy: updated.assignedBy,
+        assignedAt: updated.assignedAt,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      },
+      {
+        id: user.id,
+        email: updaterUser?.email || user.email,
+        name: updaterUser?.name || null,
+      }
+    )
 
     // Get assignee info if task is assigned
     let assignee = null
@@ -2521,6 +2582,203 @@ app.get('/projects/:id/tasks/assignments', auth, async (c) => {
 })
 
 // ============================================
+// Task Locking Routes (T6.6)
+// ============================================
+
+// POST /projects/:id/tasks/:taskId/lock - Acquire a lock on a task
+app.post('/projects/:id/tasks/:taskId/lock', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const taskIdParam = c.req.param('taskId')
+
+    // Validate UUID format for project ID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Validate taskId format (e.g., T1.1, T2.10)
+    const taskIdRegex = /^T\d+\.\d+$/
+    if (!taskIdRegex.test(taskIdParam)) {
+      return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Verify the project exists and belongs to the user
+    const [project] = await db
+      .select({ id: schema.projects.id, name: schema.projects.name })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Find the task by taskId
+    const [task] = await db
+      .select({ id: schema.tasks.id, name: schema.tasks.name })
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
+
+    if (!task) {
+      return c.json({ success: false, error: `Task ${taskIdParam} not found in this project` }, 404)
+    }
+
+    // Get user info
+    const [userInfo] = await db
+      .select({ email: schema.users.email, name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+
+    // Attempt to acquire lock
+    const result = acquireTaskLock(
+      projectId,
+      taskIdParam,
+      task.id,
+      user.id,
+      userInfo?.email || user.email,
+      userInfo?.name || null
+    )
+
+    if (result.success) {
+      // Broadcast lock to other clients
+      broadcastTaskLocked(projectId, result.lock, user.id)
+    }
+
+    return c.json({
+      success: result.success,
+      data: {
+        lock: result.lock,
+        isOwnLock: result.isOwnLock || false,
+      },
+    }, result.success ? 200 : 409)
+  } catch (error) {
+    console.error('Lock task error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// POST /projects/:id/tasks/:taskId/unlock - Release a lock on a task
+app.post('/projects/:id/tasks/:taskId/unlock', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const taskIdParam = c.req.param('taskId')
+
+    // Validate UUID format for project ID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Validate taskId format
+    const taskIdRegex = /^T\d+\.\d+$/
+    if (!taskIdRegex.test(taskIdParam)) {
+      return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Verify the project exists and belongs to the user
+    const [project] = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Find the task by taskId
+    const [task] = await db
+      .select({ id: schema.tasks.id })
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
+
+    if (!task) {
+      return c.json({ success: false, error: `Task ${taskIdParam} not found in this project` }, 404)
+    }
+
+    // Get user info
+    const [userInfo] = await db
+      .select({ email: schema.users.email, name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+
+    // Release lock (only if owned by user)
+    const released = releaseTaskLock(projectId, taskIdParam, user.id)
+
+    if (released) {
+      // Broadcast unlock to other clients
+      broadcastTaskUnlocked(projectId, {
+        taskId: taskIdParam,
+        taskUuid: task.id,
+        unlockedBy: {
+          id: user.id,
+          email: userInfo?.email || user.email,
+          name: userInfo?.name || null,
+        },
+      })
+    }
+
+    return c.json({
+      success: released,
+      data: {
+        taskId: taskIdParam,
+        released,
+      },
+    }, released ? 200 : 404)
+  } catch (error) {
+    console.error('Unlock task error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// GET /projects/:id/locks - Get all active locks for a project
+app.get('/projects/:id/locks', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    // Validate UUID format for project ID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Verify the project exists and belongs to the user
+    const [project] = await db
+      .select({ id: schema.projects.id, name: schema.projects.name })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Get all active locks
+    const locks = getProjectLocks(projectId)
+
+    return c.json({
+      success: true,
+      data: {
+        projectId,
+        projectName: project.name,
+        locks,
+        count: locks.length,
+      },
+    })
+  } catch (error) {
+    console.error('Get locks error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ============================================
 // Comment Routes (T5.5)
 // ============================================
 
@@ -2532,14 +2790,11 @@ app.get('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
   try {
     const { user } = getAuth(c)
     const projectId = c.req.param('id')
-    const taskId = c.req.param('taskId')
+    const taskIdParam = c.req.param('taskId')
 
-    // Validate UUIDs
+    // Validate project UUID
     if (!uuidRegex.test(projectId)) {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
-    }
-    if (!uuidRegex.test(taskId)) {
-      return c.json({ success: false, error: 'Invalid task ID format' }, 400)
     }
 
     const db = getDbClient()
@@ -2555,15 +2810,34 @@ app.get('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    // Verify task exists in this project
-    const [task] = await db
-      .select({ id: schema.tasks.id })
-      .from(schema.tasks)
-      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.projectId, projectId)))
-      .limit(1)
+    // Check if taskId is a UUID or a human-readable task ID (e.g., "T1.1")
+    const isUuid = uuidRegex.test(taskIdParam)
+    let taskUuid: string
 
-    if (!task) {
-      return c.json({ success: false, error: 'Task not found' }, 404)
+    if (isUuid) {
+      // Verify task exists in this project
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.id, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: 'Task not found' }, 404)
+      }
+      taskUuid = task.id
+    } else {
+      // Human-readable task ID (e.g., "T1.1")
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.taskId, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
+      }
+      taskUuid = task.id
     }
 
     // Get all comments for this task with author info
@@ -2582,7 +2856,7 @@ app.get('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
       })
       .from(schema.comments)
       .innerJoin(schema.users, eq(schema.comments.authorId, schema.users.id))
-      .where(eq(schema.comments.taskId, taskId))
+      .where(eq(schema.comments.taskId, taskUuid))
       .orderBy(schema.comments.createdAt)
 
     // Build threaded structure
@@ -2641,7 +2915,7 @@ app.get('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
     return c.json({
       success: true,
       data: {
-        taskId,
+        taskId: taskUuid,
         comments: rootComments.map(formatComment),
         totalCount: allComments.length,
       },
@@ -2657,14 +2931,11 @@ app.post('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
   try {
     const { user } = getAuth(c)
     const projectId = c.req.param('id')
-    const taskId = c.req.param('taskId')
+    const taskIdParam = c.req.param('taskId')
 
-    // Validate UUIDs
+    // Validate project UUID
     if (!uuidRegex.test(projectId)) {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
-    }
-    if (!uuidRegex.test(taskId)) {
-      return c.json({ success: false, error: 'Invalid task ID format' }, 400)
     }
 
     // Parse and validate request body
@@ -2702,28 +2973,52 @@ app.post('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    // Verify task exists in this project (also get assignee for notification)
-    const [task] = await db
-      .select({
-        id: schema.tasks.id,
-        taskId: schema.tasks.taskId,
-        name: schema.tasks.name,
-        assigneeId: schema.tasks.assigneeId,
-      })
-      .from(schema.tasks)
-      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.projectId, projectId)))
-      .limit(1)
+    // Check if taskId is a UUID or a human-readable task ID (e.g., "T1.1")
+    const isUuid = uuidRegex.test(taskIdParam)
+    let task: { id: string; taskId: string; name: string; assigneeId: string | null } | undefined
+
+    if (isUuid) {
+      // Verify task exists in this project (also get assignee for notification)
+      const [foundTask] = await db
+        .select({
+          id: schema.tasks.id,
+          taskId: schema.tasks.taskId,
+          name: schema.tasks.name,
+          assigneeId: schema.tasks.assigneeId,
+        })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.id, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      task = foundTask
+    } else {
+      // Human-readable task ID (e.g., "T1.1")
+      const [foundTask] = await db
+        .select({
+          id: schema.tasks.id,
+          taskId: schema.tasks.taskId,
+          name: schema.tasks.name,
+          assigneeId: schema.tasks.assigneeId,
+        })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.taskId, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      task = foundTask
+    }
 
     if (!task) {
-      return c.json({ success: false, error: 'Task not found' }, 404)
+      return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
     }
+
+    const taskUuid = task.id
 
     // If parentId provided, verify it exists and belongs to same task
     if (parentId) {
       const [parentComment] = await db
         .select({ id: schema.comments.id })
         .from(schema.comments)
-        .where(and(eq(schema.comments.id, parentId), eq(schema.comments.taskId, taskId)))
+        .where(and(eq(schema.comments.id, parentId), eq(schema.comments.taskId, taskUuid)))
         .limit(1)
 
       if (!parentComment) {
@@ -2751,7 +3046,7 @@ app.post('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
     const [newComment] = await db
       .insert(schema.comments)
       .values({
-        taskId,
+        taskId: taskUuid,
         authorId: user.id,
         content,
         parentId: parentId || null,
@@ -2839,6 +3134,23 @@ app.post('/projects/:id/tasks/:taskId/comments', auth, async (c) => {
       }
     }
 
+    // Broadcast comment creation to all connected clients (T6.4)
+    const commentData: CommentData = {
+      id: newComment.id,
+      taskId: newComment.taskId,
+      taskDisplayId: task.taskId,
+      content: newComment.content,
+      parentId: newComment.parentId,
+      mentions: newComment.mentions,
+      createdAt: newComment.createdAt.toISOString(),
+      author: {
+        id: user.id,
+        email: author?.email || user.email,
+        name: author?.name || null,
+      },
+    }
+    broadcastCommentCreated(projectId, commentData, user.id)
+
     return c.json(
       {
         success: true,
@@ -2866,15 +3178,12 @@ app.get('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) => {
   try {
     const { user } = getAuth(c)
     const projectId = c.req.param('id')
-    const taskId = c.req.param('taskId')
+    const taskIdParam = c.req.param('taskId')
     const commentId = c.req.param('commentId')
 
-    // Validate UUIDs
+    // Validate project and comment UUIDs
     if (!uuidRegex.test(projectId)) {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
-    }
-    if (!uuidRegex.test(taskId)) {
-      return c.json({ success: false, error: 'Invalid task ID format' }, 400)
     }
     if (!uuidRegex.test(commentId)) {
       return c.json({ success: false, error: 'Invalid comment ID format' }, 400)
@@ -2893,15 +3202,32 @@ app.get('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    // Verify task exists in this project
-    const [task] = await db
-      .select({ id: schema.tasks.id })
-      .from(schema.tasks)
-      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.projectId, projectId)))
-      .limit(1)
+    // Check if taskId is a UUID or a human-readable task ID (e.g., "T1.1")
+    const isUuid = uuidRegex.test(taskIdParam)
+    let taskUuid: string
 
-    if (!task) {
-      return c.json({ success: false, error: 'Task not found' }, 404)
+    if (isUuid) {
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.id, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: 'Task not found' }, 404)
+      }
+      taskUuid = task.id
+    } else {
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.taskId, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
+      }
+      taskUuid = task.id
     }
 
     // Get the comment with author info
@@ -2920,7 +3246,7 @@ app.get('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) => {
       })
       .from(schema.comments)
       .innerJoin(schema.users, eq(schema.comments.authorId, schema.users.id))
-      .where(and(eq(schema.comments.id, commentId), eq(schema.comments.taskId, taskId)))
+      .where(and(eq(schema.comments.id, commentId), eq(schema.comments.taskId, taskUuid)))
       .limit(1)
 
     if (!comment) {
@@ -2990,15 +3316,12 @@ app.put('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) => {
   try {
     const { user } = getAuth(c)
     const projectId = c.req.param('id')
-    const taskId = c.req.param('taskId')
+    const taskIdParam = c.req.param('taskId')
     const commentId = c.req.param('commentId')
 
-    // Validate UUIDs
+    // Validate project and comment UUIDs
     if (!uuidRegex.test(projectId)) {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
-    }
-    if (!uuidRegex.test(taskId)) {
-      return c.json({ success: false, error: 'Invalid task ID format' }, 400)
     }
     if (!uuidRegex.test(commentId)) {
       return c.json({ success: false, error: 'Invalid comment ID format' }, 400)
@@ -3039,15 +3362,32 @@ app.put('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    // Verify task exists in this project
-    const [task] = await db
-      .select({ id: schema.tasks.id })
-      .from(schema.tasks)
-      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.projectId, projectId)))
-      .limit(1)
+    // Check if taskId is a UUID or a human-readable task ID (e.g., "T1.1")
+    const isUuid = uuidRegex.test(taskIdParam)
+    let taskUuid: string
 
-    if (!task) {
-      return c.json({ success: false, error: 'Task not found' }, 404)
+    if (isUuid) {
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.id, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: 'Task not found' }, 404)
+      }
+      taskUuid = task.id
+    } else {
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.taskId, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
+      }
+      taskUuid = task.id
     }
 
     // Get the existing comment
@@ -3057,7 +3397,7 @@ app.put('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) => {
         authorId: schema.comments.authorId,
       })
       .from(schema.comments)
-      .where(and(eq(schema.comments.id, commentId), eq(schema.comments.taskId, taskId)))
+      .where(and(eq(schema.comments.id, commentId), eq(schema.comments.taskId, taskUuid)))
       .limit(1)
 
     if (!existingComment) {
@@ -3103,16 +3443,36 @@ app.put('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) => {
       .where(eq(schema.users.id, user.id))
       .limit(1)
 
+    // Get task display ID for broadcast (T6.4)
+    const [taskForBroadcast] = await db
+      .select({ taskId: schema.tasks.taskId })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.id, taskUuid))
+      .limit(1)
+
+    // Broadcast comment updated (T6.4)
+    const authorInfo = {
+      id: user.id,
+      email: author?.email || user.email,
+      name: author?.name || null,
+    }
+    broadcastCommentUpdated(projectId, {
+      id: updatedComment.id,
+      taskId: taskUuid,
+      taskDisplayId: taskForBroadcast?.taskId || taskIdParam,
+      content: updatedComment.content,
+      parentId: updatedComment.parentId,
+      mentions: updatedComment.mentions,
+      createdAt: updatedComment.createdAt.toISOString(),
+      author: authorInfo,
+    })
+
     return c.json({
       success: true,
       data: {
         comment: {
           ...updatedComment,
-          author: {
-            id: user.id,
-            email: author?.email || user.email,
-            name: author?.name || null,
-          },
+          author: authorInfo,
         },
       },
     })
@@ -3127,15 +3487,12 @@ app.delete('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) =>
   try {
     const { user } = getAuth(c)
     const projectId = c.req.param('id')
-    const taskId = c.req.param('taskId')
+    const taskIdParam = c.req.param('taskId')
     const commentId = c.req.param('commentId')
 
-    // Validate UUIDs
+    // Validate project and comment UUIDs
     if (!uuidRegex.test(projectId)) {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
-    }
-    if (!uuidRegex.test(taskId)) {
-      return c.json({ success: false, error: 'Invalid task ID format' }, 400)
     }
     if (!uuidRegex.test(commentId)) {
       return c.json({ success: false, error: 'Invalid comment ID format' }, 400)
@@ -3154,15 +3511,32 @@ app.delete('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) =>
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    // Verify task exists in this project
-    const [task] = await db
-      .select({ id: schema.tasks.id })
-      .from(schema.tasks)
-      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.projectId, projectId)))
-      .limit(1)
+    // Check if taskId is a UUID or a human-readable task ID (e.g., "T1.1")
+    const isUuid = uuidRegex.test(taskIdParam)
+    let taskUuid: string
 
-    if (!task) {
-      return c.json({ success: false, error: 'Task not found' }, 404)
+    if (isUuid) {
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.id, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: 'Task not found' }, 404)
+      }
+      taskUuid = task.id
+    } else {
+      const [task] = await db
+        .select({ id: schema.tasks.id })
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.taskId, taskIdParam), eq(schema.tasks.projectId, projectId)))
+        .limit(1)
+
+      if (!task) {
+        return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
+      }
+      taskUuid = task.id
     }
 
     // Get the existing comment
@@ -3172,7 +3546,7 @@ app.delete('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) =>
         authorId: schema.comments.authorId,
       })
       .from(schema.comments)
-      .where(and(eq(schema.comments.id, commentId), eq(schema.comments.taskId, taskId)))
+      .where(and(eq(schema.comments.id, commentId), eq(schema.comments.taskId, taskUuid)))
       .limit(1)
 
     if (!existingComment) {
@@ -3190,8 +3564,34 @@ app.delete('/projects/:id/tasks/:taskId/comments/:commentId', auth, async (c) =>
       )
     }
 
+    // Get task display ID for broadcast (T6.4)
+    const [taskForBroadcast] = await db
+      .select({ taskId: schema.tasks.taskId })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.id, taskUuid))
+      .limit(1)
+
+    // Get user info for broadcast
+    const [deleter] = await db
+      .select({ email: schema.users.email, name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+      .limit(1)
+
     // Delete the comment (CASCADE will handle replies)
     await db.delete(schema.comments).where(eq(schema.comments.id, commentId))
+
+    // Broadcast comment deleted (T6.4)
+    broadcastCommentDeleted(projectId, {
+      commentId,
+      taskId: taskUuid,
+      taskDisplayId: taskForBroadcast?.taskId || taskIdParam,
+      deletedBy: {
+        id: user.id,
+        email: deleter?.email || user.email,
+        name: deleter?.name || null,
+      },
+    })
 
     return c.json({
       success: true,
@@ -4973,7 +5373,7 @@ app.post('/invitations/:token/decline', auth, async (c) => {
 // Activity Log Endpoints (T5.6)
 // ============================================================================
 
-// Helper function to log activity (fire-and-forget)
+// Helper function to log activity (fire-and-forget) and broadcast via WebSocket (T6.3)
 async function logActivity(params: {
   action: typeof schema.activityLog.$inferInsert['action']
   entityType: typeof schema.activityLog.$inferInsert['entityType']
@@ -4988,18 +5388,60 @@ async function logActivity(params: {
 }) {
   try {
     const db = getDbClient()
-    await db.insert(schema.activityLog).values({
-      action: params.action,
-      entityType: params.entityType,
-      actorId: params.actorId,
-      entityId: params.entityId,
-      taskId: params.taskId,
-      organizationId: params.organizationId,
-      projectId: params.projectId,
-      taskUuid: params.taskUuid,
-      metadata: params.metadata,
-      description: params.description,
-    })
+
+    // Insert and return the activity
+    const [activity] = await db
+      .insert(schema.activityLog)
+      .values({
+        action: params.action,
+        entityType: params.entityType,
+        actorId: params.actorId,
+        entityId: params.entityId,
+        taskId: params.taskId,
+        organizationId: params.organizationId,
+        projectId: params.projectId,
+        taskUuid: params.taskUuid,
+        metadata: params.metadata,
+        description: params.description,
+      })
+      .returning()
+
+    // If we have a projectId, broadcast the activity via WebSocket (T6.3)
+    if (params.projectId && activity) {
+      // Fetch actor info for the broadcast
+      const [actor] = await db
+        .select({
+          id: schema.users.id,
+          email: schema.users.email,
+          name: schema.users.name,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, params.actorId))
+        .limit(1)
+
+      if (actor) {
+        broadcastActivityCreated(
+          params.projectId,
+          {
+            id: activity.id,
+            action: activity.action,
+            entityType: activity.entityType,
+            entityId: activity.entityId,
+            taskId: activity.taskId,
+            taskUuid: activity.taskUuid,
+            metadata: activity.metadata as Record<string, unknown> | null,
+            description: activity.description,
+            createdAt: activity.createdAt.toISOString(),
+            actor: {
+              id: actor.id,
+              email: actor.email,
+              name: actor.name,
+            },
+          },
+          params.actorId // Exclude the actor from receiving their own activity
+        )
+      }
+    }
   } catch (error) {
     // Log error but don't throw - activity logging should not block operations
     console.error('Activity logging error:', error)
@@ -5314,6 +5756,128 @@ app.get('/projects/:id/presence', auth, async (c) => {
     })
   } catch (error) {
     console.error('Get project presence error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// POST /projects/:id/tasks/:taskId/work - Start or stop working on a task (T6.1)
+app.post('/projects/:id/tasks/:taskId/work', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const taskIdParam = c.req.param('taskId')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const body = await c.req.json()
+    const action = body.action as string
+
+    if (!action || !['start', 'stop'].includes(action)) {
+      return c.json({ success: false, error: 'Invalid action. Must be "start" or "stop"' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check user has access to the project
+    const [project] = await db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(
+        and(
+          eq(schema.projects.id, projectId),
+          eq(schema.projects.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Import connection manager and broadcast function
+    const { connectionManager, broadcastWorkingOnChanged } = await import('./websocket/index.js')
+
+    if (action === 'stop') {
+      // Clear working on status
+      connectionManager.clearWorkingOn(projectId, user.id)
+      broadcastWorkingOnChanged(projectId, user.id, null)
+
+      return c.json({
+        success: true,
+        data: {
+          action: 'stop',
+          workingOn: null,
+        },
+      })
+    }
+
+    // action === 'start'
+    // Find the task by taskId (human-readable) or UUID
+    const isUuid = uuidRegex.test(taskIdParam)
+
+    let task: { id: string; taskId: string; name: string } | undefined
+
+    if (isUuid) {
+      const [result] = await db
+        .select({ id: schema.tasks.id, taskId: schema.tasks.taskId, name: schema.tasks.name })
+        .from(schema.tasks)
+        .where(
+          and(
+            eq(schema.tasks.id, taskIdParam),
+            eq(schema.tasks.projectId, projectId)
+          )
+        )
+        .limit(1)
+      task = result
+    } else {
+      // Human-readable task ID
+      const [result] = await db
+        .select({ id: schema.tasks.id, taskId: schema.tasks.taskId, name: schema.tasks.name })
+        .from(schema.tasks)
+        .where(
+          and(
+            eq(schema.tasks.taskId, taskIdParam),
+            eq(schema.tasks.projectId, projectId)
+          )
+        )
+        .limit(1)
+      task = result
+    }
+
+    if (!task) {
+      return c.json({ success: false, error: 'Task not found' }, 404)
+    }
+
+    // Set working on status
+    const startedAt = connectionManager.setWorkingOn(projectId, user.id, {
+      taskId: task.taskId,
+      taskUuid: task.id,
+      taskName: task.name,
+    })
+
+    const workingOnData = {
+      taskId: task.taskId,
+      taskUuid: task.id,
+      taskName: task.name,
+      startedAt: startedAt.toISOString(),
+    }
+
+    // Broadcast to other clients
+    broadcastWorkingOnChanged(projectId, user.id, workingOnData)
+
+    return c.json({
+      success: true,
+      data: {
+        action: 'start',
+        workingOn: workingOnData,
+      },
+    })
+  } catch (error) {
+    console.error('Work on task error:', error)
     return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
   }
 })
@@ -6081,6 +6645,19 @@ export async function createNotification(data: {
         taskId: data.taskId ?? null,
       })
       .returning()
+
+    // Send real-time notification via WebSocket (T6.4)
+    if (notification && data.projectId) {
+      const wsNotification: NotificationData = {
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        body: notification.body,
+        link: notification.link,
+        createdAt: notification.createdAt.toISOString(),
+      }
+      sendNotificationToUser(data.projectId, data.userId, wsNotification)
+    }
 
     // Send email notification if requested and email service is configured
     if (data.sendEmail && data.recipientEmail && isEmailServiceConfigured()) {

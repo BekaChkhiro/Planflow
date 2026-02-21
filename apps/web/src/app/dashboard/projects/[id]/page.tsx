@@ -24,11 +24,19 @@ import {
   Ban,
   ChevronRight,
   GripVertical,
+  Activity,
+  PanelRight,
+  PanelRightClose,
 } from 'lucide-react'
 
-import { useProject, useDeleteProject, useUpdateProject, useProjectTasks, type Task } from '@/hooks/use-projects'
+import { useProject, useDeleteProject, useUpdateProject, useProjectTasks, useAssignTask, type Task, type TaskAssignee } from '@/hooks/use-projects'
+import { useOrganizations, useTeamMembers, type TeamMember } from '@/hooks/use-team'
+import { TaskAssigneeSelector, TaskDetailSheet, type TaskDetail } from '@/components/tasks'
 import { useProjectWebSocket } from '@/hooks/use-websocket'
+import { useNotificationToasts } from '@/hooks/use-notification-toasts'
+import { usePresence, type PresenceStatus } from '@/hooks/use-presence'
 import { ConnectionIndicator } from '@/components/ui/connection-indicator'
+import { PresenceAvatarStack } from '@/components/presence'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -68,6 +76,7 @@ import { ProgressRing } from '@/components/ui/progress-ring'
 import { PhaseProgress, type PhaseData } from '@/components/ui/phase-progress'
 import { TaskDistributionBar } from '@/components/ui/task-distribution-bar'
 import { ComplexityBreakdown } from '@/components/ui/complexity-breakdown'
+import { ActivityFeed, ActivityFeedSidebar } from '@/components/activity'
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -98,11 +107,14 @@ interface DisplayTask {
   id: string
   taskId: string
   name: string
+  description: string | null
   complexity: 'Low' | 'Medium' | 'High'
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
   dependencies: string[]
   phase: number
   updatedAt: string
+  estimatedHours: number | null
+  assignee: TaskAssignee | null
 }
 
 // Convert API tasks to display tasks with computed phase
@@ -117,11 +129,14 @@ function toDisplayTasks(tasks: Task[]): DisplayTask[] {
       id: task.id,
       taskId: task.taskId,
       name: task.name,
+      description: task.description,
       complexity: task.complexity,
       status: task.status,
       dependencies: task.dependencies,
       phase,
       updatedAt: task.updatedAt,
+      estimatedHours: task.estimatedHours,
+      assignee: task.assignee,
     }
   })
 }
@@ -210,12 +225,38 @@ const complexityConfig = {
   High: { color: 'bg-rose-100 text-rose-700', label: 'High' },
 }
 
-function TaskCard({ task, view }: { task: DisplayTask; view: 'kanban' | 'list' }) {
+interface TaskCardProps {
+  task: DisplayTask
+  view: 'kanban' | 'list'
+  teamMembers?: TeamMember[]
+  onAssign?: (taskId: string, userId: string | null) => void
+  isAssigning?: boolean
+  assigningTaskId?: string | null
+  onClick?: (task: DisplayTask) => void
+  /** Function to get presence status for a user (T7.8) */
+  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
+}
+
+function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigningTaskId, onClick, getPresenceStatus }: TaskCardProps) {
   const StatusIcon = statusConfig[task.status].icon
+  const isThisTaskAssigning = isAssigning && assigningTaskId === task.taskId
+
+  const handleAssign = (userId: string | null) => {
+    if (onAssign) {
+      onAssign(task.taskId, userId)
+    }
+  }
+
+  const handleClick = () => {
+    onClick?.(task)
+  }
 
   if (view === 'list') {
     return (
-      <div className="flex items-center gap-4 rounded-lg border bg-white p-4 transition-colors hover:bg-gray-50">
+      <div
+        className="flex items-center gap-4 rounded-lg border bg-white p-4 transition-colors hover:bg-gray-50 cursor-pointer"
+        onClick={handleClick}
+      >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
           <StatusIcon
             className={`h-4 w-4 ${
@@ -237,7 +278,16 @@ function TaskCard({ task, view }: { task: DisplayTask; view: 'kanban' | 'list' }
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-3">
+          {teamMembers.length > 0 && onAssign && (
+            <TaskAssigneeSelector
+              assignee={task.assignee}
+              teamMembers={teamMembers}
+              onAssign={handleAssign}
+              isLoading={isThisTaskAssigning}
+              size="md"
+            />
+          )}
           <Badge variant="outline" className={complexityConfig[task.complexity].color}>
             {task.complexity}
           </Badge>
@@ -251,12 +301,26 @@ function TaskCard({ task, view }: { task: DisplayTask; view: 'kanban' | 'list' }
 
   // Kanban card
   return (
-    <div className="group rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md">
+    <div
+      className="group rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md cursor-pointer"
+      onClick={handleClick}
+    >
       <div className="mb-2 flex items-start justify-between">
         <span className="font-mono text-xs text-muted-foreground">{task.taskId}</span>
-        <Badge variant="outline" className={`text-xs ${complexityConfig[task.complexity].color}`}>
-          {task.complexity}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          {teamMembers.length > 0 && onAssign && (
+            <TaskAssigneeSelector
+              assignee={task.assignee}
+              teamMembers={teamMembers}
+              onAssign={handleAssign}
+              isLoading={isThisTaskAssigning}
+              size="sm"
+            />
+          )}
+          <Badge variant="outline" className={`text-xs ${complexityConfig[task.complexity].color}`}>
+            {task.complexity}
+          </Badge>
+        </div>
       </div>
       <p className="mb-3 text-sm font-medium leading-snug">{task.name}</p>
       <div className="flex items-center justify-between">
@@ -273,13 +337,25 @@ function TaskCard({ task, view }: { task: DisplayTask; view: 'kanban' | 'list' }
   )
 }
 
+interface KanbanColumnProps {
+  status: DisplayTask['status']
+  tasks: DisplayTask[]
+  teamMembers?: TeamMember[]
+  onAssign?: (taskId: string, userId: string | null) => void
+  isAssigning?: boolean
+  assigningTaskId?: string | null
+  onTaskClick?: (task: DisplayTask) => void
+}
+
 function KanbanColumn({
   status,
   tasks,
-}: {
-  status: DisplayTask['status']
-  tasks: DisplayTask[]
-}) {
+  teamMembers,
+  onAssign,
+  isAssigning,
+  assigningTaskId,
+  onTaskClick,
+}: KanbanColumnProps) {
   const config = statusConfig[status]
   const StatusIcon = config.icon
 
@@ -300,14 +376,34 @@ function KanbanColumn({
             <p className="text-sm text-muted-foreground">No tasks</p>
           </div>
         ) : (
-          tasks.map((task) => <TaskCard key={task.id} task={task} view="kanban" />)
+          tasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              view="kanban"
+              teamMembers={teamMembers}
+              onAssign={onAssign}
+              isAssigning={isAssigning}
+              assigningTaskId={assigningTaskId}
+              onClick={onTaskClick}
+            />
+          ))
         )}
       </div>
     </div>
   )
 }
 
-function KanbanView({ tasks }: { tasks: DisplayTask[] }) {
+interface KanbanViewProps {
+  tasks: DisplayTask[]
+  teamMembers?: TeamMember[]
+  onAssign?: (taskId: string, userId: string | null) => void
+  isAssigning?: boolean
+  assigningTaskId?: string | null
+  onTaskClick?: (task: DisplayTask) => void
+}
+
+function KanbanView({ tasks, teamMembers, onAssign, isAssigning, assigningTaskId, onTaskClick }: KanbanViewProps) {
   // Helper to sort by taskId (T1.1, T1.2, T2.1, etc.)
   const sortByTaskId = (a: DisplayTask, b: DisplayTask) => a.taskId.localeCompare(b.taskId, undefined, { numeric: true })
   // Helper to sort by updatedAt descending (most recent first)
@@ -324,21 +420,33 @@ function KanbanView({ tasks }: { tasks: DisplayTask[] }) {
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-4">
-      <KanbanColumn status="TODO" tasks={tasksByStatus.TODO} />
-      <KanbanColumn status="IN_PROGRESS" tasks={tasksByStatus.IN_PROGRESS} />
-      <KanbanColumn status="BLOCKED" tasks={tasksByStatus.BLOCKED} />
-      <KanbanColumn status="DONE" tasks={tasksByStatus.DONE} />
+      <KanbanColumn status="TODO" tasks={tasksByStatus.TODO} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
+      <KanbanColumn status="IN_PROGRESS" tasks={tasksByStatus.IN_PROGRESS} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
+      <KanbanColumn status="BLOCKED" tasks={tasksByStatus.BLOCKED} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
+      <KanbanColumn status="DONE" tasks={tasksByStatus.DONE} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
     </div>
   )
+}
+
+interface ListViewProps {
+  tasks: DisplayTask[]
+  groupBy: 'status' | 'phase'
+  teamMembers?: TeamMember[]
+  onAssign?: (taskId: string, userId: string | null) => void
+  isAssigning?: boolean
+  assigningTaskId?: string | null
+  onTaskClick?: (task: DisplayTask) => void
 }
 
 function ListView({
   tasks,
   groupBy,
-}: {
-  tasks: DisplayTask[]
-  groupBy: 'status' | 'phase'
-}) {
+  teamMembers,
+  onAssign,
+  isAssigning,
+  assigningTaskId,
+  onTaskClick,
+}: ListViewProps) {
   if (groupBy === 'status') {
     const statuses: DisplayTask['status'][] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE']
 
@@ -362,7 +470,16 @@ function ListView({
               </div>
               <div className="space-y-2">
                 {statusTasks.map((task) => (
-                  <TaskCard key={task.id} task={task} view="list" />
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    view="list"
+                    teamMembers={teamMembers}
+                    onAssign={onAssign}
+                    isAssigning={isAssigning}
+                    assigningTaskId={assigningTaskId}
+                    onClick={onTaskClick}
+                  />
                 ))}
               </div>
             </div>
@@ -391,7 +508,16 @@ function ListView({
             </div>
             <div className="space-y-2">
               {phaseTasks.map((task) => (
-                <TaskCard key={task.id} task={task} view="list" />
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  view="list"
+                  teamMembers={teamMembers}
+                  onAssign={onAssign}
+                  isAssigning={isAssigning}
+                  assigningTaskId={assigningTaskId}
+                  onClick={onTaskClick}
+                />
               ))}
             </div>
           </div>
@@ -682,11 +808,36 @@ function PlanTab({ plan }: { plan: string | null | undefined }) {
   )
 }
 
-function TasksTab({ tasks: apiTasks }: { tasks: Task[] }) {
+function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false }: { tasks: Task[]; projectId: string; isProjectOwner?: boolean }) {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
   const [groupBy, setGroupBy] = useState<'status' | 'phase'>('status')
   const [filterStatus, setFilterStatus] = useState<DisplayTask['status'] | 'ALL'>('ALL')
   const [filterPhase, setFilterPhase] = useState<number | 'ALL'>('ALL')
+  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
+  const [selectedTask, setSelectedTask] = useState<DisplayTask | null>(null)
+
+  // Fetch organizations to get team members
+  const { data: organizations = [] } = useOrganizations()
+  const primaryOrg = organizations[0] // Use first organization
+  const { data: teamMembers = [] } = useTeamMembers(primaryOrg?.id)
+
+  // Assignment mutation
+  const assignTask = useAssignTask(projectId)
+
+  const handleAssign = async (taskId: string, userId: string | null) => {
+    setAssigningTaskId(taskId)
+    try {
+      await assignTask.mutateAsync({ taskId, assigneeId: userId })
+    } catch (error) {
+      console.error('Failed to assign task:', error)
+    } finally {
+      setAssigningTaskId(null)
+    }
+  }
+
+  const handleTaskClick = (task: DisplayTask) => {
+    setSelectedTask(task)
+  }
 
   const tasks = toDisplayTasks(apiTasks)
   const stats = computeTaskStats(apiTasks)
@@ -856,14 +1007,39 @@ function TasksTab({ tasks: apiTasks }: { tasks: Task[] }) {
           </CardContent>
         </Card>
       ) : viewMode === 'kanban' ? (
-        <KanbanView tasks={filteredTasks} />
+        <KanbanView
+          tasks={filteredTasks}
+          teamMembers={teamMembers}
+          onAssign={handleAssign}
+          isAssigning={assignTask.isPending}
+          assigningTaskId={assigningTaskId}
+          onTaskClick={handleTaskClick}
+        />
       ) : (
         <Card>
           <CardContent className="pt-6">
-            <ListView tasks={filteredTasks} groupBy={groupBy} />
+            <ListView
+              tasks={filteredTasks}
+              groupBy={groupBy}
+              teamMembers={teamMembers}
+              onAssign={handleAssign}
+              isAssigning={assignTask.isPending}
+              assigningTaskId={assigningTaskId}
+              onTaskClick={handleTaskClick}
+            />
           </CardContent>
         </Card>
       )}
+
+      {/* Task Detail Sheet with Comments */}
+      <TaskDetailSheet
+        task={selectedTask}
+        projectId={projectId}
+        isOpen={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+        isProjectOwner={isProjectOwner}
+        getPresenceStatus={getPresenceStatus}
+      />
     </div>
   )
 }
@@ -952,11 +1128,36 @@ export default function ProjectDetailPage() {
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showActivitySidebar, setShowActivitySidebar] = useState(true)
+
+  // Notification toasts (T6.7)
+  const { showNotificationToast } = useNotificationToasts()
+
+  // Presence tracking (T7.8)
+  const {
+    onlineUsers,
+    onlineCount,
+    handlePresenceList,
+    handlePresenceJoined,
+    handlePresenceLeft,
+    handlePresenceUpdated,
+    handleWorkingOnChanged,
+    clearPresence,
+    getPresenceStatus,
+  } = usePresence()
 
   // WebSocket for real-time updates
   const { status: wsStatus } = useProjectWebSocket({
     projectId,
     enabled: !isLoading && !error && !!project,
+    onNotificationNew: showNotificationToast,
+    // Presence callbacks (T7.8)
+    onPresenceList: handlePresenceList,
+    onPresenceJoined: handlePresenceJoined,
+    onPresenceLeft: handlePresenceLeft,
+    onPresenceUpdated: handlePresenceUpdated,
+    onWorkingOnChanged: handleWorkingOnChanged,
+    onDisconnected: clearPresence,
   })
 
   const handleDelete = async () => {
@@ -1015,40 +1216,78 @@ export default function ProjectDetailPage() {
                 <Badge variant={progress === 100 ? 'default' : 'secondary'}>{progress}%</Badge>
               )}
               <ConnectionIndicator status={wsStatus} />
+              {/* Online team members (T7.8) */}
+              {onlineCount > 0 && (
+                <div className="flex items-center gap-2">
+                  <PresenceAvatarStack
+                    users={onlineUsers.map(user => ({
+                      userId: user.userId,
+                      name: user.name,
+                      email: user.email,
+                      status: user.status,
+                      workingOn: user.workingOn,
+                      lastActiveAt: user.lastActiveAt,
+                    }))}
+                    max={4}
+                    size="xs"
+                  />
+                  <span className="text-xs text-gray-500">
+                    {onlineCount} online
+                  </span>
+                </div>
+              )}
             </div>
             {project.description && (
               <p className="mt-1 text-sm text-gray-500">{project.description}</p>
             )}
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <MoreVertical className="h-4 w-4" />
-                <span className="sr-only">Open menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit project
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/dashboard/projects/${project.id}/settings`}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-red-600 focus:bg-red-50 focus:text-red-600"
-                onClick={() => setShowDeleteDialog(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete project
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            {/* Activity Sidebar Toggle */}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowActivitySidebar(!showActivitySidebar)}
+              title={showActivitySidebar ? 'Hide activity sidebar' : 'Show activity sidebar'}
+              className="hidden lg:flex"
+            >
+              {showActivitySidebar ? (
+                <PanelRightClose className="h-4 w-4" />
+              ) : (
+                <PanelRight className="h-4 w-4" />
+              )}
+              <span className="sr-only">Toggle activity sidebar</span>
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit project
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/dashboard/projects/${project.id}/settings`}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete project
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
@@ -1065,40 +1304,80 @@ export default function ProjectDetailPage() {
 
       <Separator className="mb-6" />
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview" className="gap-2">
-            <LayoutDashboard className="h-4 w-4" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="plan" className="gap-2">
-            <FileText className="h-4 w-4" />
-            Plan
-          </TabsTrigger>
-          <TabsTrigger value="tasks" className="gap-2">
-            <ListTodo className="h-4 w-4" />
-            Tasks
-            {stats.total > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-                {stats.total}
-              </Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      {/* Main Content with Activity Sidebar */}
+      <div className="flex gap-6">
+        {/* Main Content Area */}
+        <div className={`flex-1 min-w-0 ${showActivitySidebar ? 'lg:pr-0' : ''}`}>
+          {/* Tabs */}
+          <Tabs defaultValue="overview" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="overview" className="gap-2">
+                <LayoutDashboard className="h-4 w-4" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="plan" className="gap-2">
+                <FileText className="h-4 w-4" />
+                Plan
+              </TabsTrigger>
+              <TabsTrigger value="tasks" className="gap-2">
+                <ListTodo className="h-4 w-4" />
+                Tasks
+                {stats.total > 0 && (
+                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
+                    {stats.total}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="activity" className="gap-2 lg:hidden">
+                <Activity className="h-4 w-4" />
+                Activity
+              </TabsTrigger>
+            </TabsList>
 
-        <TabsContent value="overview">
-          <OverviewTab tasks={tasks} />
-        </TabsContent>
+            <TabsContent value="overview">
+              <OverviewTab tasks={tasks} />
+            </TabsContent>
 
-        <TabsContent value="plan">
-          <PlanTab plan={project.plan} />
-        </TabsContent>
+            <TabsContent value="plan">
+              <PlanTab plan={project.plan} />
+            </TabsContent>
 
-        <TabsContent value="tasks">
-          <TasksTab tasks={tasks} />
-        </TabsContent>
-      </Tabs>
+            <TabsContent value="tasks">
+              <TasksTab tasks={tasks} projectId={projectId} />
+            </TabsContent>
+
+            <TabsContent value="activity" className="lg:hidden">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Activity Feed</CardTitle>
+                  <CardDescription>
+                    Real-time activity log showing all project events
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ActivityFeed
+                    projectId={projectId}
+                    variant="default"
+                    maxHeight="600px"
+                    showHeader={false}
+                    showFilters={true}
+                    limit={25}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Activity Sidebar - Only visible on large screens */}
+        {showActivitySidebar && (
+          <aside className="hidden lg:block w-80 flex-shrink-0">
+            <Card className="sticky top-4 h-[calc(100vh-8rem)] overflow-hidden">
+              <ActivityFeedSidebar projectId={projectId} />
+            </Card>
+          </aside>
+        )}
+      </div>
 
       {/* Delete Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

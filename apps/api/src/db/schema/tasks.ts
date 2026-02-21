@@ -21,6 +21,10 @@ export const tasks = pgTable('tasks', {
   assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
   assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
   assignedAt: timestamp('assigned_at', { withTimezone: true }),
+  // Task locking fields (T6.6)
+  lockedBy: uuid('locked_by').references(() => users.id, { onDelete: 'set null' }),
+  lockedAt: timestamp('locked_at', { withTimezone: true }),
+  lockExpiresAt: timestamp('lock_expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

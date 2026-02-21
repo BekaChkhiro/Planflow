@@ -17,6 +17,9 @@ import { taskListTool } from './task-list.js'
 import { taskUpdateTool } from './task-update.js'
 import { taskNextTool } from './task-next.js'
 import { notificationsTool } from './notifications.js'
+import { activityTool } from './activity.js'
+import { commentsTool } from './comments.js'
+import { commentTool } from './comment.js'
 
 /**
  * Registry of all available tools
@@ -32,6 +35,9 @@ import { notificationsTool } from './notifications.js'
  * - planflow_task_update (T2.12)
  * - planflow_task_next (T2.13)
  * - planflow_notifications (T2.14)
+ * - planflow_activity (T6.4)
+ * - planflow_comments (T6.5)
+ * - planflow_comment (T6.5)
  */
 export const tools: ToolDefinition[] = [
   loginTool,
@@ -44,6 +50,9 @@ export const tools: ToolDefinition[] = [
   taskUpdateTool,
   taskNextTool,
   notificationsTool,
+  activityTool,
+  commentsTool,
+  commentTool,
 ]
 
 /**

@@ -8,14 +8,16 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_LIMIT = 5
+const TOAST_REMOVE_DELAY = 5000 // 5 seconds auto-dismiss
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  icon?: React.ReactNode
+  duration?: number // Custom duration in ms, overrides default
 }
 
 const _actionTypes = {
@@ -57,19 +59,23 @@ interface State {
 }
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+const toastDurations = new Map<string, number>()
 
-const addToRemoveQueue = (toastId: string) => {
+const addToRemoveQueue = (toastId: string, duration?: number) => {
   if (toastTimeouts.has(toastId)) {
     return
   }
 
+  const delay = duration ?? toastDurations.get(toastId) ?? TOAST_REMOVE_DELAY
+
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId)
+    toastDurations.delete(toastId)
     dispatch({
       type: "REMOVE_TOAST",
       toastId: toastId,
     })
-  }, TOAST_REMOVE_DELAY)
+  }, delay)
 
   toastTimeouts.set(toastId, timeout)
 }
@@ -142,8 +148,13 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">
 
-function toast({ ...props }: Toast) {
+function toast({ duration, ...props }: Toast) {
   const id = genId()
+
+  // Store custom duration for this toast
+  if (duration !== undefined) {
+    toastDurations.set(id, duration)
+  }
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -163,6 +174,12 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+
+  // Auto-dismiss after duration (unless duration is Infinity or 0)
+  const effectiveDuration = duration ?? TOAST_REMOVE_DELAY
+  if (effectiveDuration > 0 && effectiveDuration !== Infinity) {
+    addToRemoveQueue(id, effectiveDuration)
+  }
 
   return {
     id: id,

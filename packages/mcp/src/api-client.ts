@@ -94,6 +94,78 @@ interface NotificationResponse {
   notification: Notification
 }
 
+// Comment types
+interface CommentAuthor {
+  id: string
+  email: string
+  name: string | null
+}
+
+interface Comment {
+  id: string
+  taskId: string
+  content: string
+  parentId: string | null
+  mentions: string[] | null
+  createdAt: string
+  updatedAt: string
+  author: CommentAuthor
+  replies?: Comment[]
+}
+
+interface CommentsListResponse {
+  taskId: string
+  comments: Comment[]
+  totalCount: number
+}
+
+interface CommentResponse {
+  comment: Comment
+}
+
+interface CreateCommentRequest {
+  content: string
+  parentId?: string
+  mentions?: string[]
+}
+
+interface UpdateCommentRequest {
+  content?: string
+  mentions?: string[]
+}
+
+// Activity types
+interface ActivityActor {
+  id: string
+  email: string
+  name: string | null
+}
+
+interface Activity {
+  id: string
+  action: string
+  entityType: string
+  entityId: string | null
+  taskId: string | null
+  organizationId: string | null
+  projectId: string | null
+  taskUuid: string | null
+  metadata: Record<string, unknown> | null
+  description: string | null
+  createdAt: string
+  actor: ActivityActor
+}
+
+interface ActivityListResponse {
+  activities: Activity[]
+  pagination: {
+    total: number
+    limit: number
+    offset: number
+    hasMore: boolean
+  }
+}
+
 // ============================================================
 // API Client Configuration
 // ============================================================
@@ -513,6 +585,190 @@ export class ApiClient {
   async markAllNotificationsRead(projectId?: string): Promise<{ markedCount: number }> {
     const body = projectId ? { projectId } : undefined
     return this.request<{ markedCount: number }>('PUT', '/notifications/read-all', { body })
+  }
+
+  // ============================================================
+  // Activity Endpoints
+  // ============================================================
+
+  /**
+   * Get activity log for a project
+   */
+  async getProjectActivity(
+    projectId: string,
+    options?: {
+      action?: string
+      entityType?: string
+      taskId?: string
+      limit?: number
+      offset?: number
+    }
+  ): Promise<ActivityListResponse> {
+    const params = new URLSearchParams()
+    if (options?.action) params.append('action', options.action)
+    if (options?.entityType) params.append('entityType', options.entityType)
+    if (options?.taskId) params.append('taskId', options.taskId)
+    if (options?.limit) params.append('limit', String(options.limit))
+    if (options?.offset) params.append('offset', String(options.offset))
+
+    const query = params.toString()
+    const path = `/projects/${projectId}/activity${query ? '?' + query : ''}`
+    return this.request<ActivityListResponse>('GET', path)
+  }
+
+  /**
+   * Get activity log for a specific task
+   */
+  async getTaskActivity(
+    projectId: string,
+    taskId: string,
+    options?: {
+      action?: string
+      limit?: number
+      offset?: number
+    }
+  ): Promise<ActivityListResponse> {
+    const params = new URLSearchParams()
+    if (options?.action) params.append('action', options.action)
+    if (options?.limit) params.append('limit', String(options.limit))
+    if (options?.offset) params.append('offset', String(options.offset))
+
+    const query = params.toString()
+    const path = `/projects/${projectId}/tasks/${taskId}/activity${query ? '?' + query : ''}`
+    return this.request<ActivityListResponse>('GET', path)
+  }
+
+  // ============================================================
+  // Comment Endpoints
+  // ============================================================
+
+  /**
+   * List all comments for a task
+   */
+  async listComments(projectId: string, taskId: string): Promise<CommentsListResponse> {
+    return this.request<CommentsListResponse>(
+      'GET',
+      `/projects/${projectId}/tasks/${taskId}/comments`
+    )
+  }
+
+  /**
+   * Get a single comment with replies
+   */
+  async getComment(
+    projectId: string,
+    taskId: string,
+    commentId: string
+  ): Promise<CommentResponse> {
+    return this.request<CommentResponse>(
+      'GET',
+      `/projects/${projectId}/tasks/${taskId}/comments/${commentId}`
+    )
+  }
+
+  /**
+   * Create a new comment on a task
+   */
+  async createComment(
+    projectId: string,
+    taskId: string,
+    data: CreateCommentRequest
+  ): Promise<CommentResponse> {
+    return this.request<CommentResponse>(
+      'POST',
+      `/projects/${projectId}/tasks/${taskId}/comments`,
+      { body: data }
+    )
+  }
+
+  /**
+   * Update a comment
+   */
+  async updateComment(
+    projectId: string,
+    taskId: string,
+    commentId: string,
+    data: UpdateCommentRequest
+  ): Promise<CommentResponse> {
+    return this.request<CommentResponse>(
+      'PUT',
+      `/projects/${projectId}/tasks/${taskId}/comments/${commentId}`,
+      { body: data }
+    )
+  }
+
+  /**
+   * Delete a comment
+   */
+  async deleteComment(
+    projectId: string,
+    taskId: string,
+    commentId: string
+  ): Promise<void> {
+    await this.request<{ message: string }>(
+      'DELETE',
+      `/projects/${projectId}/tasks/${taskId}/comments/${commentId}`
+    )
+  }
+
+  // ============================================================
+  // Presence & Working On Endpoints (T6.1)
+  // ============================================================
+
+  /**
+   * Get presence list for a project
+   */
+  async getPresence(projectId: string): Promise<{
+    users: Array<{
+      userId: string
+      email: string
+      name: string | null
+      status: 'online' | 'idle' | 'away'
+      connectedAt: string
+      lastActiveAt: string
+      workingOn: {
+        taskId: string
+        taskUuid: string
+        taskName: string
+        startedAt: string
+      } | null
+    }>
+    onlineCount: number
+  }> {
+    return this.request('GET', `/projects/${projectId}/presence`)
+  }
+
+  /**
+   * Start working on a task
+   */
+  async startWorkingOn(
+    projectId: string,
+    taskId: string
+  ): Promise<{
+    action: 'start'
+    workingOn: {
+      taskId: string
+      taskUuid: string
+      taskName: string
+      startedAt: string
+    }
+  }> {
+    return this.request('POST', `/projects/${projectId}/tasks/${taskId}/work`, {
+      body: { action: 'start' },
+    })
+  }
+
+  /**
+   * Stop working on current task
+   */
+  async stopWorkingOn(projectId: string): Promise<{
+    action: 'stop'
+    workingOn: null
+  }> {
+    // Use a dummy task ID since we're stopping
+    return this.request('POST', `/projects/${projectId}/tasks/_/work`, {
+      body: { action: 'stop' },
+    })
   }
 
   // ============================================================

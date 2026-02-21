@@ -3,7 +3,7 @@
 import { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, Key, CreditCard, Server } from 'lucide-react'
+import { User, Key, CreditCard, Server, Plug, Bell } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -29,6 +29,18 @@ const settingsNavItems = [
     href: '/dashboard/settings/mcp-setup',
     icon: Server,
     description: 'Connect Claude Code to PlanFlow',
+  },
+  {
+    title: 'Integrations',
+    href: '/dashboard/settings/integrations',
+    icon: Plug,
+    description: 'Connect GitHub, Slack & more',
+  },
+  {
+    title: 'Notifications',
+    href: '/dashboard/settings/notifications',
+    icon: Bell,
+    description: 'Push, email & in-app alerts',
   },
   {
     title: 'Billing',

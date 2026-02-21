@@ -286,6 +286,7 @@ function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigni
               onAssign={handleAssign}
               isLoading={isThisTaskAssigning}
               size="md"
+              getPresenceStatus={getPresenceStatus}
             />
           )}
           <Badge variant="outline" className={complexityConfig[task.complexity].color}>
@@ -315,6 +316,7 @@ function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigni
               onAssign={handleAssign}
               isLoading={isThisTaskAssigning}
               size="sm"
+              getPresenceStatus={getPresenceStatus}
             />
           )}
           <Badge variant="outline" className={`text-xs ${complexityConfig[task.complexity].color}`}>
@@ -345,6 +347,8 @@ interface KanbanColumnProps {
   isAssigning?: boolean
   assigningTaskId?: string | null
   onTaskClick?: (task: DisplayTask) => void
+  /** Function to get presence status for a user (T7.8) */
+  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
 }
 
 function KanbanColumn({
@@ -355,6 +359,7 @@ function KanbanColumn({
   isAssigning,
   assigningTaskId,
   onTaskClick,
+  getPresenceStatus,
 }: KanbanColumnProps) {
   const config = statusConfig[status]
   const StatusIcon = config.icon
@@ -386,6 +391,7 @@ function KanbanColumn({
               isAssigning={isAssigning}
               assigningTaskId={assigningTaskId}
               onClick={onTaskClick}
+              getPresenceStatus={getPresenceStatus}
             />
           ))
         )}
@@ -401,9 +407,11 @@ interface KanbanViewProps {
   isAssigning?: boolean
   assigningTaskId?: string | null
   onTaskClick?: (task: DisplayTask) => void
+  /** Function to get presence status for a user (T7.8) */
+  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
 }
 
-function KanbanView({ tasks, teamMembers, onAssign, isAssigning, assigningTaskId, onTaskClick }: KanbanViewProps) {
+function KanbanView({ tasks, teamMembers, onAssign, isAssigning, assigningTaskId, onTaskClick, getPresenceStatus }: KanbanViewProps) {
   // Helper to sort by taskId (T1.1, T1.2, T2.1, etc.)
   const sortByTaskId = (a: DisplayTask, b: DisplayTask) => a.taskId.localeCompare(b.taskId, undefined, { numeric: true })
   // Helper to sort by updatedAt descending (most recent first)
@@ -420,10 +428,10 @@ function KanbanView({ tasks, teamMembers, onAssign, isAssigning, assigningTaskId
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-4">
-      <KanbanColumn status="TODO" tasks={tasksByStatus.TODO} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
-      <KanbanColumn status="IN_PROGRESS" tasks={tasksByStatus.IN_PROGRESS} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
-      <KanbanColumn status="BLOCKED" tasks={tasksByStatus.BLOCKED} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
-      <KanbanColumn status="DONE" tasks={tasksByStatus.DONE} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} />
+      <KanbanColumn status="TODO" tasks={tasksByStatus.TODO} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
+      <KanbanColumn status="IN_PROGRESS" tasks={tasksByStatus.IN_PROGRESS} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
+      <KanbanColumn status="BLOCKED" tasks={tasksByStatus.BLOCKED} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
+      <KanbanColumn status="DONE" tasks={tasksByStatus.DONE} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
     </div>
   )
 }
@@ -436,6 +444,8 @@ interface ListViewProps {
   isAssigning?: boolean
   assigningTaskId?: string | null
   onTaskClick?: (task: DisplayTask) => void
+  /** Function to get presence status for a user (T7.8) */
+  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
 }
 
 function ListView({
@@ -446,6 +456,7 @@ function ListView({
   isAssigning,
   assigningTaskId,
   onTaskClick,
+  getPresenceStatus,
 }: ListViewProps) {
   if (groupBy === 'status') {
     const statuses: DisplayTask['status'][] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE']
@@ -479,6 +490,7 @@ function ListView({
                     isAssigning={isAssigning}
                     assigningTaskId={assigningTaskId}
                     onClick={onTaskClick}
+                    getPresenceStatus={getPresenceStatus}
                   />
                 ))}
               </div>
@@ -517,6 +529,7 @@ function ListView({
                   isAssigning={isAssigning}
                   assigningTaskId={assigningTaskId}
                   onClick={onTaskClick}
+                  getPresenceStatus={getPresenceStatus}
                 />
               ))}
             </div>
@@ -808,7 +821,7 @@ function PlanTab({ plan }: { plan: string | null | undefined }) {
   )
 }
 
-function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false }: { tasks: Task[]; projectId: string; isProjectOwner?: boolean }) {
+function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false, getPresenceStatus }: { tasks: Task[]; projectId: string; isProjectOwner?: boolean; getPresenceStatus?: (userId: string) => PresenceStatus | undefined }) {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
   const [groupBy, setGroupBy] = useState<'status' | 'phase'>('status')
   const [filterStatus, setFilterStatus] = useState<DisplayTask['status'] | 'ALL'>('ALL')
@@ -1014,6 +1027,7 @@ function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false }: { task
           isAssigning={assignTask.isPending}
           assigningTaskId={assigningTaskId}
           onTaskClick={handleTaskClick}
+          getPresenceStatus={getPresenceStatus}
         />
       ) : (
         <Card>
@@ -1026,6 +1040,7 @@ function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false }: { task
               isAssigning={assignTask.isPending}
               assigningTaskId={assigningTaskId}
               onTaskClick={handleTaskClick}
+              getPresenceStatus={getPresenceStatus}
             />
           </CardContent>
         </Card>
@@ -1343,7 +1358,7 @@ export default function ProjectDetailPage() {
             </TabsContent>
 
             <TabsContent value="tasks">
-              <TasksTab tasks={tasks} projectId={projectId} />
+              <TasksTab tasks={tasks} projectId={projectId} getPresenceStatus={getPresenceStatus} />
             </TabsContent>
 
             <TabsContent value="activity" className="lg:hidden">

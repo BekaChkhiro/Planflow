@@ -1,7 +1,9 @@
 'use client'
 
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { PostHogProvider } from '@/components/analytics/posthog-provider'
+import { ServiceWorkerRegistration } from '@/components/notifications/service-worker-registration'
 
 interface ProvidersProps {
   children: ReactNode
@@ -48,7 +50,13 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <Suspense fallback={null}>
+        <PostHogProvider>
+          {children}
+        </PostHogProvider>
+      </Suspense>
+      {/* Service Worker for Push Notifications (T6.8) */}
+      <ServiceWorkerRegistration />
       {/* Theme Provider can be added here if dark mode is needed */}
     </QueryClientProvider>
   )

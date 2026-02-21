@@ -13,7 +13,7 @@ interface CommentListProps {
   taskDisplayId: string
   currentUserId: string
   isProjectOwner?: boolean
-  onCreateComment: (content: string, parentId?: string) => Promise<void>
+  onCreateComment: (content: string, parentId?: string, mentions?: string[]) => Promise<void>
   onEditComment: (commentId: string, content: string) => Promise<void>
   onDeleteComment: (commentId: string) => Promise<void>
   isCreating?: boolean
@@ -47,8 +47,8 @@ export function CommentList({
   }, [])
 
   const handleSubmitReply = useCallback(
-    async (content: string, parentId: string) => {
-      await onCreateComment(content, parentId)
+    async (content: string, parentId: string, mentions?: string[]) => {
+      await onCreateComment(content, parentId, mentions)
       setReplyingTo(null)
     },
     [onCreateComment]

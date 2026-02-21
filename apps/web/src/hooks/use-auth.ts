@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import type { AuthResponse, LoginRequest, RegisterRequest, ApiResponse, User } from '@planflow/shared'
 import { api, ApiError } from '@/lib/api'
+import { trackEvent, resetUser } from '@/lib/posthog'
 
 interface UseAuthReturn {
   user: User | null
@@ -83,6 +84,9 @@ export function useAuth(): UseAuthReturn {
   )
 
   const logout = useCallback(async () => {
+    // Track logout event before resetting user
+    trackEvent('user_logged_out', { source: 'web' })
+    resetUser()
     await store.logout()
     router.push('/login')
   }, [store, router])

@@ -916,3 +916,293 @@ export const CreateNotificationRequestSchema = z.object({
 })
 
 export type CreateNotificationRequest = z.infer<typeof CreateNotificationRequestSchema>
+
+// ============================================
+// GitHub OAuth Types (T8.2)
+// ============================================
+
+/**
+ * GitHub authorization URL response
+ */
+export const GitHubAuthorizationResponseSchema = z.object({
+  authorizationUrl: z.string().url(),
+  state: z.string(),
+})
+
+export type GitHubAuthorizationResponse = z.infer<typeof GitHubAuthorizationResponseSchema>
+
+/**
+ * GitHub OAuth callback request
+ */
+export const GitHubCallbackRequestSchema = z.object({
+  code: z.string().min(1, 'Authorization code is required'),
+  state: z.string().min(1, 'State token is required'),
+})
+
+export type GitHubCallbackRequest = z.infer<typeof GitHubCallbackRequestSchema>
+
+/**
+ * GitHub integration status
+ */
+export const GitHubIntegrationSchema = z.object({
+  id: z.string().uuid(),
+  githubId: z.string(),
+  githubUsername: z.string(),
+  githubEmail: z.string().nullable(),
+  githubAvatarUrl: z.string().nullable(),
+  githubName: z.string().nullable(),
+  grantedScopes: z.array(z.string()).nullable(),
+  isConnected: z.boolean(),
+  lastSyncAt: z.date().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+})
+
+export type GitHubIntegrationStatus = z.infer<typeof GitHubIntegrationSchema>
+
+/**
+ * GitHub user info from API
+ */
+export const GitHubUserInfoSchema = z.object({
+  id: z.number(),
+  login: z.string(),
+  name: z.string().nullable(),
+  email: z.string().nullable(),
+  avatar_url: z.string().nullable(),
+})
+
+export type GitHubUserInfo = z.infer<typeof GitHubUserInfoSchema>
+
+/**
+ * GitHub repository info
+ */
+export const GitHubRepositorySchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  full_name: z.string(),
+  owner: z.object({
+    login: z.string(),
+    avatar_url: z.string().nullable(),
+  }),
+  description: z.string().nullable(),
+  private: z.boolean(),
+  html_url: z.string().url(),
+  default_branch: z.string(),
+})
+
+export type GitHubRepository = z.infer<typeof GitHubRepositorySchema>
+
+// ============================================
+// GitHub Issue Link Types (T8.3)
+// ============================================
+
+/**
+ * GitHub issue info
+ */
+export const GitHubIssueSchema = z.object({
+  id: z.number(),
+  number: z.number(),
+  title: z.string(),
+  body: z.string().nullable(),
+  state: z.enum(['open', 'closed']),
+  html_url: z.string().url(),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+  closed_at: z.string().datetime().nullable(),
+  user: z.object({
+    login: z.string(),
+    avatar_url: z.string().nullable(),
+  }),
+  labels: z.array(z.object({
+    id: z.number(),
+    name: z.string(),
+    color: z.string(),
+  })),
+  assignees: z.array(z.object({
+    login: z.string(),
+    avatar_url: z.string().nullable(),
+  })),
+})
+
+export type GitHubIssue = z.infer<typeof GitHubIssueSchema>
+
+/**
+ * Task GitHub link info (stored in task)
+ */
+export const TaskGitHubLinkSchema = z.object({
+  issueNumber: z.number(),
+  repository: z.string(), // "owner/repo"
+  issueUrl: z.string().url(),
+  issueTitle: z.string(),
+  issueState: z.enum(['open', 'closed']),
+  linkedBy: z.string().uuid(),
+  linkedAt: z.date(),
+})
+
+export type TaskGitHubLink = z.infer<typeof TaskGitHubLinkSchema>
+
+/**
+ * Link task to GitHub issue request
+ */
+export const LinkTaskToGitHubRequestSchema = z.object({
+  issueNumber: z.number().int().positive('Issue number must be positive'),
+  repository: z.string().regex(/^[^/]+\/[^/]+$/, 'Repository must be in format "owner/repo"'),
+})
+
+export type LinkTaskToGitHubRequest = z.infer<typeof LinkTaskToGitHubRequestSchema>
+
+/**
+ * Create GitHub issue from task request
+ */
+export const CreateGitHubIssueFromTaskRequestSchema = z.object({
+  repository: z.string().regex(/^[^/]+\/[^/]+$/, 'Repository must be in format "owner/repo"'),
+  labels: z.array(z.string()).optional(),
+  assignees: z.array(z.string()).optional(),
+})
+
+export type CreateGitHubIssueFromTaskRequest = z.infer<typeof CreateGitHubIssueFromTaskRequestSchema>
+
+/**
+ * GitHub issues list query params
+ */
+export const GitHubIssuesQuerySchema = z.object({
+  state: z.enum(['open', 'closed', 'all']).optional().default('open'),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  perPage: z.coerce.number().int().min(1).max(100).optional().default(30),
+  search: z.string().optional(),
+})
+
+export type GitHubIssuesQuery = z.infer<typeof GitHubIssuesQuerySchema>
+
+/**
+ * Extended task schema with GitHub link info
+ */
+export const TaskWithGitHubLinkSchema = TaskSchema.extend({
+  assigneeId: z.string().uuid().nullable(),
+  assignedBy: z.string().uuid().nullable(),
+  assignedAt: z.date().nullable(),
+  assignee: z.object({
+    id: z.string().uuid(),
+    email: z.string().email(),
+    name: z.string().nullable(),
+  }).nullable().optional(),
+  githubIssueNumber: z.number().nullable(),
+  githubRepository: z.string().nullable(),
+  githubIssueUrl: z.string().nullable(),
+  githubIssueTitle: z.string().nullable(),
+  githubIssueState: z.enum(['open', 'closed']).nullable(),
+  githubLinkedBy: z.string().uuid().nullable(),
+  githubLinkedAt: z.date().nullable(),
+})
+
+export type TaskWithGitHubLink = z.infer<typeof TaskWithGitHubLinkSchema>
+
+// ============================================
+// GitHub Pull Request Link Types (T8.4)
+// ============================================
+
+/**
+ * GitHub Pull Request state
+ */
+export const GitHubPrStateSchema = z.enum(['open', 'closed', 'merged'])
+export type GitHubPrState = z.infer<typeof GitHubPrStateSchema>
+
+/**
+ * GitHub Pull Request info
+ */
+export const GitHubPullRequestSchema = z.object({
+  id: z.number(),
+  number: z.number(),
+  title: z.string(),
+  body: z.string().nullable(),
+  state: GitHubPrStateSchema,
+  draft: z.boolean(),
+  html_url: z.string().url(),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+  closed_at: z.string().datetime().nullable(),
+  merged_at: z.string().datetime().nullable(),
+  user: z.object({
+    login: z.string(),
+    avatar_url: z.string().nullable(),
+  }),
+  head: z.object({
+    ref: z.string(), // Branch name
+    sha: z.string(),
+  }),
+  base: z.object({
+    ref: z.string(), // Target branch (e.g., "main")
+    sha: z.string(),
+  }),
+  labels: z.array(z.object({
+    id: z.number(),
+    name: z.string(),
+    color: z.string(),
+  })),
+  assignees: z.array(z.object({
+    login: z.string(),
+    avatar_url: z.string().nullable(),
+  })),
+  requested_reviewers: z.array(z.object({
+    login: z.string(),
+    avatar_url: z.string().nullable(),
+  })),
+})
+
+export type GitHubPullRequest = z.infer<typeof GitHubPullRequestSchema>
+
+/**
+ * Task GitHub PR link info (stored in task)
+ */
+export const TaskGitHubPrLinkSchema = z.object({
+  prNumber: z.number(),
+  repository: z.string(), // "owner/repo"
+  prUrl: z.string().url(),
+  prTitle: z.string(),
+  prState: GitHubPrStateSchema,
+  headBranch: z.string(),
+  baseBranch: z.string(),
+  linkedBy: z.string().uuid(),
+  linkedAt: z.date(),
+})
+
+export type TaskGitHubPrLink = z.infer<typeof TaskGitHubPrLinkSchema>
+
+/**
+ * Link task to GitHub PR request
+ */
+export const LinkTaskToGitHubPrRequestSchema = z.object({
+  prNumber: z.number().int().positive('PR number must be positive'),
+  repository: z.string().regex(/^[^/]+\/[^/]+$/, 'Repository must be in format "owner/repo"'),
+})
+
+export type LinkTaskToGitHubPrRequest = z.infer<typeof LinkTaskToGitHubPrRequestSchema>
+
+/**
+ * GitHub PRs list query params
+ */
+export const GitHubPullRequestsQuerySchema = z.object({
+  state: z.enum(['open', 'closed', 'all']).optional().default('open'),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  perPage: z.coerce.number().int().min(1).max(100).optional().default(30),
+  search: z.string().optional(),
+})
+
+export type GitHubPullRequestsQuery = z.infer<typeof GitHubPullRequestsQuerySchema>
+
+/**
+ * Extended task schema with GitHub PR link info
+ */
+export const TaskWithGitHubPrLinkSchema = TaskWithGitHubLinkSchema.extend({
+  githubPrNumber: z.number().nullable(),
+  githubPrRepository: z.string().nullable(),
+  githubPrUrl: z.string().nullable(),
+  githubPrTitle: z.string().nullable(),
+  githubPrState: GitHubPrStateSchema.nullable(),
+  githubPrBranch: z.string().nullable(),
+  githubPrBaseBranch: z.string().nullable(),
+  githubPrLinkedBy: z.string().uuid().nullable(),
+  githubPrLinkedAt: z.date().nullable(),
+})
+
+export type TaskWithGitHubPrLink = z.infer<typeof TaskWithGitHubPrLinkSchema>

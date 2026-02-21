@@ -15,6 +15,7 @@ import {
   isAtProjectLimit,
   type Project,
 } from '@/hooks/use-projects'
+import { useProjectAnalytics } from '@/hooks/use-analytics'
 import { CreateProjectRequestSchema, type CreateProjectRequest, type ProjectLimits } from '@planflow/shared'
 import { UpgradePrompt, ProjectLimitBadge } from '@/components/upgrade-prompt'
 import { Button } from '@/components/ui/button'
@@ -129,6 +130,7 @@ function CreateProjectDialog({
 }) {
   const router = useRouter()
   const createProject = useCreateProject()
+  const { trackProjectCreated } = useProjectAnalytics()
   const [apiError, setApiError] = useState<string | null>(null)
   const [isLimitError, setIsLimitError] = useState(false)
 
@@ -148,6 +150,8 @@ function CreateProjectDialog({
         name: data.name,
         description: data.description || undefined,
       })
+      // Track project creation
+      trackProjectCreated(project.id, project.name)
       form.reset()
       onOpenChange(false)
       router.push(`/dashboard/projects/${project.id}`)
@@ -278,7 +282,7 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
   )
 }
 
-function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
+function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string, name: string) => void }) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   return (
@@ -344,7 +348,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
-              onClick={() => onDelete(project.id)}
+              onClick={() => onDelete(project.id, project.name)}
             >
               Delete
             </AlertDialogAction>
@@ -358,14 +362,17 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
 export default function ProjectsPage() {
   const { data, isLoading, error, refetch } = useProjects()
   const deleteProject = useDeleteProject()
+  const { trackProjectDeleted } = useProjectAnalytics()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
 
   const projects = data?.projects
   const limits = data?.limits
 
-  const handleDelete = async (projectId: string) => {
+  const handleDelete = async (projectId: string, projectName: string) => {
     try {
       await deleteProject.mutateAsync(projectId)
+      // Track project deletion
+      trackProjectDeleted(projectId, projectName)
     } catch (err) {
       console.error('Failed to delete project:', err)
     }

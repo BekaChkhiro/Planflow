@@ -45,11 +45,12 @@ export function CommentsSection({
 
   // Handle create comment
   const handleCreateComment = useCallback(
-    async (content: string, parentId?: string) => {
+    async (content: string, parentId?: string, mentions?: string[]) => {
       try {
         await createComment.mutateAsync({
           content,
           parentId,
+          mentions,
         })
       } catch (err) {
         toast({
@@ -143,9 +144,9 @@ export function CommentsSection({
         projectId={projectId}
         taskId={taskId}
         taskDisplayId={taskDisplayId}
-        onSubmit={(content) => handleCreateComment(content)}
+        onSubmit={(content, mentions) => handleCreateComment(content, undefined, mentions)}
         isSubmitting={createComment.isPending}
-        placeholder="Write a comment..."
+        placeholder="Write a comment... Use @ to mention team members"
       />
 
       {/* Typing Indicators */}

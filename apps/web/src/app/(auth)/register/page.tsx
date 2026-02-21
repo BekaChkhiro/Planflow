@@ -10,6 +10,7 @@ import { Loader2 } from 'lucide-react'
 
 import { RegisterRequestSchema } from '@planflow/shared'
 import { useAuth } from '@/hooks/use-auth'
+import { useAnalytics } from '@/hooks/use-analytics'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -42,6 +43,7 @@ type RegisterFormData = z.infer<typeof RegisterFormSchema>
 export default function RegisterPage() {
   const router = useRouter()
   const { register, isLoading: authLoading } = useAuth()
+  const { track } = useAnalytics()
   const [error, setError] = useState<string | null>(null)
 
   const form = useForm<RegisterFormData>({
@@ -67,6 +69,8 @@ export default function RegisterPage() {
     })
 
     if (result.success) {
+      // Track signup event (user will be identified on first login)
+      track('user_signed_up', { source: 'web' })
       // Registration successful - redirect to login
       router.push('/login?registered=true')
     } else {

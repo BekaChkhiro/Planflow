@@ -8,6 +8,41 @@
       "when": 1770319491046,
       "tag": "0000_quick_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771666400100,
+      "tag": "0001_friendly_miss_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771671851000,
+      "tag": "0002_github_issue_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771759973000,
+      "tag": "0003_github_pr_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771670653551,
+      "tag": "0004_cold_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1771843200000,
+      "tag": "0005_digest_emails",
+      "breakpoints": true
     }
   ]
 }

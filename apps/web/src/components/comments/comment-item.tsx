@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { MoreHorizontal, Pencil, Trash2, Reply, Loader2, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -27,6 +27,44 @@ import { getAuthorInitials, formatCommentTime } from '@/hooks/use-comments'
 import { type PresenceStatus, getPresenceColor } from '@/hooks/use-presence'
 import { CommentInput } from './comment-input'
 
+/**
+ * Render comment content with highlighted @mentions
+ */
+function renderContentWithMentions(content: string): React.ReactNode {
+  // Match @mentions (email format: @user@domain.com or simple: @username)
+  const mentionPattern = /@([^\s@]+(?:@[^\s@]+\.[^\s@]+)?)/g
+  const parts: React.ReactNode[] = []
+  let lastIndex = 0
+  let match
+
+  while ((match = mentionPattern.exec(content)) !== null) {
+    // Add text before the mention
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index))
+    }
+
+    // Add the mention with highlighting
+    const mentionText = match[0]
+    parts.push(
+      <span
+        key={match.index}
+        className="inline-flex items-center rounded bg-primary/10 px-1 text-primary font-medium"
+      >
+        {mentionText}
+      </span>
+    )
+
+    lastIndex = match.index + mentionText.length
+  }
+
+  // Add remaining text
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex))
+  }
+
+  return parts.length > 0 ? parts : content
+}
+
 interface CommentItemProps {
   comment: Comment
   currentUserId: string
@@ -34,7 +72,7 @@ interface CommentItemProps {
   onEdit: (commentId: string, content: string) => Promise<void>
   onDelete: (commentId: string) => Promise<void>
   onReply?: (parentId: string) => void
-  onSubmitReply?: (content: string, parentId: string) => Promise<void>
+  onSubmitReply?: (content: string, parentId: string, mentions?: string[]) => Promise<void>
   onCancelReply?: () => void
   replyingToId?: string | null
   isCreatingReply?: boolean
@@ -211,7 +249,7 @@ export function CommentItem({
             </div>
           ) : (
             <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap break-words">
-              {comment.content}
+              {renderContentWithMentions(comment.content)}
             </p>
           )}
 
@@ -308,9 +346,9 @@ export function CommentItem({
             projectId={projectId}
             taskId={taskId}
             taskDisplayId={taskDisplayId}
-            onSubmit={(content) => onSubmitReply(content, comment.id)}
+            onSubmit={(content, mentions) => onSubmitReply(content, comment.id, mentions)}
             isSubmitting={isCreatingReply}
-            placeholder="Write a reply..."
+            placeholder="Write a reply... Use @ to mention team members"
             autoFocus
             showCancel
             onCancel={onCancelReply}

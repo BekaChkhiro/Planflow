@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare, Users, Bell } from "lucide-react"
+import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare, Users, Bell, BarChart3 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -117,6 +117,12 @@ export function Navbar() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
+                  <Link href="/dashboard/team/analytics" className="flex items-center">
+                    <BarChart3 className="mr-2 h-4 w-4" />
+                    Analytics
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link href="/dashboard/notifications" className="flex items-center">
                     <Bell className="mr-2 h-4 w-4" />
                     Notifications
@@ -202,6 +208,12 @@ export function Navbar() {
                       <Link href="/dashboard/team" onClick={() => setIsOpen(false)}>
                         <Users className="mr-2 h-4 w-4" />
                         Team
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" asChild className="justify-start">
+                      <Link href="/dashboard/team/analytics" onClick={() => setIsOpen(false)}>
+                        <BarChart3 className="mr-2 h-4 w-4" />
+                        Analytics
                       </Link>
                     </Button>
                     <Button variant="ghost" asChild className="justify-start">

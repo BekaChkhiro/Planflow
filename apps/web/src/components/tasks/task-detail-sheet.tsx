@@ -20,6 +20,8 @@ import {
   Calendar,
 } from 'lucide-react'
 import { CommentsSection } from '@/components/comments'
+import { GitHubLinkSection } from './github-link-section'
+import { GitHubPrSection } from './github-pr-section'
 import type { PresenceStatus } from '@/hooks/use-presence'
 
 // Task type from the project page
@@ -39,6 +41,12 @@ export interface TaskDetail {
     email: string
     name: string | null
   } | null
+  // GitHub link fields (T8.3)
+  githubIssueNumber?: number | null
+  githubRepository?: string | null
+  githubIssueUrl?: string | null
+  githubIssueTitle?: string | null
+  githubIssueState?: 'open' | 'closed' | null
 }
 
 interface TaskDetailSheetProps {
@@ -203,6 +211,25 @@ export function TaskDetailSheet({
                 </div>
               </>
             )}
+
+            {/* GitHub Issue Link Section (T8.3) */}
+            <Separator />
+            <GitHubLinkSection
+              projectId={projectId}
+              taskId={task.id}
+              taskDisplayId={task.taskId}
+              taskName={task.name}
+            />
+
+            {/* GitHub PR Link Section (T8.4) */}
+            <Separator />
+            <GitHubPrSection
+              projectId={projectId}
+              taskId={task.id}
+              taskDisplayId={task.taskId}
+              taskName={task.name}
+              taskDescription={task.description || undefined}
+            />
 
             {/* Comments Section */}
             <Separator />

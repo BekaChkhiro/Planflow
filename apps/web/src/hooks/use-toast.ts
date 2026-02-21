@@ -188,6 +188,41 @@ function toast({ duration, ...props }: Toast) {
   }
 }
 
+// Helper methods for common toast types
+toast.success = (message: string, options?: Partial<Toast>) => {
+  return toast({
+    title: "Success",
+    description: message,
+    ...options,
+  })
+}
+
+toast.error = (message: string, options?: Partial<Toast>) => {
+  return toast({
+    title: "Error",
+    description: message,
+    variant: "destructive",
+    ...options,
+  })
+}
+
+toast.info = (message: string, options?: Partial<Toast>) => {
+  return toast({
+    title: "Info",
+    description: message,
+    ...options,
+  })
+}
+
+toast.warning = (message: string, options?: Partial<Toast>) => {
+  return toast({
+    title: "Warning",
+    description: message,
+    variant: "destructive",
+    ...options,
+  })
+}
+
 function useToast() {
   const [state, setState] = React.useState<State>(memoryState)
 

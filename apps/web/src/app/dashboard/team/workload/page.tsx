@@ -345,7 +345,6 @@ export default function WorkloadPage() {
 
   // Auto-select first organization
   const currentOrgId = selectedOrgId || organizations?.[0]?.id
-  const currentOrg = organizations?.find((org) => org.id === currentOrgId)
 
   // Fetch workload data
   const { data: workloadData, isLoading: workloadLoading } = useTeamWorkload(currentOrgId)

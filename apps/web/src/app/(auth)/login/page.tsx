@@ -9,6 +9,8 @@ import { Loader2 } from 'lucide-react'
 
 import { LoginRequestSchema, type LoginRequest } from '@planflow/shared'
 import { useAuth } from '@/hooks/use-auth'
+import { useAuthAnalytics } from '@/hooks/use-analytics'
+import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -32,6 +34,7 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login, isLoading: authLoading } = useAuth()
+  const { trackLogin } = useAuthAnalytics()
   const [error, setError] = useState<string | null>(null)
 
   const justRegistered = searchParams.get('registered') === 'true'
@@ -53,6 +56,11 @@ export default function LoginPage() {
     const result = await login(data)
 
     if (result.success) {
+      // Track login event
+      const user = useAuthStore.getState().user
+      if (user) {
+        trackLogin(user.id, user.email, 'email')
+      }
       // Redirect to returnUrl or dashboard
       router.push(returnUrl || '/dashboard')
     } else {

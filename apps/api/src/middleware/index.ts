@@ -33,3 +33,5 @@ export {
   validateRedirectUrl,
   timingSafeEqual,
 } from './security.js'
+
+export { sentryMiddleware, sentryErrorHandler } from './sentry.js'

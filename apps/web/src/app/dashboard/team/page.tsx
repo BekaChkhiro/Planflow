@@ -18,7 +18,6 @@ import {
   X,
   Loader2,
   Building2,
-  ChevronDown,
   Settings2,
   BarChart3,
 } from 'lucide-react'
@@ -29,7 +28,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
@@ -38,7 +36,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog'
 import {
   AlertDialog,
@@ -87,7 +84,6 @@ import {
   canManageMembers,
   canChangeRoles,
   getInitials,
-  type Organization,
   type TeamMember,
   type TeamInvitation,
   type MemberRole,

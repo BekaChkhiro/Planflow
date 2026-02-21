@@ -25,6 +25,24 @@ export const tasks = pgTable('tasks', {
   lockedBy: uuid('locked_by').references(() => users.id, { onDelete: 'set null' }),
   lockedAt: timestamp('locked_at', { withTimezone: true }),
   lockExpiresAt: timestamp('lock_expires_at', { withTimezone: true }),
+  // GitHub issue link fields (T8.3)
+  githubIssueNumber: integer('github_issue_number'),
+  githubRepository: text('github_repository'), // Format: "owner/repo"
+  githubIssueUrl: text('github_issue_url'),
+  githubIssueTitle: text('github_issue_title'),
+  githubIssueState: text('github_issue_state'), // "open" or "closed"
+  githubLinkedBy: uuid('github_linked_by').references(() => users.id, { onDelete: 'set null' }),
+  githubLinkedAt: timestamp('github_linked_at', { withTimezone: true }),
+  // GitHub Pull Request link fields (T8.4)
+  githubPrNumber: integer('github_pr_number'),
+  githubPrRepository: text('github_pr_repository'), // Format: "owner/repo"
+  githubPrUrl: text('github_pr_url'),
+  githubPrTitle: text('github_pr_title'),
+  githubPrState: text('github_pr_state'), // "open", "closed", or "merged"
+  githubPrBranch: text('github_pr_branch'), // Head branch name
+  githubPrBaseBranch: text('github_pr_base_branch'), // Base branch name (e.g., "main")
+  githubPrLinkedBy: uuid('github_pr_linked_by').references(() => users.id, { onDelete: 'set null' }),
+  githubPrLinkedAt: timestamp('github_pr_linked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })

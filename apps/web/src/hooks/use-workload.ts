@@ -2,8 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
-import { useTeamMembers, type TeamMember, type MemberRole } from './use-team'
-import { type Task, type TaskAssignee } from './use-projects'
+import { useTeamMembers, type MemberRole } from './use-team'
+import { type Task, type Project } from './use-projects'
 
 // Workload status types
 export type WorkloadStatus = 'light' | 'balanced' | 'heavy' | 'overloaded'
@@ -60,14 +60,10 @@ interface ProjectTasksResponse {
   }
 }
 
-interface OrganizationProjectsResponse {
+interface ProjectsResponse {
   success: boolean
   data: {
-    projects: Array<{
-      id: string
-      name: string
-      organizationId: string
-    }>
+    projects: Project[]
   }
 }
 
@@ -120,13 +116,13 @@ export const workloadQueryKey = (organizationId: string) => ['organization', org
 
 /**
  * Hook to compute team workload data
- * Combines team members with their assigned tasks across all organization projects
+ * Combines team members with their assigned tasks across all accessible projects
  */
 export function useTeamWorkload(organizationId: string | undefined) {
   // Get team members
-  const { data: members, isLoading: membersLoading } = useTeamMembers(organizationId)
+  const { data: members } = useTeamMembers(organizationId)
 
-  // Fetch all organization projects and their tasks
+  // Fetch all projects and their tasks
   return useQuery({
     queryKey: workloadQueryKey(organizationId || ''),
     queryFn: async (): Promise<{
@@ -151,10 +147,11 @@ export function useTeamWorkload(organizationId: string | undefined) {
         }
       }
 
-      // Fetch organization projects
-      const projectsResponse = await authApi.get<OrganizationProjectsResponse>(
-        `/organizations/${organizationId}/projects`
-      )
+      // Create a set of team member user IDs for filtering
+      const teamMemberIds = new Set(members.map((m) => m.userId))
+
+      // Fetch all accessible projects
+      const projectsResponse = await authApi.get<ProjectsResponse>('/projects')
       const projects = projectsResponse.data?.projects || []
 
       // Fetch tasks from all projects
@@ -166,22 +163,28 @@ export function useTeamWorkload(organizationId: string | undefined) {
           )
           allTasks.push(...(tasksResponse.data?.tasks || []))
         } catch {
-          // Skip projects with no access
+          // Skip projects with no access or errors
         }
       }
 
+      // Filter tasks to only those assigned to team members
       // Group tasks by assignee
       const tasksByAssignee = new Map<string, Task[]>()
       const unassignedTasks: Task[] = []
+      const teamTasks: Task[] = []
 
       for (const task of allTasks) {
-        if (task.assigneeId) {
+        if (task.assigneeId && teamMemberIds.has(task.assigneeId)) {
+          // Task assigned to a team member
           const existing = tasksByAssignee.get(task.assigneeId) || []
           existing.push(task)
           tasksByAssignee.set(task.assigneeId, existing)
-        } else {
+          teamTasks.push(task)
+        } else if (!task.assigneeId) {
+          // Unassigned task
           unassignedTasks.push(task)
         }
+        // Tasks assigned to non-team-members are ignored for team workload
       }
 
       // Build workload data for each member
@@ -226,18 +229,18 @@ export function useTeamWorkload(organizationId: string | undefined) {
       // Sort by workload (heaviest first)
       memberWorkloads.sort((a, b) => b.taskCount - a.taskCount)
 
-      // Calculate summary
-      const totalAssigned = allTasks.filter((t) => t.assigneeId).length
+      // Calculate summary based on team-assigned tasks
+      const totalAssigned = teamTasks.length
       const summary: TeamWorkloadSummary = {
-        totalTasks: allTasks.length,
+        totalTasks: teamTasks.length + unassignedTasks.length,
         assignedTasks: totalAssigned,
         unassignedTasks: unassignedTasks.length,
         averageTasksPerMember:
           members.length > 0 ? Math.round((totalAssigned / members.length) * 10) / 10 : 0,
         membersOverloaded: memberWorkloads.filter((m) => m.workloadStatus === 'overloaded').length,
         membersAvailable: memberWorkloads.filter((m) => m.workloadStatus === 'light').length,
-        totalEstimatedHours: allTasks.reduce((sum, t) => sum + (t.estimatedHours || 0), 0),
-        completedHours: allTasks
+        totalEstimatedHours: teamTasks.reduce((sum, t) => sum + (t.estimatedHours || 0), 0),
+        completedHours: teamTasks
           .filter((t) => t.status === 'DONE')
           .reduce((sum, t) => sum + (t.estimatedHours || 0), 0),
       }

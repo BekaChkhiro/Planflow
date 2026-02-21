@@ -16,6 +16,7 @@ import {
   Zap,
   Bell,
   Send,
+  AlertCircle,
 } from 'lucide-react'
 
 import {
@@ -549,6 +550,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const connectIntegration = useConnectIntegration()
   const disconnectIntegration = useDisconnectIntegration()
@@ -557,6 +559,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
   const colors = getIntegrationColor(config.type)
 
   async function handleConnect() {
+    setErrorMessage(null)
     if (config.type === 'github') {
       // GitHub uses OAuth flow
       setIsConnecting(true)
@@ -565,8 +568,13 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
         if (response.data.authUrl) {
           // Redirect to GitHub OAuth
           window.location.href = response.data.authUrl
+        } else {
+          setErrorMessage('Failed to get GitHub authorization URL')
+          setIsConnecting(false)
         }
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to connect to GitHub'
+        setErrorMessage(message)
         setIsConnecting(false)
       }
     } else {
@@ -660,6 +668,14 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
             <div className="flex items-center gap-2 rounded-md bg-green-50 p-3 text-sm text-green-700">
               <Check className="h-4 w-4" />
               {successMessage}
+            </div>
+          )}
+
+          {/* Error message */}
+          {errorMessage && (
+            <div className="flex items-center gap-2 rounded-md bg-red-50 p-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4" />
+              {errorMessage}
             </div>
           )}
 

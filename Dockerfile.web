@@ -40,7 +40,7 @@ COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=base /app/apps/web/.next ./apps/web/.next
-COPY --from=base /app/apps/web/next.config.js ./apps/web/next.config.js
+COPY --from=base /app/apps/web/next.config.mjs ./apps/web/next.config.mjs
 COPY --from=base /app/packages/shared/dist ./packages/shared/dist
 
 ENV NODE_ENV=production

@@ -1,10 +1,12 @@
 import webpush from 'web-push'
 import { getDbClient } from '../db/index.js'
 import * as schema from '../db/schema/index.js'
-
-// Get Drizzle client
-const db = getDbClient()
 import { eq, and } from 'drizzle-orm'
+
+// Lazy db getter - only connects when actually used
+function getDb() {
+  return getDbClient()
+}
 
 // Initialize VAPID keys from environment variables
 const VAPID_PUBLIC_KEY = process.env['VAPID_PUBLIC_KEY']
@@ -73,7 +75,7 @@ export async function sendPushNotification(
   }
 
   // Get user's push subscriptions
-  const subscriptions = await db
+  const subscriptions = await getDb()
     .select()
     .from(schema.pushSubscriptions)
     .where(
@@ -88,7 +90,7 @@ export async function sendPushNotification(
   }
 
   // Check user's notification preferences
-  const [preferences] = await db
+  const [preferences] = await getDb()
     .select()
     .from(schema.notificationPreferences)
     .where(eq(schema.notificationPreferences.userId, userId))
@@ -138,7 +140,7 @@ export async function sendPushNotification(
         const statusCode = (error as { statusCode?: number })?.statusCode
         if (statusCode === 410 || statusCode === 404) {
           // Subscription expired or invalid - mark as inactive
-          await db
+          await getDb()
             .update(schema.pushSubscriptions)
             .set({ isActive: false, updatedAt: new Date() })
             .where(eq(schema.pushSubscriptions.id, subscription.id))
@@ -221,7 +223,7 @@ export async function subscribeToPush(
   userAgent?: string
 ): Promise<schema.PushSubscription> {
   // Check if subscription already exists
-  const [existing] = await db
+  const [existing] = await getDb()
     .select()
     .from(schema.pushSubscriptions)
     .where(eq(schema.pushSubscriptions.endpoint, subscription.endpoint))
@@ -229,7 +231,7 @@ export async function subscribeToPush(
 
   if (existing) {
     // Update existing subscription
-    const [updated] = await db
+    const [updated] = await getDb()
       .update(schema.pushSubscriptions)
       .set({
         userId,
@@ -246,7 +248,7 @@ export async function subscribeToPush(
   }
 
   // Create new subscription
-  const [created] = await db
+  const [created] = await getDb()
     .insert(schema.pushSubscriptions)
     .values({
       userId,
@@ -258,14 +260,14 @@ export async function subscribeToPush(
     .returning()
 
   // Ensure user has notification preferences
-  const [prefs] = await db
+  const [prefs] = await getDb()
     .select()
     .from(schema.notificationPreferences)
     .where(eq(schema.notificationPreferences.userId, userId))
     .limit(1)
 
   if (!prefs) {
-    await db.insert(schema.notificationPreferences).values({ userId })
+    await getDb().insert(schema.notificationPreferences).values({ userId })
   }
 
   return created
@@ -276,7 +278,7 @@ export async function unsubscribeFromPush(
   userId: string,
   endpoint: string
 ): Promise<boolean> {
-  const result = await db
+  const result = await getDb()
     .delete(schema.pushSubscriptions)
     .where(
       and(
@@ -293,7 +295,7 @@ export async function unsubscribeFromPush(
 export async function getNotificationPreferences(
   userId: string
 ): Promise<schema.NotificationPreference | null> {
-  const [preferences] = await db
+  const [preferences] = await getDb()
     .select()
     .from(schema.notificationPreferences)
     .where(eq(schema.notificationPreferences.userId, userId))
@@ -308,14 +310,14 @@ export async function updateNotificationPreferences(
   updates: Partial<Omit<schema.NotificationPreference, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>
 ): Promise<schema.NotificationPreference> {
   // Check if preferences exist
-  const [existing] = await db
+  const [existing] = await getDb()
     .select()
     .from(schema.notificationPreferences)
     .where(eq(schema.notificationPreferences.userId, userId))
     .limit(1)
 
   if (existing) {
-    const [updated] = await db
+    const [updated] = await getDb()
       .update(schema.notificationPreferences)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(schema.notificationPreferences.userId, existing.id))
@@ -325,7 +327,7 @@ export async function updateNotificationPreferences(
   }
 
   // Create new preferences with updates
-  const [created] = await db
+  const [created] = await getDb()
     .insert(schema.notificationPreferences)
     .values({ userId, ...updates })
     .returning()

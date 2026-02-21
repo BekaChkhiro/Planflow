@@ -1,0 +1,18 @@
+# Railway Configuration for PlanFlow Web (Frontend)
+# Documentation: https://docs.railway.app/reference/config-as-code
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.web"
+
+[deploy]
+# Number of instances
+numReplicas = 1
+
+# Health check configuration
+healthcheckPath = "/"
+healthcheckTimeout = 30
+
+# Restart policy
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

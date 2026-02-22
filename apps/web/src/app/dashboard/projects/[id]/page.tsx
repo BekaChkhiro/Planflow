@@ -308,7 +308,7 @@ function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigni
             Phase {task.phase}
           </Badge>
         </div>
-      </div>
+      </article>
     )
   }
 
@@ -359,7 +359,7 @@ function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigni
           </span>
         )}
       </div>
-    </div>
+    </article>
   )
 }
 
@@ -426,7 +426,7 @@ function KanbanColumn({
           ))
         )}
       </div>
-    </div>
+    </section>
   )
 }
 

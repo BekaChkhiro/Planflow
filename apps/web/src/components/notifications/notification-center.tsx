@@ -16,6 +16,7 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { NotificationListSkeleton } from '@/components/ui/loading-skeletons'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,15 +33,31 @@ import { useNotifications, type Notification } from '@/hooks/use-notifications'
 function getNotificationIcon(type: string) {
   switch (type) {
     case 'mention':
-      return <AtSign className="h-4 w-4 text-blue-500" />
+      return <AtSign className="h-4 w-4 text-blue-500" aria-hidden="true" />
     case 'assignment':
-      return <UserPlus className="h-4 w-4 text-green-500" />
+      return <UserPlus className="h-4 w-4 text-green-500" aria-hidden="true" />
     case 'comment':
-      return <MessageSquare className="h-4 w-4 text-gray-500" />
+      return <MessageSquare className="h-4 w-4 text-gray-500" aria-hidden="true" />
     case 'status_change':
-      return <RefreshCw className="h-4 w-4 text-blue-500" />
+      return <RefreshCw className="h-4 w-4 text-blue-500" aria-hidden="true" />
     default:
-      return <Bell className="h-4 w-4 text-gray-500" />
+      return <Bell className="h-4 w-4 text-gray-500" aria-hidden="true" />
+  }
+}
+
+// Get notification type label for screen readers
+function getNotificationTypeLabel(type: string): string {
+  switch (type) {
+    case 'mention':
+      return 'Mention'
+    case 'assignment':
+      return 'Task assignment'
+    case 'comment':
+      return 'Comment'
+    case 'status_change':
+      return 'Status change'
+    default:
+      return 'Notification'
   }
 }
 
@@ -64,6 +81,8 @@ function NotificationItem({
   onClose: () => void
 }) {
   const isUnread = !notification.readAt
+  const typeLabel = getNotificationTypeLabel(notification.type)
+  const timeAgo = formatTime(notification.createdAt)
 
   const handleClick = () => {
     if (isUnread) {
@@ -72,13 +91,28 @@ function NotificationItem({
     onClose()
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleClick()
+    }
+  }
+
+  // Build accessible label
+  const accessibleLabel = `${typeLabel}: ${notification.title}${isUnread ? ', unread' : ''}, ${timeAgo}`
+
   const content = (
     <div
+      role="article"
+      tabIndex={0}
       className={cn(
         'flex gap-3 p-3 rounded-md transition-colors cursor-pointer',
+        'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset',
         isUnread ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-muted/50'
       )}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      aria-label={accessibleLabel}
     >
       <div className="flex-shrink-0 mt-0.5">
         {getNotificationIcon(notification.type)}
@@ -98,12 +132,12 @@ function NotificationItem({
           </p>
         )}
         <p className="text-xs text-muted-foreground/70 mt-1">
-          {formatTime(notification.createdAt)}
+          {timeAgo}
         </p>
       </div>
       {isUnread && (
-        <div className="flex-shrink-0">
-          <div className="h-2 w-2 rounded-full bg-blue-500" />
+        <div className="flex-shrink-0" aria-hidden="true">
+          <div className="h-2 w-2 rounded-full bg-blue-500" title="Unread" />
         </div>
       )}
     </div>
@@ -112,7 +146,12 @@ function NotificationItem({
   // If notification has a link, wrap in Link component
   if (notification.link) {
     return (
-      <Link href={notification.link} className="block">
+      <Link
+        href={notification.link}
+        className="block focus:outline-none"
+        aria-label={`${accessibleLabel}. Click to view details.`}
+        onClick={handleClick}
+      >
         {content}
       </Link>
     )
@@ -124,8 +163,12 @@ function NotificationItem({
 // Empty state
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-      <Bell className="h-10 w-10 text-muted-foreground/40 mb-3" />
+    <div
+      className="flex flex-col items-center justify-center py-8 px-4 text-center"
+      role="status"
+      aria-label="No notifications"
+    >
+      <Bell className="h-10 w-10 text-muted-foreground/40 mb-3" aria-hidden="true" />
       <p className="text-sm font-medium text-muted-foreground">No notifications</p>
       <p className="text-xs text-muted-foreground/70 mt-1">
         You&apos;re all caught up!
@@ -137,23 +180,29 @@ function EmptyState() {
 // Error state
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-      <AlertCircle className="h-10 w-10 text-red-400 mb-3" />
-      <p className="text-sm font-medium text-muted-foreground">Failed to load</p>
-      <Button variant="ghost" size="sm" onClick={onRetry} className="mt-2">
+    <div
+      className="flex flex-col items-center justify-center py-8 px-4 text-center"
+      role="alert"
+      aria-live="polite"
+    >
+      <AlertCircle className="h-10 w-10 text-red-400 mb-3" aria-hidden="true" />
+      <p className="text-sm font-medium text-muted-foreground">Failed to load notifications</p>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onRetry}
+        className="mt-2"
+        aria-label="Retry loading notifications"
+      >
         Try again
       </Button>
     </div>
   )
 }
 
-// Loading state
+// Loading state - now uses skeleton for better UX
 function LoadingState() {
-  return (
-    <div className="flex flex-col items-center justify-center py-8 px-4">
-      <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
-    </div>
-  )
+  return <NotificationListSkeleton count={5} />
 }
 
 /**
@@ -213,37 +262,48 @@ export function NotificationCenter() {
               className="h-auto py-1 px-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={() => markAllAsRead()}
               disabled={isMarkingAllRead}
+              aria-label={`Mark all ${unreadCount} notifications as read`}
             >
               {isMarkingAllRead ? (
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" aria-hidden="true" />
               ) : (
-                <CheckCheck className="h-3 w-3 mr-1" />
+                <CheckCheck className="h-3 w-3 mr-1" aria-hidden="true" />
               )}
-              Mark all read
+              <span>Mark all read</span>
             </Button>
           )}
         </div>
 
-        {/* Notification List */}
+        {/* Notification List with live region for updates */}
         <ScrollArea className="max-h-[400px]">
-          {isLoading ? (
-            <LoadingState />
-          ) : isError ? (
-            <ErrorState onRetry={refetch} />
-          ) : notifications.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <div className="py-1">
-              {notifications.map((notification) => (
-                <NotificationItem
-                  key={notification.id}
-                  notification={notification}
-                  onMarkRead={markAsRead}
-                  onClose={handleClose}
-                />
-              ))}
-            </div>
-          )}
+          <div
+            aria-live="polite"
+            aria-atomic="false"
+            aria-relevant="additions removals"
+          >
+            {isLoading ? (
+              <LoadingState />
+            ) : isError ? (
+              <ErrorState onRetry={refetch} />
+            ) : notifications.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <div
+                className="py-1"
+                role="feed"
+                aria-label={`${notifications.length} notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+              >
+                {notifications.map((notification, index) => (
+                  <NotificationItem
+                    key={notification.id}
+                    notification={notification}
+                    onMarkRead={markAsRead}
+                    onClose={handleClose}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </ScrollArea>
 
         {/* Footer */}

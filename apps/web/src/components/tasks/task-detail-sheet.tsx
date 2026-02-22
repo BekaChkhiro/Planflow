@@ -118,6 +118,7 @@ export function TaskDetailSheet({
           <div className="flex items-start gap-3">
             <div
               className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${statusConfig[task.status].color}`}
+              aria-hidden="true"
             >
               <StatusIcon
                 className={`h-4 w-4 ${task.status === 'IN_PROGRESS' ? 'animate-spin' : ''}`}
@@ -137,27 +138,31 @@ export function TaskDetailSheet({
         <ScrollArea className="flex-1 px-6">
           <div className="space-y-6 pb-6">
             {/* Status and Metadata */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className={statusConfig[task.status].color}>
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label="Task metadata"
+            >
+              <Badge className={statusConfig[task.status].color} aria-label={`Status: ${statusConfig[task.status].label}`}>
                 {statusConfig[task.status].label}
               </Badge>
-              <Badge variant="outline" className={complexityConfig[task.complexity].color}>
+              <Badge variant="outline" className={complexityConfig[task.complexity].color} aria-label={`Complexity: ${task.complexity}`}>
                 {task.complexity}
               </Badge>
-              <Badge variant="outline">Phase {task.phase}</Badge>
+              <Badge variant="outline" aria-label={`Phase ${task.phase}`}>Phase {task.phase}</Badge>
             </div>
 
             {/* Details Grid */}
-            <div className="grid gap-3">
+            <dl className="grid gap-3" aria-label="Task details">
               {/* Dependencies */}
               {task.dependencies.length > 0 && (
                 <div className="flex items-start gap-2">
-                  <GitBranch className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" />
+                  <GitBranch className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
                   <div className="text-sm">
-                    <span className="text-muted-foreground">Depends on: </span>
-                    <span className="font-mono">
+                    <dt className="inline text-muted-foreground">Depends on: </dt>
+                    <dd className="inline font-mono">
                       {task.dependencies.join(', ')}
-                    </span>
+                    </dd>
                   </div>
                 </div>
               )}
@@ -165,50 +170,50 @@ export function TaskDetailSheet({
               {/* Estimated Hours */}
               {task.estimatedHours && (
                 <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-sm">
-                    <span className="text-muted-foreground">Estimated: </span>
-                    {task.estimatedHours} hour{task.estimatedHours !== 1 ? 's' : ''}
-                  </span>
+                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                  <div className="text-sm">
+                    <dt className="inline text-muted-foreground">Estimated: </dt>
+                    <dd className="inline">{task.estimatedHours} hour{task.estimatedHours !== 1 ? 's' : ''}</dd>
+                  </div>
                 </div>
               )}
 
               {/* Last Updated */}
               <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-sm">
-                  <span className="text-muted-foreground">Updated: </span>
-                  {formatDate(task.updatedAt)}
-                </span>
+                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                <div className="text-sm">
+                  <dt className="inline text-muted-foreground">Updated: </dt>
+                  <dd className="inline">{formatDate(task.updatedAt)}</dd>
+                </div>
               </div>
 
               {/* Assignee */}
               {task.assignee && (
                 <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0" aria-hidden="true">
                     <span className="text-[10px] font-medium text-primary">
                       {task.assignee.name?.[0]?.toUpperCase() ||
                         task.assignee.email[0]?.toUpperCase()}
                     </span>
                   </div>
-                  <span className="text-sm">
-                    <span className="text-muted-foreground">Assigned to: </span>
-                    {task.assignee.name || task.assignee.email}
-                  </span>
+                  <div className="text-sm">
+                    <dt className="inline text-muted-foreground">Assigned to: </dt>
+                    <dd className="inline">{task.assignee.name || task.assignee.email}</dd>
+                  </div>
                 </div>
               )}
-            </div>
+            </dl>
 
             {/* Description */}
             {task.description && (
               <>
-                <Separator />
-                <div>
-                  <h4 className="mb-2 text-sm font-medium">Description</h4>
+                <Separator aria-hidden="true" />
+                <section aria-labelledby="task-description-heading">
+                  <h4 id="task-description-heading" className="mb-2 text-sm font-medium">Description</h4>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                     {task.description}
                   </p>
-                </div>
+                </section>
               </>
             )}
 

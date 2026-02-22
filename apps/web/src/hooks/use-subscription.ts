@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 import type { SubscriptionTier, SubscriptionStatus } from '@planflow/shared'
 
 export interface Subscription {
@@ -69,8 +71,8 @@ export function useCreateCheckout() {
       // Redirect to LemonSqueezy checkout
       window.location.href = checkoutUrl
     },
-    onError: (error) => {
-      console.error('Checkout error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -89,8 +91,8 @@ export function useCreatePortalSession() {
       // Open portal in new tab
       window.open(portalUrl, '_blank', 'noopener,noreferrer')
     },
-    onError: (error) => {
-      console.error('Portal session error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

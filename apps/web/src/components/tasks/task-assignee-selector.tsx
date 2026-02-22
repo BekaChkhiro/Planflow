@@ -60,6 +60,17 @@ export function TaskAssigneeSelector({
   // Get presence status for assignee (T7.8)
   const assigneePresence = presenceStatus ?? (assignee && getPresenceStatus?.(assignee.id))
 
+  // Build accessible label based on state
+  const getButtonLabel = () => {
+    if (isLoading) return 'Loading assignee...'
+    if (assignee) {
+      const name = assignee.name || assignee.email
+      const presenceText = assigneePresence === 'online' ? ', online' : assigneePresence === 'away' ? ', away' : ''
+      return `Assigned to ${name}${presenceText}. Click to change assignee.`
+    }
+    return 'Unassigned. Click to assign this task to a team member.'
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -72,9 +83,12 @@ export function TaskAssigneeSelector({
           )}
           disabled={disabled || isLoading}
           onClick={(e) => e.stopPropagation()}
+          aria-label={getButtonLabel()}
+          aria-expanded={open}
+          aria-haspopup="listbox"
         >
           {isLoading ? (
-            <div className={cn(avatarSize, 'flex items-center justify-center')}>
+            <div className={cn(avatarSize, 'flex items-center justify-center')} aria-hidden="true">
               <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
             </div>
           ) : assignee ? (
@@ -92,6 +106,7 @@ export function TaskAssigneeSelector({
                     indicatorSize,
                     getPresenceColor(assigneePresence)
                   )}
+                  aria-hidden="true"
                 />
               )}
             </div>
@@ -101,29 +116,44 @@ export function TaskAssigneeSelector({
                 avatarSize,
                 'flex items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 hover:border-muted-foreground/50 transition-colors'
               )}
-              title="Assign task"
+              aria-hidden="true"
             >
               <UserPlus className="h-3 w-3 text-muted-foreground/50" />
             </div>
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0" align="start" onClick={(e) => e.stopPropagation()}>
+      <PopoverContent
+        className="w-[200px] p-0"
+        align="start"
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Select team member to assign"
+      >
         <Command>
-          <CommandInput placeholder="Search members..." className="h-9" />
-          <CommandList>
-            <CommandEmpty>No members found.</CommandEmpty>
-            <CommandGroup>
+          <CommandInput
+            placeholder="Search members..."
+            className="h-9"
+            aria-label="Search team members"
+          />
+          <CommandList aria-label="Team members">
+            <CommandEmpty role="status">No members found.</CommandEmpty>
+            <CommandGroup heading="Team members">
               {teamMembers.map((member) => {
                 const memberPresence = getPresenceStatus?.(member.userId)
+                const isSelected = assignee?.id === member.userId
+                const memberName = member.userName || member.userEmail
+                const presenceText = memberPresence === 'online' ? ', online' : memberPresence === 'away' ? ', away' : ''
+
                 return (
                   <CommandItem
                     key={member.userId}
                     value={`${member.userName} ${member.userEmail}`}
                     onSelect={() => handleSelect(member.userId)}
                     className="flex items-center gap-2"
+                    aria-selected={isSelected}
+                    aria-label={`${memberName}${presenceText}${isSelected ? ', currently assigned' : ''}`}
                   >
-                    <div className="relative">
+                    <div className="relative" aria-hidden="true">
                       <Avatar className="h-6 w-6">
                         <AvatarFallback className="text-[10px] font-medium">
                           {getInitials(member.userName, member.userEmail)}
@@ -141,7 +171,7 @@ export function TaskAssigneeSelector({
                     </div>
                     <div className="flex flex-col flex-1 min-w-0">
                       <span className="truncate text-sm">
-                        {member.userName || member.userEmail}
+                        {memberName}
                       </span>
                       {member.userName && (
                         <span className="truncate text-xs text-muted-foreground">
@@ -149,8 +179,8 @@ export function TaskAssigneeSelector({
                         </span>
                       )}
                     </div>
-                    {assignee?.id === member.userId && (
-                      <Check className="h-4 w-4 text-primary shrink-0" />
+                    {isSelected && (
+                      <Check className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
                     )}
                   </CommandItem>
                 )
@@ -163,8 +193,9 @@ export function TaskAssigneeSelector({
                   <CommandItem
                     onSelect={() => handleSelect(null)}
                     className="flex items-center gap-2 text-muted-foreground"
+                    aria-label="Remove assignee from this task"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4" aria-hidden="true" />
                     <span>Unassign</span>
                   </CommandItem>
                 </CommandGroup>
@@ -194,8 +225,16 @@ export function TaskAssigneeDisplay({
   const textSize = size === 'sm' ? 'text-[9px]' : 'text-[10px]'
   const indicatorSize = size === 'sm' ? 'h-1.5 w-1.5' : 'h-2 w-2'
 
+  const displayName = assignee.name || assignee.email
+  const presenceLabel = presenceStatus === 'online' ? ', online' : presenceStatus === 'away' ? ', away' : ''
+
   return (
-    <div className="relative inline-flex items-center gap-1" title={assignee.name || assignee.email}>
+    <div
+      className="relative inline-flex items-center gap-1"
+      title={displayName}
+      role="img"
+      aria-label={`Assigned to ${displayName}${presenceLabel}`}
+    >
       <Avatar className={avatarSize}>
         <AvatarFallback className={cn(textSize, 'bg-primary/10 text-primary font-medium')}>
           {getInitials(assignee.name, assignee.email)}
@@ -209,6 +248,7 @@ export function TaskAssigneeDisplay({
             indicatorSize,
             getPresenceColor(presenceStatus)
           )}
+          aria-hidden="true"
         />
       )}
     </div>

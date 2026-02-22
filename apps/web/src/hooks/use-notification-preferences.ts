@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './use-auth'
+import { toast } from '@/hooks/use-toast'
 
 export interface NotificationPreferences {
   pushEnabled: boolean
@@ -112,6 +113,7 @@ export function useNotificationPreferences() {
     },
     onError: (err: Error) => {
       setError(err.message)
+      toast.error(err.message || 'Failed to update preferences')
     },
   })
 

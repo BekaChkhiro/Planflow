@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { MessageSquare, Loader2 } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import { CommentItem } from './comment-item'
+import { CommentListSkeleton } from '@/components/ui/loading-skeletons'
 import type { Comment } from '@/hooks/use-comments'
 import type { PresenceStatus } from '@/hooks/use-presence'
 
@@ -55,11 +56,7 @@ export function CommentList({
   )
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <CommentListSkeleton count={3} />
   }
 
   // Filter to only show top-level comments (no parentId)

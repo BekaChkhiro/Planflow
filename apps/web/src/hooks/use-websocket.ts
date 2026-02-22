@@ -206,36 +206,126 @@ export function useProjectWebSocket({
   const shouldReconnectRef = useRef(true)
   const isConnectingRef = useRef(false)
 
+  // T10.5: Race condition fixes
+  const connectionIdRef = useRef(0) // Unique ID for each connection attempt
+  const isMountedRef = useRef(true) // Track if component is mounted
+  const currentProjectIdRef = useRef(projectId) // Track current projectId to detect changes
+
+  // Store callbacks in refs to avoid recreating connect function (T10.5)
+  const callbacksRef = useRef({
+    onConnected,
+    onDisconnected,
+    onTaskUpdated,
+    onTasksSynced,
+    onActivityCreated,
+    onNotificationNew,
+    onTypingStart,
+    onTypingStop,
+    onTaskLocked,
+    onTaskUnlocked,
+    onTaskLockExtended,
+    onLocksList,
+    onLockResult,
+    onUnlockResult,
+    onPresenceList,
+    onPresenceJoined,
+    onPresenceLeft,
+    onPresenceUpdated,
+    onWorkingOnChanged,
+  })
+
+  // Update callbacks ref when they change (T10.5)
+  useEffect(() => {
+    callbacksRef.current = {
+      onConnected,
+      onDisconnected,
+      onTaskUpdated,
+      onTasksSynced,
+      onActivityCreated,
+      onNotificationNew,
+      onTypingStart,
+      onTypingStop,
+      onTaskLocked,
+      onTaskUnlocked,
+      onTaskLockExtended,
+      onLocksList,
+      onLockResult,
+      onUnlockResult,
+      onPresenceList,
+      onPresenceJoined,
+      onPresenceLeft,
+      onPresenceUpdated,
+      onWorkingOnChanged,
+    }
+  }, [onConnected, onDisconnected, onTaskUpdated, onTasksSynced, onActivityCreated, onNotificationNew, onTypingStart, onTypingStop, onTaskLocked, onTaskUnlocked, onTaskLockExtended, onLocksList, onLockResult, onUnlockResult, onPresenceList, onPresenceJoined, onPresenceLeft, onPresenceUpdated, onWorkingOnChanged])
+
   /**
-   * Clean up timers and connection
+   * Clean up timers and connection (T10.5 - safe cleanup)
    */
   const cleanup = useCallback(() => {
+    // Clear reconnect timeout first to prevent new connection attempts
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
+
+    // Clear ping interval
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current)
       pingIntervalRef.current = null
     }
+
+    // Close WebSocket connection
+    // T10.5: Use terminate-style close to avoid lingering connections
     if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
+      const ws = wsRef.current
+      wsRef.current = null // Clear ref first to prevent handlers from running
+
+      // Remove handlers to prevent callbacks after cleanup
+      ws.onopen = null
+      ws.onmessage = null
+      ws.onclose = null
+      ws.onerror = null
+
+      // Close the connection if it's not already closed
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close(1000, 'Client cleanup')
+      }
     }
+
     isConnectingRef.current = false
   }, [])
 
   /**
-   * Connect to WebSocket server
+   * Connect to WebSocket server (T10.5 - Race condition fixes)
    */
   const connect = useCallback(async () => {
+    // Generate unique connection ID to detect stale connections (T10.5)
+    const thisConnectionId = ++connectionIdRef.current
+    const targetProjectId = projectId // Capture projectId at start of connection
+
     // Prevent duplicate connections
-    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
+    if (isConnectingRef.current) {
+      return
+    }
+
+    // Check if already connected
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      return
+    }
+
+    // Check if already in CONNECTING state (T10.5 - prevent concurrent connection attempts)
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) {
       return
     }
 
     // Check if we should reconnect
     if (!shouldReconnectRef.current) {
+      return
+    }
+
+    // Check if component is still mounted (T10.5)
+    if (!isMountedRef.current) {
       return
     }
 
@@ -246,6 +336,25 @@ export function useProjectWebSocket({
     let token = authStore.getToken()
     if (!token || authStore.isTokenExpired()) {
       const refreshed = await authStore.refreshAccessToken()
+
+      // T10.5: Check for stale connection after async operation
+      if (connectionIdRef.current !== thisConnectionId) {
+        isConnectingRef.current = false
+        return // A newer connection attempt has started
+      }
+
+      // T10.5: Check if still mounted after async operation
+      if (!isMountedRef.current) {
+        isConnectingRef.current = false
+        return
+      }
+
+      // T10.5: Check if projectId changed during async operation
+      if (targetProjectId !== currentProjectIdRef.current) {
+        isConnectingRef.current = false
+        return
+      }
+
       if (!refreshed) {
         setStatus('error')
         isConnectingRef.current = false
@@ -260,15 +369,24 @@ export function useProjectWebSocket({
       return
     }
 
-    // Build WebSocket URL
+    // Build WebSocket URL (T10.1 - token moved to subprotocol for security)
+    // Token is no longer in URL, preventing exposure in logs/browser history
     const wsBaseUrl = getWebSocketUrl(env.NEXT_PUBLIC_API_URL)
-    const wsUrl = `${wsBaseUrl}/ws?token=${encodeURIComponent(token)}&projectId=${encodeURIComponent(projectId)}`
+    const wsUrl = `${wsBaseUrl}/ws?projectId=${encodeURIComponent(targetProjectId)}`
 
     try {
-      const ws = new WebSocket(wsUrl)
+      // Pass token via subprotocol (T10.1 - Security fix)
+      // Format: "access_token.{JWT}" - this keeps token out of URL logs
+      const ws = new WebSocket(wsUrl, [`access_token.${token}`])
       wsRef.current = ws
 
       ws.onopen = () => {
+        // T10.5: Check for stale connection
+        if (connectionIdRef.current !== thisConnectionId || !isMountedRef.current) {
+          ws.close()
+          return
+        }
+
         setStatus('connected')
         isConnectingRef.current = false
         reconnectDelayRef.current = INITIAL_RECONNECT_DELAY // Reset reconnect delay
@@ -280,13 +398,22 @@ export function useProjectWebSocket({
           }
         }, PING_INTERVAL)
 
-        onConnected?.()
+        // Use ref for callback to avoid stale closure (T10.5)
+        callbacksRef.current.onConnected?.()
       }
 
       ws.onmessage = (event) => {
+        // T10.5: Check for stale connection
+        if (connectionIdRef.current !== thisConnectionId || !isMountedRef.current) {
+          return
+        }
+
         try {
           const message: WebSocketMessage = JSON.parse(event.data)
           setLastMessage(message)
+
+          // Use callbacksRef to always get latest callbacks (T10.5)
+          const callbacks = callbacksRef.current
 
           switch (message.type) {
             case 'connected':
@@ -296,26 +423,26 @@ export function useProjectWebSocket({
             case 'task_updated':
               // Invalidate tasks query to refetch
               queryClient.invalidateQueries({
-                queryKey: projectTasksQueryKey(projectId),
+                queryKey: projectTasksQueryKey(targetProjectId),
               })
-              onTaskUpdated?.(message.data?.['task'] as Record<string, unknown>)
+              callbacks.onTaskUpdated?.(message.data?.['task'] as Record<string, unknown>)
               break
 
             case 'tasks_synced':
               // Invalidate both tasks and project queries
               queryClient.invalidateQueries({
-                queryKey: projectTasksQueryKey(projectId),
+                queryKey: projectTasksQueryKey(targetProjectId),
               })
               queryClient.invalidateQueries({
-                queryKey: projectQueryKey(projectId),
+                queryKey: projectQueryKey(targetProjectId),
               })
-              onTasksSynced?.(message.data as { tasksCount: number; completedCount: number; progress: number })
+              callbacks.onTasksSynced?.(message.data as { tasksCount: number; completedCount: number; progress: number })
               break
 
             case 'project_updated':
               // Invalidate project query
               queryClient.invalidateQueries({
-                queryKey: projectQueryKey(projectId),
+                queryKey: projectQueryKey(targetProjectId),
               })
               break
 
@@ -325,47 +452,47 @@ export function useProjectWebSocket({
 
             case 'activity_created':
               // New activity was created - notify listeners
-              onActivityCreated?.(message.data?.['activity'] as ActivityData)
+              callbacks.onActivityCreated?.(message.data?.['activity'] as ActivityData)
               break
 
             case 'notification_new':
               // New notification received - notify listeners (T6.7)
-              onNotificationNew?.(message.data?.['notification'] as NotificationData)
+              callbacks.onNotificationNew?.(message.data?.['notification'] as NotificationData)
               break
 
             case 'comment_typing_start':
               // Someone started typing a comment (T6.5)
-              onTypingStart?.(message.data?.['typing'] as TypingIndicatorData)
+              callbacks.onTypingStart?.(message.data?.['typing'] as TypingIndicatorData)
               break
 
             case 'comment_typing_stop':
               // Someone stopped typing a comment (T6.5)
-              onTypingStop?.(message.data as { userId: string; taskId: string; taskDisplayId: string })
+              callbacks.onTypingStop?.(message.data as { userId: string; taskId: string; taskDisplayId: string })
               break
 
             // Task locking messages (T6.6)
             case 'task_locked':
-              onTaskLocked?.(message.data?.['lock'] as TaskLockInfo)
+              callbacks.onTaskLocked?.(message.data?.['lock'] as TaskLockInfo)
               break
 
             case 'task_unlocked':
-              onTaskUnlocked?.(message.data as unknown as { taskId: string; taskUuid: string; unlockedBy: { id: string; email: string; name: string | null } | null })
+              callbacks.onTaskUnlocked?.(message.data as unknown as { taskId: string; taskUuid: string; unlockedBy: { id: string; email: string; name: string | null } | null })
               break
 
             case 'task_lock_extended':
-              onTaskLockExtended?.(message.data?.['lock'] as TaskLockInfo)
+              callbacks.onTaskLockExtended?.(message.data?.['lock'] as TaskLockInfo)
               break
 
             case 'locks_list':
-              onLocksList?.(message.data?.['locks'] as TaskLockInfo[])
+              callbacks.onLocksList?.(message.data?.['locks'] as TaskLockInfo[])
               break
 
             case 'task_lock_result':
-              onLockResult?.(message.data as unknown as TaskLockResult)
+              callbacks.onLockResult?.(message.data as unknown as TaskLockResult)
               break
 
             case 'task_unlock_result':
-              onUnlockResult?.(message.data as unknown as { success: boolean; taskId: string })
+              callbacks.onUnlockResult?.(message.data as unknown as { success: boolean; taskId: string })
               break
 
             case 'task_lock_extend_result':
@@ -374,23 +501,23 @@ export function useProjectWebSocket({
 
             // Presence messages (T7.8)
             case 'presence_list':
-              onPresenceList?.(message.data as { users: UserPresence[]; onlineCount: number })
+              callbacks.onPresenceList?.(message.data as { users: UserPresence[]; onlineCount: number })
               break
 
             case 'presence_joined':
-              onPresenceJoined?.(message.data as { user: UserPresence; onlineCount: number })
+              callbacks.onPresenceJoined?.(message.data as { user: UserPresence; onlineCount: number })
               break
 
             case 'presence_left':
-              onPresenceLeft?.(message.data as { userId: string; onlineCount: number })
+              callbacks.onPresenceLeft?.(message.data as { userId: string; onlineCount: number })
               break
 
             case 'presence_updated':
-              onPresenceUpdated?.(message.data as { userId: string; status: PresenceStatus; lastActiveAt: string })
+              callbacks.onPresenceUpdated?.(message.data as { userId: string; status: PresenceStatus; lastActiveAt: string })
               break
 
             case 'working_on_changed':
-              onWorkingOnChanged?.(message.data as { userId: string; workingOn: WorkingOnData | null })
+              callbacks.onWorkingOnChanged?.(message.data as { userId: string; workingOn: WorkingOnData | null })
               break
           }
         } catch {
@@ -399,14 +526,29 @@ export function useProjectWebSocket({
       }
 
       ws.onclose = (event) => {
+        // T10.5: Only handle close for current connection
+        if (connectionIdRef.current !== thisConnectionId) {
+          return
+        }
+
         cleanup()
+
+        // T10.5: Check if still mounted before updating state
+        if (!isMountedRef.current) {
+          return
+        }
+
         setStatus('disconnected')
-        onDisconnected?.()
+        callbacksRef.current.onDisconnected?.()
 
         // Reconnect with exponential backoff if we should
         if (shouldReconnectRef.current && event.code !== 4001) {
           // 4001 is auth error
           reconnectTimeoutRef.current = setTimeout(() => {
+            // T10.5: Double-check conditions before reconnecting
+            if (!isMountedRef.current || !shouldReconnectRef.current) {
+              return
+            }
             reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 2, MAX_RECONNECT_DELAY)
             connect()
           }, reconnectDelayRef.current)
@@ -414,59 +556,115 @@ export function useProjectWebSocket({
       }
 
       ws.onerror = () => {
+        // T10.5: Check for stale connection
+        if (connectionIdRef.current !== thisConnectionId || !isMountedRef.current) {
+          return
+        }
         setStatus('error')
         isConnectingRef.current = false
       }
     } catch {
-      setStatus('error')
+      // T10.5: Check if still mounted before updating state
+      if (isMountedRef.current) {
+        setStatus('error')
+      }
       isConnectingRef.current = false
     }
-  }, [projectId, authStore, queryClient, cleanup, onConnected, onDisconnected, onTaskUpdated, onTasksSynced, onActivityCreated, onNotificationNew, onTypingStart, onTypingStop, onTaskLocked, onTaskUnlocked, onTaskLockExtended, onLocksList, onLockResult, onUnlockResult, onPresenceList, onPresenceJoined, onPresenceLeft, onPresenceUpdated, onWorkingOnChanged])
+  }, [projectId, authStore, queryClient, cleanup]) // T10.5: Removed callback dependencies to prevent reconnection loops
 
   /**
-   * Disconnect from WebSocket server
+   * Disconnect from WebSocket server (T10.5 - increments connectionId to invalidate pending connections)
    */
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false
+    connectionIdRef.current++ // T10.5: Invalidate any pending connection attempts
     cleanup()
-    setStatus('disconnected')
+    if (isMountedRef.current) {
+      setStatus('disconnected')
+    }
   }, [cleanup])
 
   /**
-   * Manual reconnect (resets reconnect delay)
+   * Manual reconnect (resets reconnect delay) (T10.5 - properly handles reconnection)
    */
   const reconnect = useCallback(() => {
+    connectionIdRef.current++ // T10.5: Invalidate any pending connection attempts
     cleanup()
     reconnectDelayRef.current = INITIAL_RECONNECT_DELAY
     shouldReconnectRef.current = true
-    connect()
+    // T10.5: Small delay to ensure cleanup completes before reconnecting
+    setTimeout(() => {
+      if (isMountedRef.current && shouldReconnectRef.current) {
+        connect()
+      }
+    }, 50)
   }, [cleanup, connect])
 
-  // Connect on mount, disconnect on unmount
+  // T10.5: Track mounted state
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  // T10.5: Handle projectId changes - disconnect old, connect new
+  useEffect(() => {
+    const previousProjectId = currentProjectIdRef.current
+    currentProjectIdRef.current = projectId
+
+    // If projectId changed, we need to disconnect from old project
+    if (previousProjectId !== projectId && previousProjectId) {
+      connectionIdRef.current++ // Invalidate old connection
+      cleanup()
+    }
+  }, [projectId, cleanup])
+
+  // Connect on mount/enable, disconnect on unmount/disable (T10.5 - stable dependencies)
   useEffect(() => {
     if (!enabled || !projectId) {
+      // If disabled, disconnect
+      if (wsRef.current) {
+        connectionIdRef.current++
+        cleanup()
+        setStatus('disconnected')
+      }
       return
     }
 
     shouldReconnectRef.current = true
-    connect()
+
+    // T10.5: Small delay to batch rapid changes
+    const connectTimeout = setTimeout(() => {
+      if (isMountedRef.current && enabled && projectId) {
+        connect()
+      }
+    }, 10)
 
     return () => {
+      clearTimeout(connectTimeout)
       shouldReconnectRef.current = false
+      connectionIdRef.current++ // T10.5: Invalidate pending connections
       cleanup()
     }
   }, [enabled, projectId, connect, cleanup])
 
-  // Reconnect if auth state changes
+  // Reconnect if auth state changes (T10.5 - debounced to prevent rapid reconnection attempts)
   useEffect(() => {
     if (!enabled || !projectId) {
       return
     }
 
-    // If we're disconnected and user is authenticated, try to reconnect
-    if (status === 'disconnected' && authStore.isAuthenticated) {
-      shouldReconnectRef.current = true
-      connect()
+    // If we're disconnected/error and user is authenticated, try to reconnect
+    if ((status === 'disconnected' || status === 'error') && authStore.isAuthenticated) {
+      // T10.5: Debounce reconnection to prevent rapid attempts
+      const reconnectTimeout = setTimeout(() => {
+        if (isMountedRef.current && shouldReconnectRef.current && !isConnectingRef.current) {
+          connect()
+        }
+      }, 100)
+
+      return () => clearTimeout(reconnectTimeout)
     }
   }, [enabled, projectId, status, authStore.isAuthenticated, connect])
 

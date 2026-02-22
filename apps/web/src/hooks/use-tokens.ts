@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 
 export interface ApiToken {
   id: string
@@ -68,6 +70,9 @@ export function useCreateToken() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: tokensQueryKey })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -81,6 +86,9 @@ export function useRevokeToken() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: tokensQueryKey })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

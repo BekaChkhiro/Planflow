@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare, Users, Bell, BarChart3 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import {
   SheetContent,
   SheetTrigger,
   SheetTitle,
+  SheetDescription,
 } from "@/components/ui/sheet"
 import {
   DropdownMenu,
@@ -23,6 +25,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAuthStore } from "@/stores/auth-store"
 import { FeedbackDialog } from "@/components/feedback-dialog"
 import { NotificationCenter } from "@/components/notifications"
+import { SkipLink } from "@/components/ui/skip-link"
 
 function getInitials(name: string | undefined): string {
   if (!name) return 'U'
@@ -44,30 +47,51 @@ export function Navbar() {
   const [isOpen, setIsOpen] = React.useState(false)
   const [feedbackOpen, setFeedbackOpen] = React.useState(false)
   const { user, isAuthenticated, isInitialized, logout } = useAuthStore()
+  const pathname = usePathname()
+
+  // Check if a nav link is current
+  const isCurrentPage = (href: string) => {
+    if (href.startsWith('#')) return false
+    return pathname === href
+  }
 
   return (
     <>
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    {/* Skip Link for keyboard navigation */}
+    <SkipLink />
+
+    <header
+      className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      role="banner"
+    >
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
-        <Link href="/" className="flex items-center space-x-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+        <Link
+          href="/"
+          className="flex items-center space-x-2"
+          aria-label="PlanFlow - Go to homepage"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary" aria-hidden="true">
             <span className="text-sm font-bold text-primary-foreground">P</span>
           </div>
           <span className="text-xl font-bold">PlanFlow</span>
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex md:items-center md:space-x-6">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </Link>
-          ))}
+        <nav className="hidden md:flex md:items-center md:space-x-6" aria-label="Main navigation">
+          {navLinks.map((link) => {
+            const isCurrent = isCurrentPage(link.href)
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                aria-current={isCurrent ? 'page' : undefined}
+              >
+                {link.label}
+              </Link>
+            )
+          })}
         </nav>
 
         {/* Desktop Auth Buttons */}
@@ -86,7 +110,12 @@ export function Navbar() {
             <NotificationCenter />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                <Button
+                  variant="ghost"
+                  className="relative h-9 w-9 rounded-full"
+                  aria-label={`User menu for ${user?.name || 'user'}`}
+                  aria-haspopup="menu"
+                >
                   <Avatar className="h-9 w-9">
                     <AvatarFallback className="bg-primary text-primary-foreground">
                       {getInitials(user?.name)}
@@ -166,14 +195,30 @@ export function Navbar() {
         {/* Mobile Menu */}
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild className="md:hidden">
-            <Button variant="ghost" size="icon">
-              <Menu className="h-5 w-5" />
-              <span className="sr-only">Toggle menu</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Open navigation menu"
+              aria-expanded={isOpen}
+              aria-controls="mobile-nav"
+            >
+              <Menu className="h-5 w-5" aria-hidden="true" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+          <SheetContent
+            side="right"
+            className="w-[300px] sm:w-[400px]"
+            aria-describedby="mobile-nav-description"
+          >
             <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-            <nav className="flex flex-col space-y-4 mt-8">
+            <SheetDescription id="mobile-nav-description" className="sr-only">
+              Main navigation menu with links to features, pricing, docs, and account settings.
+            </SheetDescription>
+            <nav
+              id="mobile-nav"
+              className="flex flex-col space-y-4 mt-8"
+              aria-label="Mobile navigation"
+            >
               {navLinks.map((link) => (
                 <Link
                   key={link.href}

@@ -21,9 +21,16 @@ export function getDb(): NeonQueryFunction<boolean, boolean> {
   return db
 }
 
-// Re-export Drizzle client and schema
-export { getDbClient, schema } from './client'
-export type { DbClient } from './client'
+// Re-export Drizzle client, schema, and transaction utilities
+export {
+  getDbClient,
+  getDbClientWithTransactions,
+  withTransaction,
+  withTransactionIsolated,
+  closePool,
+  schema,
+} from './client'
+export type { DbClient, DbClientWithTx, TransactionCallback } from './client'
 
 /**
  * Check database connectivity

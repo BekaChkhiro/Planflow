@@ -166,9 +166,16 @@ export function CommentInput({
 
   const canSubmit = content.trim().length > 0 && !isSubmitting
 
+  const textareaId = `comment-input-${taskId}`
+  const hintId = `comment-hint-${taskId}`
+
   return (
-    <div className="relative space-y-2">
+    <div className="relative space-y-2" role="form" aria-label="Add a comment">
+      <label htmlFor={textareaId} className="sr-only">
+        Comment
+      </label>
       <Textarea
+        id={textareaId}
         ref={textareaRef}
         value={content}
         onChange={handleChange}
@@ -181,6 +188,10 @@ export function CommentInput({
         disabled={isSubmitting}
         className="min-h-[80px] resize-none"
         rows={3}
+        aria-describedby={hintId}
+        aria-expanded={showMentions}
+        aria-haspopup={showMentions ? 'listbox' : undefined}
+        aria-autocomplete={showMentions ? 'list' : undefined}
       />
 
       {showMentions && (
@@ -195,11 +206,14 @@ export function CommentInput({
       )}
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          <kbd className="rounded border px-1 text-xs">@</kbd> to mention{' '}
-          <span className="text-muted-foreground/70">|</span>{' '}
-          <kbd className="rounded border px-1 text-xs">Cmd</kbd>+
-          <kbd className="rounded border px-1 text-xs">Enter</kbd> to submit
+        <p id={hintId} className="text-xs text-muted-foreground">
+          <kbd className="rounded border px-1 text-xs" aria-label="At symbol">@</kbd>
+          {' '}to mention{' '}
+          <span className="text-muted-foreground/70" aria-hidden="true">|</span>{' '}
+          <kbd className="rounded border px-1 text-xs">Cmd</kbd>
+          <span aria-hidden="true">+</span>
+          <kbd className="rounded border px-1 text-xs">Enter</kbd>
+          {' '}to submit
         </p>
         <div className="flex gap-2">
           {showCancel && onCancel && (
@@ -209,6 +223,7 @@ export function CommentInput({
               size="sm"
               onClick={onCancel}
               disabled={isSubmitting}
+              aria-label="Cancel comment"
             >
               Cancel
             </Button>
@@ -218,18 +233,26 @@ export function CommentInput({
             size="sm"
             onClick={handleSubmit}
             disabled={!canSubmit}
+            aria-label={isSubmitting ? 'Sending comment...' : 'Send comment'}
           >
             {isSubmitting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <>
-                <Send className="mr-2 h-4 w-4" />
+                <Send className="mr-2 h-4 w-4" aria-hidden="true" />
                 Send
               </>
             )}
           </Button>
         </div>
       </div>
+
+      {/* Screen reader announcement for loading state */}
+      {isSubmitting && (
+        <div className="sr-only" role="status" aria-live="polite">
+          Sending your comment...
+        </div>
+      )}
     </div>
   )
 }

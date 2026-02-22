@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 import type { ProjectLimits, SubscriptionTier, SubscriptionStatus } from '@planflow/shared'
 
 export interface Project {
@@ -134,6 +136,11 @@ export function useCreateProject() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey })
     },
+    onError: (error: unknown) => {
+      // Don't show toast for ProjectLimitError - handled by UI
+      if (error instanceof ProjectLimitError) return
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -147,6 +154,9 @@ export function useDeleteProject() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -199,6 +209,9 @@ export function useUpdateProject() {
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey })
       queryClient.setQueryData(projectQueryKey(project.id), project)
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -274,6 +287,9 @@ export function useAssignTask(projectId: string) {
     onSuccess: () => {
       // Invalidate tasks query to refetch with updated assignee
       queryClient.invalidateQueries({ queryKey: projectTasksQueryKey(projectId) })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

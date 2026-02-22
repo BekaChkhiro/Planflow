@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 import type { GitHubIntegrationStatus, GitHubRepository } from '@planflow/shared'
 
 // Query key for GitHub integration
@@ -92,8 +94,8 @@ export function useGitHubAuthorize() {
       )
       return response.data
     },
-    onError: (error: Error) => {
-      console.error('GitHub authorize error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -116,8 +118,8 @@ export function useGitHubCallback() {
       // Invalidate GitHub integration query to refresh status
       queryClient.invalidateQueries({ queryKey: githubQueryKey })
     },
-    onError: (error: Error) => {
-      console.error('GitHub callback error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -141,8 +143,8 @@ export function useGitHubDisconnect() {
       // Also invalidate repos since we're disconnected
       queryClient.invalidateQueries({ queryKey: githubReposQueryKey })
     },
-    onError: (error: Error) => {
-      console.error('GitHub disconnect error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -164,8 +166,8 @@ export function useGitHubRefresh() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: githubQueryKey })
     },
-    onError: (error: Error) => {
-      console.error('GitHub refresh error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -368,8 +370,8 @@ export function useLinkTaskToGitHub() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Link task to GitHub error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -396,8 +398,8 @@ export function useUnlinkTaskFromGitHub() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Unlink task from GitHub error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -436,8 +438,8 @@ export function useCreateGitHubIssueFromTask() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Create GitHub issue from task error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -464,8 +466,8 @@ export function useSyncTaskGitHubIssue() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Sync task GitHub issue error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -763,8 +765,8 @@ export function useLinkTaskToGitHubPr() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Link task to GitHub PR error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -791,8 +793,8 @@ export function useUnlinkTaskFromGitHubPr() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Unlink task from GitHub PR error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -819,8 +821,8 @@ export function useSyncTaskGitHubPr() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Sync task GitHub PR error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -926,8 +928,8 @@ export function useCreateGitHubPrFromTask() {
       // Invalidate tasks list to update UI
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.projectId] })
     },
-    onError: (error: Error) => {
-      console.error('Create GitHub PR from task error:', error)
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

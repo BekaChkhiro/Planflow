@@ -75,6 +75,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { IntegrationCardSkeleton } from '@/components/ui/loading-skeletons'
 import { useToast } from '@/hooks/use-toast'
 
 // Slack icon component (Lucide doesn't have one)
@@ -776,8 +777,10 @@ function IntegrationsList() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="grid gap-6">
+        <IntegrationCardSkeleton />
+        <IntegrationCardSkeleton />
+        <IntegrationCardSkeleton />
       </div>
     )
   }

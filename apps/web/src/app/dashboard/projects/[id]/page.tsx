@@ -252,12 +252,24 @@ function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigni
   }
 
   if (view === 'list') {
+    const statusLabel = statusConfig[task.status].label
+    const taskLabel = `${task.taskId}: ${task.name}, Status: ${statusLabel}, Complexity: ${task.complexity}, Phase ${task.phase}${task.assignee ? `, Assigned to ${task.assignee.name || task.assignee.email}` : ', Unassigned'}`
+
     return (
-      <div
-        className="flex items-center gap-4 rounded-lg border bg-white p-4 transition-colors hover:bg-gray-50 cursor-pointer"
+      <article
+        className="flex items-center gap-4 rounded-lg border bg-white p-4 transition-colors hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handleClick()
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-label={taskLabel}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100" aria-hidden="true">
           <StatusIcon
             className={`h-4 w-4 ${
               task.status === 'IN_PROGRESS' ? 'animate-spin text-blue-500' : ''
@@ -301,13 +313,25 @@ function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigni
   }
 
   // Kanban card
+  const statusLabel = statusConfig[task.status].label
+  const kanbanTaskLabel = `${task.taskId}: ${task.name}, Complexity: ${task.complexity}, Phase ${task.phase}${task.assignee ? `, Assigned to ${task.assignee.name || task.assignee.email}` : ''}`
+
   return (
-    <div
-      className="group rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md cursor-pointer"
+    <article
+      className="group rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleClick()
+        }
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label={kanbanTaskLabel}
     >
       <div className="mb-2 flex items-start justify-between">
-        <span className="font-mono text-xs text-muted-foreground">{task.taskId}</span>
+        <span className="font-mono text-xs text-muted-foreground" aria-hidden="true">{task.taskId}</span>
         <div className="flex items-center gap-1.5">
           {teamMembers.length > 0 && onAssign && (
             <TaskAssigneeSelector
@@ -364,20 +388,26 @@ function KanbanColumn({
   const config = statusConfig[status]
   const StatusIcon = config.icon
 
+  const columnId = `kanban-column-${status.toLowerCase()}`
+
   return (
-    <div className={`flex min-w-[280px] flex-col rounded-lg ${config.columnColor} p-3`}>
+    <section
+      className={`flex min-w-[280px] flex-col rounded-lg ${config.columnColor} p-3`}
+      aria-labelledby={columnId}
+    >
       <div className="mb-3 flex items-center gap-2">
         <StatusIcon
           className={`h-4 w-4 ${status === 'IN_PROGRESS' ? 'animate-spin' : ''}`}
+          aria-hidden="true"
         />
-        <h3 className="font-semibold">{config.label}</h3>
-        <Badge variant="secondary" className="ml-auto">
+        <h3 id={columnId} className="font-semibold">{config.label}</h3>
+        <Badge variant="secondary" className="ml-auto" aria-label={`${tasks.length} tasks`}>
           {tasks.length}
         </Badge>
       </div>
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto" role="list" aria-label={`${config.label} tasks`}>
         {tasks.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-gray-200 p-4 text-center">
+          <div className="rounded-lg border-2 border-dashed border-gray-200 p-4 text-center" role="status">
             <p className="text-sm text-muted-foreground">No tasks</p>
           </div>
         ) : (
@@ -426,8 +456,13 @@ function KanbanView({ tasks, teamMembers, onAssign, isAssigning, assigningTaskId
     DONE: tasks.filter((t) => t.status === 'DONE').sort(sortByUpdatedAtDesc),
   }
 
+  const totalTasks = tasks.length
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
+    <div
+      className="flex gap-4 overflow-x-auto pb-4"
+      role="region"
+      aria-label={`Kanban board with ${totalTasks} tasks across 4 columns`}
+    >
       <KanbanColumn status="TODO" tasks={tasksByStatus.TODO} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
       <KanbanColumn status="IN_PROGRESS" tasks={tasksByStatus.IN_PROGRESS} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
       <KanbanColumn status="BLOCKED" tasks={tasksByStatus.BLOCKED} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
@@ -462,24 +497,26 @@ function ListView({
     const statuses: DisplayTask['status'][] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE']
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" role="region" aria-label="Tasks grouped by status">
         {statuses.map((status) => {
           const statusTasks = tasks.filter((t) => t.status === status)
           if (statusTasks.length === 0) return null
 
           const config = statusConfig[status]
           const StatusIcon = config.icon
+          const sectionId = `status-section-${status.toLowerCase()}`
 
           return (
-            <div key={status}>
+            <section key={status} aria-labelledby={sectionId}>
               <div className="mb-3 flex items-center gap-2">
                 <StatusIcon
                   className={`h-4 w-4 ${status === 'IN_PROGRESS' ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
                 />
-                <h3 className="font-semibold">{config.label}</h3>
-                <Badge variant="secondary">{statusTasks.length}</Badge>
+                <h3 id={sectionId} className="font-semibold">{config.label}</h3>
+                <Badge variant="secondary" aria-label={`${statusTasks.length} tasks`}>{statusTasks.length}</Badge>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2" role="list" aria-label={`${config.label} tasks`}>
                 {statusTasks.map((task) => (
                   <TaskCard
                     key={task.id}
@@ -494,7 +531,7 @@ function ListView({
                   />
                 ))}
               </div>
-            </div>
+            </section>
           )
         })}
       </div>
@@ -505,20 +542,22 @@ function ListView({
   const phases = [...new Set(tasks.map((t) => t.phase))].sort((a, b) => a - b)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" role="region" aria-label="Tasks grouped by phase">
       {phases.map((phase) => {
         const phaseTasks = tasks.filter((t) => t.phase === phase)
+        const phaseId = `phase-section-${phase}`
+        const completedCount = phaseTasks.filter((t) => t.status === 'DONE').length
 
         return (
-          <div key={phase}>
+          <section key={phase} aria-labelledby={phaseId}>
             <div className="mb-3 flex items-center gap-2">
-              <h3 className="font-semibold">Phase {phase}</h3>
-              <Badge variant="secondary">{phaseTasks.length}</Badge>
-              <span className="ml-2 text-sm text-muted-foreground">
-                {phaseTasks.filter((t) => t.status === 'DONE').length}/{phaseTasks.length} completed
+              <h3 id={phaseId} className="font-semibold">Phase {phase}</h3>
+              <Badge variant="secondary" aria-label={`${phaseTasks.length} tasks`}>{phaseTasks.length}</Badge>
+              <span className="ml-2 text-sm text-muted-foreground" aria-label={`${completedCount} of ${phaseTasks.length} completed`}>
+                {completedCount}/{phaseTasks.length} completed
               </span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2" role="list" aria-label={`Phase ${phase} tasks`}>
               {phaseTasks.map((task) => (
                 <TaskCard
                   key={task.id}
@@ -533,7 +572,7 @@ function ListView({
                 />
               ))}
             </div>
-          </div>
+          </section>
         )
       })}
     </div>
@@ -939,11 +978,14 @@ function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false, getPrese
 
           {/* Filters */}
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Filter:</span>
+            <span id="filter-label" className="text-sm text-muted-foreground">Filter:</span>
+            <label htmlFor="filter-status" className="sr-only">Filter by status</label>
             <select
+              id="filter-status"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as DisplayTask['status'] | 'ALL')}
               className="h-8 rounded-md border bg-background px-2 text-sm"
+              aria-describedby="filter-label"
             >
               <option value="ALL">All Status</option>
               <option value="TODO">To Do</option>
@@ -951,12 +993,15 @@ function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false, getPrese
               <option value="BLOCKED">Blocked</option>
               <option value="DONE">Done</option>
             </select>
+            <label htmlFor="filter-phase" className="sr-only">Filter by phase</label>
             <select
+              id="filter-phase"
               value={filterPhase}
               onChange={(e) =>
                 setFilterPhase(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value, 10))
               }
               className="h-8 rounded-md border bg-background px-2 text-sm"
+              aria-describedby="filter-label"
             >
               <option value="ALL">All Phases</option>
               {phases.map((phase) => (

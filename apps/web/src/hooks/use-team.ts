@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 
 // Types
 export type MemberRole = 'owner' | 'admin' | 'editor' | 'viewer'
@@ -125,6 +127,9 @@ export function useCreateOrganization() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: organizationsQueryKey })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -175,6 +180,9 @@ export function useInviteMember(organizationId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: invitationsQueryKey(organizationId) })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -195,6 +203,9 @@ export function useUpdateMemberRole(organizationId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: membersQueryKey(organizationId) })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -214,6 +225,9 @@ export function useRemoveMember(organizationId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: membersQueryKey(organizationId) })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -230,6 +244,9 @@ export function useRevokeInvitation(organizationId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: invitationsQueryKey(organizationId) })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

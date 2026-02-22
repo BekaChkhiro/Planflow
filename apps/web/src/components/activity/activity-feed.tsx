@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity as ActivityIcon, Loader2, RefreshCw, Filter } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { ActivityFeedSkeleton } from '@/components/ui/loading-skeletons'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -236,9 +237,7 @@ export function ActivityFeed({
         onScrollCapture={handleScroll}
       >
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
+          <ActivityFeedSkeleton count={5} className="px-2" />
         ) : filteredActivities.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
             <ActivityIcon className="h-8 w-8 mb-2 opacity-50" />

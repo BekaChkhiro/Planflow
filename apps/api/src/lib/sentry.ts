@@ -9,6 +9,9 @@
  */
 
 import * as Sentry from '@sentry/node'
+import { loggers } from './logger.js'
+
+const log = loggers.sentry
 
 // Environment variables
 const SENTRY_DSN = process.env['SENTRY_DSN']
@@ -24,7 +27,7 @@ export const isSentryConfigured = !!SENTRY_DSN
  */
 export function initSentry(): void {
   if (!SENTRY_DSN) {
-    console.log('🔕 Sentry DSN not configured, error tracking disabled')
+    log.info('Sentry DSN not configured, error tracking disabled')
     return
   }
 
@@ -86,7 +89,7 @@ export function initSentry(): void {
     ],
   })
 
-  console.log(`🛡️  Sentry initialized (env: ${NODE_ENV})`)
+  log.info({ env: NODE_ENV }, 'Sentry initialized')
 }
 
 /**
@@ -101,7 +104,7 @@ export function captureException(
   }
 ): string | undefined {
   if (!isSentryConfigured) {
-    console.error('Uncaptured exception:', error)
+    log.error({ err: error }, 'Uncaptured exception (Sentry not configured)')
     return undefined
   }
 
@@ -131,7 +134,9 @@ export function captureMessage(
   level: 'info' | 'warning' | 'error' = 'info'
 ): string | undefined {
   if (!isSentryConfigured) {
-    console.log(`[${level.toUpperCase()}] ${message}`)
+    // Map Sentry level names to pino level names
+    const pinoLevel = level === 'warning' ? 'warn' : level
+    log[pinoLevel](message)
     return undefined
   }
 

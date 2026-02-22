@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 import { useCallback, useState, useEffect } from 'react'
 import type { NotificationData } from './use-websocket'
 
@@ -78,6 +80,9 @@ export function useNotifications(options?: { limit?: number; enabled?: boolean }
       queryClient.invalidateQueries({ queryKey: notificationsQueryKey(limit) })
       queryClient.invalidateQueries({ queryKey: unreadCountQueryKey })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 
   // Mutation to mark all notifications as read
@@ -88,6 +93,9 @@ export function useNotifications(options?: { limit?: number; enabled?: boolean }
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notificationsQueryKey(limit) })
       queryClient.invalidateQueries({ queryKey: unreadCountQueryKey })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 

@@ -64,6 +64,32 @@ export const TokenRefreshResponseSchema = z.object({
 
 export type TokenRefreshResponse = z.infer<typeof TokenRefreshResponseSchema>
 
+// Session schema (for listing active sessions)
+export const SessionSchema = z.object({
+  id: z.string().uuid(),
+  createdAt: z.date(),
+  expiresAt: z.date(),
+  isCurrent: z.boolean(), // true if this is the session making the request
+})
+
+export type Session = z.infer<typeof SessionSchema>
+
+// Sessions list response
+export const SessionsResponseSchema = z.object({
+  sessions: z.array(SessionSchema),
+  total: z.number(),
+})
+
+export type SessionsResponse = z.infer<typeof SessionsResponseSchema>
+
+// Logout all response
+export const LogoutAllResponseSchema = z.object({
+  revokedCount: z.number(),
+  message: z.string(),
+})
+
+export type LogoutAllResponse = z.infer<typeof LogoutAllResponseSchema>
+
 // Project types
 export const ProjectSchema = z.object({
   id: z.string().uuid(),

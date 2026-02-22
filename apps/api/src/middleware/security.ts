@@ -1,6 +1,7 @@
 import { Context, Next } from 'hono'
 import { cors } from 'hono/cors'
 import crypto from 'crypto'
+import { getRateLimitStore, type RateLimitStore } from '../lib/redis'
 
 // ============================================
 // CORS Configuration
@@ -62,13 +63,15 @@ export const secureCors = cors({
       }
     }
 
-    // Allow Railway domains (*.up.railway.app)
-    if (origin.includes('.up.railway.app')) {
+    // Allow Railway domains (*.up.railway.app) - strict regex validation
+    // Pattern: https://<subdomain>.up.railway.app (subdomain can contain lowercase letters, numbers, hyphens)
+    if (/^https:\/\/[a-z0-9][a-z0-9-]*\.up\.railway\.app$/.test(origin)) {
       return origin
     }
 
-    // Allow Vercel preview deployments
-    if (origin.includes('.vercel.app')) {
+    // Allow Vercel preview deployments - strict regex validation
+    // Pattern: https://<subdomain>.vercel.app (subdomain can contain lowercase letters, numbers, hyphens)
+    if (/^https:\/\/[a-z0-9][a-z0-9-]*\.vercel\.app$/.test(origin)) {
       return origin
     }
 
@@ -125,27 +128,47 @@ export async function securityHeaders(c: Context, next: Next) {
 }
 
 // ============================================
-// Rate Limiting
+// Rate Limiting (Redis-backed with in-memory fallback)
 // ============================================
 
-interface RateLimitEntry {
-  count: number
-  resetAt: number
+// Store reference for backwards compatibility
+let _rateLimitStore: RateLimitStore | null = null
+
+/**
+ * Get the rate limit store instance
+ * Lazy initialization to allow Redis to connect first
+ */
+function getStore(): RateLimitStore {
+  if (!_rateLimitStore) {
+    _rateLimitStore = getRateLimitStore()
+  }
+  return _rateLimitStore
 }
 
-// In-memory rate limit store (for single-instance deployments)
-// For production with multiple instances, use Redis
-const rateLimitStore = new Map<string, RateLimitEntry>()
+/**
+ * Start the rate limit cleanup interval
+ * @deprecated No longer needed - cleanup is handled by store implementation
+ */
+export function startRateLimitCleanup(): void {
+  // No-op for backwards compatibility
+  // Cleanup is now handled internally by the store
+}
 
-// Clean up expired entries periodically
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (entry.resetAt < now) {
-      rateLimitStore.delete(key)
-    }
-  }
-}, 60000) // Clean every minute
+/**
+ * Stop the rate limit cleanup interval
+ * @deprecated No longer needed - cleanup is handled by store implementation
+ */
+export function stopRateLimitCleanup(): void {
+  // No-op for backwards compatibility
+}
+
+/**
+ * Clear all rate limit entries
+ * Useful for testing or reset scenarios
+ */
+export async function clearRateLimitStore(): Promise<void> {
+  await getStore().clear()
+}
 
 interface RateLimitConfig {
   windowMs: number // Time window in milliseconds
@@ -157,6 +180,8 @@ interface RateLimitConfig {
 
 /**
  * Rate limiting middleware factory
+ * Uses Redis when available, falls back to in-memory store
+ * Works across multiple server instances when using Redis
  */
 export function rateLimit(config: RateLimitConfig) {
   const {
@@ -167,43 +192,39 @@ export function rateLimit(config: RateLimitConfig) {
   } = config
 
   return async (c: Context, next: Next) => {
-    const key = `ratelimit:${keyGenerator(c)}`
-    const now = Date.now()
+    const key = keyGenerator(c)
+    const store = getStore()
 
-    let entry = rateLimitStore.get(key)
+    try {
+      const { count, resetAt } = await store.increment(key, windowMs)
+      const now = Date.now()
 
-    if (!entry || entry.resetAt < now) {
-      // Create new entry
-      entry = {
-        count: 0,
-        resetAt: now + windowMs,
+      // Set rate limit headers
+      const remaining = Math.max(0, maxRequests - count)
+      const resetSeconds = Math.ceil((resetAt - now) / 1000)
+
+      c.header('X-RateLimit-Limit', maxRequests.toString())
+      c.header('X-RateLimit-Remaining', remaining.toString())
+      c.header('X-RateLimit-Reset', resetSeconds.toString())
+
+      if (count > maxRequests) {
+        c.header('Retry-After', resetSeconds.toString())
+        return c.json(
+          {
+            success: false,
+            error: message,
+            retryAfter: resetSeconds,
+          },
+          429
+        )
       }
+
+      await next()
+    } catch (error) {
+      // If rate limiting fails, allow the request but log the error
+      console.error('[RateLimit] Error checking rate limit:', error)
+      await next()
     }
-
-    entry.count++
-    rateLimitStore.set(key, entry)
-
-    // Set rate limit headers
-    const remaining = Math.max(0, maxRequests - entry.count)
-    const resetSeconds = Math.ceil((entry.resetAt - now) / 1000)
-
-    c.header('X-RateLimit-Limit', maxRequests.toString())
-    c.header('X-RateLimit-Remaining', remaining.toString())
-    c.header('X-RateLimit-Reset', resetSeconds.toString())
-
-    if (entry.count > maxRequests) {
-      c.header('Retry-After', resetSeconds.toString())
-      return c.json(
-        {
-          success: false,
-          error: message,
-          retryAfter: resetSeconds,
-        },
-        429
-      )
-    }
-
-    await next()
   }
 }
 

@@ -3,6 +3,9 @@ import type { Server as HttpServer } from 'http'
 import type { Http2SecureServer, Http2Server } from 'http2'
 import { URL } from 'url'
 import { authenticateWebSocket } from './auth.js'
+import { loggers } from '../lib/logger.js'
+
+const log = loggers.websocket
 import { connectionManager, type Client, type WebSocketMessage, type PresenceStatus } from './connection-manager.js'
 import {
   broadcastPresenceJoined,
@@ -38,6 +41,30 @@ interface ExtendedWebSocket extends WebSocket {
 type ServerType = HttpServer | Http2Server | Http2SecureServer
 
 /**
+ * Extract token from WebSocket subprotocol header (T10.1 - Security fix)
+ * Token is passed as subprotocol in format: "access_token.{JWT}"
+ * This prevents token from being logged in server access logs or browser history
+ */
+function extractTokenFromProtocol(request: { headers: Record<string, string | string[] | undefined> }): string | null {
+  const protocolHeader = request.headers['sec-websocket-protocol']
+  if (!protocolHeader) return null
+
+  // Handle both string and array formats
+  const protocols = Array.isArray(protocolHeader)
+    ? protocolHeader
+    : protocolHeader.split(',').map(p => p.trim())
+
+  // Find the access_token protocol
+  for (const protocol of protocols) {
+    if (protocol.startsWith('access_token.')) {
+      return protocol.substring('access_token.'.length)
+    }
+  }
+
+  return null
+}
+
+/**
  * Setup WebSocket server on the existing HTTP server
  */
 export function setupWebSocketServer(server: ServerType): WebSocketServer {
@@ -46,22 +73,39 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
   const wss = new WebSocketServer({
     server: server as HttpServer,
     path: '/ws',
+    // Handle subprotocol selection for token auth (T10.1)
+    handleProtocols: (protocols, request) => {
+      // Accept the access_token protocol if present
+      for (const protocol of protocols) {
+        if (protocol.startsWith('access_token.')) {
+          return protocol
+        }
+      }
+      // Also accept 'planflow-v1' as a valid protocol
+      if (protocols.has('planflow-v1')) {
+        return 'planflow-v1'
+      }
+      return false
+    },
   })
 
-  console.log('[WS] WebSocket server initialized on /ws')
+  log.info('WebSocket server initialized on /ws (secure token via subprotocol)')
 
   wss.on('connection', async (ws: ExtendedWebSocket, request) => {
-    // Parse URL params for authentication
+    // Parse URL params for projectId only (T10.1 - token moved to subprotocol)
     const url = new URL(request.url || '', `http://${request.headers.host}`)
-    const token = url.searchParams.get('token')
     const projectId = url.searchParams.get('projectId')
+
+    // Extract token from subprotocol header (T10.1 - Security fix)
+    // Token is no longer in URL, preventing exposure in logs/history
+    const token = extractTokenFromProtocol(request)
 
     // Authenticate the connection
     const auth = await authenticateWebSocket(token, projectId)
 
     if (!auth.success) {
       const error = (auth as { success: false; error: string }).error
-      console.warn(`[WS] Connection rejected: ${error}`)
+      log.warn({ error }, 'Connection rejected')
       ws.close(4001, error)
       return
     }
@@ -98,8 +142,10 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
     // Send presence list to new client (T5.9)
     sendPresenceList(auth.projectId, client)
 
-    // Send locks list to new client (T6.6)
-    sendLocksList(auth.projectId, client)
+    // Send locks list to new client (T6.6) - async, but we don't need to wait
+    sendLocksList(auth.projectId, client).catch(err => {
+      log.error({ err, projectId: auth.projectId }, 'Error sending locks list')
+    })
 
     // If first connection for this user, broadcast presence_joined to others
     if (isFirstConn) {
@@ -127,7 +173,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
     })
 
     // Handle incoming messages
-    ws.on('message', (data) => {
+    ws.on('message', async (data) => {
       try {
         const message = JSON.parse(data.toString())
 
@@ -174,7 +220,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
                 startedAt: startedAt.toISOString(),
               }
             )
-            console.log(`[WS] User ${auth.userId} started working on ${taskId}`)
+            log.debug({ userId: auth.userId, taskId }, 'User started working on task')
           }
           return
         }
@@ -187,7 +233,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
             auth.userId,
             null
           )
-          console.log(`[WS] User ${auth.userId} stopped working`)
+          log.debug({ userId: auth.userId }, 'User stopped working')
           return
         }
 
@@ -205,7 +251,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
               startedAt: startedAt.toISOString(),
             }
             broadcastTypingStart(auth.projectId, typingData, auth.userId)
-            console.log(`[WS] User ${auth.userId} started typing on ${taskDisplayId}`)
+            log.debug({ userId: auth.userId, taskDisplayId }, 'User started typing')
           }
           return
         }
@@ -224,16 +270,16 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
               },
               auth.userId
             )
-            console.log(`[WS] User ${auth.userId} stopped typing`)
+            log.debug({ userId: auth.userId }, 'User stopped typing')
           }
           return
         }
 
-        // Handle task_lock from client (T6.6)
+        // Handle task_lock from client (T6.6 + T10.9 Redis persistence)
         if (message.type === 'task_lock') {
           const { taskId, taskUuid, taskName } = message
           if (taskId && taskUuid) {
-            const result = acquireTaskLock(
+            const result = await acquireTaskLock(
               auth.projectId,
               taskId,
               taskUuid,
@@ -263,17 +309,17 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
               } else {
                 broadcastTaskLocked(auth.projectId, result.lock, auth.userId)
               }
-              console.log(`[WS] User ${auth.userId} locked task ${taskId}`)
+              log.debug({ userId: auth.userId, taskId }, 'User locked task')
             }
           }
           return
         }
 
-        // Handle task_unlock from client (T6.6)
+        // Handle task_unlock from client (T6.6 + T10.9 Redis persistence)
         if (message.type === 'task_unlock') {
           const { taskId, taskUuid } = message
           if (taskId) {
-            const released = releaseTaskLock(auth.projectId, taskId, auth.userId)
+            const released = await releaseTaskLock(auth.projectId, taskId, auth.userId)
 
             if (released) {
               broadcastTaskUnlocked(
@@ -288,7 +334,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
                   },
                 }
               )
-              console.log(`[WS] User ${auth.userId} unlocked task ${taskId}`)
+              log.debug({ userId: auth.userId, taskId }, 'User unlocked task')
             }
 
             // Send result back to requesting client
@@ -306,14 +352,14 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
           return
         }
 
-        // Handle task_lock_extend from client (T6.6)
+        // Handle task_lock_extend from client (T6.6 + T10.9 Redis persistence)
         if (message.type === 'task_lock_extend') {
           const { taskId } = message
           if (taskId) {
-            const extended = extendTaskLock(auth.projectId, taskId, auth.userId)
+            const extended = await extendTaskLock(auth.projectId, taskId, auth.userId)
 
             if (extended) {
-              const lock = connectionManager.getLock(auth.projectId, taskId)
+              const lock = await connectionManager.getLock(auth.projectId, taskId)
               if (lock) {
                 broadcastTaskLockExtended(auth.projectId, lock)
               }
@@ -335,15 +381,15 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
         }
 
         // Log other messages for debugging
-        console.log(`[WS] Received message from ${auth.userId}:`, message.type)
+        log.debug({ userId: auth.userId, type: message.type }, 'Received message')
       } catch (err) {
-        console.error('[WS] Failed to parse message:', err)
+        log.error({ err }, 'Failed to parse message')
       }
     })
 
     // Handle client disconnect
     ws.on('close', (code, reason) => {
-      console.log(`[WS] Client disconnected: code=${code}, reason=${reason.toString() || 'none'}`)
+      log.debug({ code, reason: reason.toString() || 'none', userId: auth.userId }, 'Client disconnected')
 
       // Check if this is the last connection for the user BEFORE removing (T5.9)
       const isLastConn = connectionManager.isLastConnection(auth.projectId, auth.userId)
@@ -375,16 +421,19 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
           })
         }
 
-        // Release any locks held by this user (T6.6)
-        const releasedLocks = releaseUserLocks(auth.projectId, auth.userId)
-        for (const taskId of releasedLocks) {
-          broadcastTaskUnlocked(auth.projectId, {
-            taskId,
-            taskUuid: '', // UUID not available here, but taskId is sufficient
-            unlockedBy: null, // null indicates auto-release due to disconnect
-          })
-          console.log(`[WS] Auto-released lock on ${taskId} due to user disconnect`)
-        }
+        // Release any locks held by this user (T6.6 + T10.9 Redis persistence)
+        releaseUserLocks(auth.projectId, auth.userId).then(releasedLocks => {
+          for (const taskId of releasedLocks) {
+            broadcastTaskUnlocked(auth.projectId, {
+              taskId,
+              taskUuid: '', // UUID not available here, but taskId is sufficient
+              unlockedBy: null, // null indicates auto-release due to disconnect
+            })
+            log.debug({ taskId, userId: auth.userId }, 'Auto-released lock due to user disconnect')
+          }
+        }).catch(err => {
+          log.error({ err, userId: auth.userId }, 'Error releasing user locks')
+        })
       }
 
       // Clear ping interval if exists
@@ -395,14 +444,14 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
 
     // Handle errors
     ws.on('error', (err) => {
-      console.error('[WS] WebSocket error:', err)
+      log.error({ err, userId: auth.userId }, 'WebSocket error')
       connectionManager.removeClient(auth.projectId, client)
     })
 
     // Start ping interval for this connection
     ws.pingInterval = setInterval(() => {
       if (ws.isAlive === false) {
-        console.log('[WS] Client unresponsive, terminating connection')
+        log.debug({ userId: auth.userId }, 'Client unresponsive, terminating connection')
         clearInterval(ws.pingInterval)
         ws.terminate()
         return
@@ -415,7 +464,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
 
   // Log server errors
   wss.on('error', (err) => {
-    console.error('[WS] Server error:', err)
+    log.error({ err }, 'Server error')
   })
 
   return wss

@@ -612,8 +612,8 @@ export function broadcastTaskLockExtended(
  * Send the current locks list to a single client
  * Called when a new connection is established
  */
-export function sendLocksList(projectId: string, targetClient: Client): void {
-  const locks = connectionManager.getProjectLocks(projectId)
+export async function sendLocksList(projectId: string, targetClient: Client): Promise<void> {
+  const locks = await connectionManager.getProjectLocks(projectId)
 
   const message: WebSocketMessage = {
     type: 'locks_list',
@@ -634,21 +634,21 @@ export function sendLocksList(projectId: string, targetClient: Client): void {
 /**
  * Check if a task is locked and get lock info
  */
-export function getTaskLock(projectId: string, taskId: string): TaskLockInfo | null {
+export async function getTaskLock(projectId: string, taskId: string): Promise<TaskLockInfo | null> {
   return connectionManager.getLock(projectId, taskId)
 }
 
 /**
  * Get all locks for a project
  */
-export function getProjectLocks(projectId: string): TaskLockInfo[] {
+export async function getProjectLocks(projectId: string): Promise<TaskLockInfo[]> {
   return connectionManager.getProjectLocks(projectId)
 }
 
 /**
  * Acquire a task lock
  */
-export function acquireTaskLock(
+export async function acquireTaskLock(
   projectId: string,
   taskId: string,
   taskUuid: string,
@@ -656,27 +656,27 @@ export function acquireTaskLock(
   userEmail: string,
   userName: string | null,
   durationMs?: number
-): { success: boolean; lock: TaskLockInfo; isOwnLock?: boolean } {
+): Promise<{ success: boolean; lock: TaskLockInfo; isOwnLock?: boolean }> {
   return connectionManager.acquireLock(projectId, taskId, taskUuid, userId, userEmail, userName, durationMs)
 }
 
 /**
  * Release a task lock
  */
-export function releaseTaskLock(projectId: string, taskId: string, userId?: string): boolean {
+export async function releaseTaskLock(projectId: string, taskId: string, userId?: string): Promise<boolean> {
   return connectionManager.releaseLock(projectId, taskId, userId)
 }
 
 /**
  * Extend a task lock
  */
-export function extendTaskLock(projectId: string, taskId: string, userId: string, durationMs?: number): boolean {
+export async function extendTaskLock(projectId: string, taskId: string, userId: string, durationMs?: number): Promise<boolean> {
   return connectionManager.extendLock(projectId, taskId, userId, durationMs)
 }
 
 /**
  * Release all locks held by a user
  */
-export function releaseUserLocks(projectId: string, userId: string): string[] {
+export async function releaseUserLocks(projectId: string, userId: string): Promise<string[]> {
   return connectionManager.releaseUserLocks(projectId, userId)
 }

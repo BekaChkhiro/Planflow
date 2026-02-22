@@ -2,6 +2,8 @@
 
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 import type { FeedbackCategory } from '@planflow/shared'
 
 export interface Feedback {
@@ -35,6 +37,9 @@ export function useCreateFeedback() {
         pageUrl: typeof window !== 'undefined' ? window.location.href : undefined,
       })
       return response.data
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

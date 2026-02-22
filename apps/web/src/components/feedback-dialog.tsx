@@ -139,31 +139,54 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
               name="rating"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>How would you rate your experience?</FormLabel>
+                  <FormLabel id="rating-label">How would you rate your experience?</FormLabel>
                   <FormControl>
-                    <div className="flex gap-1">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => field.onChange(star)}
-                          onMouseEnter={() => setHoveredRating(star)}
-                          onMouseLeave={() => setHoveredRating(0)}
-                          disabled={isLoading}
-                          className="rounded-md p-1 transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
-                        >
-                          <Star
-                            className={cn(
-                              'h-8 w-8 transition-colors',
-                              (hoveredRating || currentRating) >= star
-                                ? 'fill-yellow-400 text-yellow-400'
-                                : 'text-muted-foreground'
-                            )}
-                          />
-                        </button>
-                      ))}
+                    <div
+                      className="flex gap-1"
+                      role="radiogroup"
+                      aria-labelledby="rating-label"
+                      aria-describedby="rating-status"
+                    >
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const isSelected = currentRating === star
+                        const isFilled = (hoveredRating || currentRating) >= star
+                        const starLabel = star === 1 ? '1 star' : `${star} stars`
+
+                        return (
+                          <button
+                            key={star}
+                            type="button"
+                            role="radio"
+                            aria-checked={isSelected}
+                            aria-label={starLabel}
+                            onClick={() => field.onChange(star)}
+                            onMouseEnter={() => setHoveredRating(star)}
+                            onMouseLeave={() => setHoveredRating(0)}
+                            disabled={isLoading}
+                            className="rounded-md p-1 transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
+                          >
+                            <Star
+                              className={cn(
+                                'h-8 w-8 transition-colors',
+                                isFilled
+                                  ? 'fill-yellow-400 text-yellow-400'
+                                  : 'text-muted-foreground'
+                              )}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        )
+                      })}
                     </div>
                   </FormControl>
+                  {/* Screen reader status for current selection */}
+                  <p id="rating-status" className="sr-only" aria-live="polite">
+                    {currentRating === 0
+                      ? 'No rating selected'
+                      : currentRating === 1
+                        ? '1 star selected'
+                        : `${currentRating} stars selected`}
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

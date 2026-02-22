@@ -3,7 +3,7 @@
 import { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, Key, CreditCard, Server, Plug, Bell } from 'lucide-react'
+import { User, Key, CreditCard, Server, Plug, Bell, Shield } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -17,6 +17,12 @@ const settingsNavItems = [
     href: '/dashboard/settings/profile',
     icon: User,
     description: 'Manage your account details',
+  },
+  {
+    title: 'Security',
+    href: '/dashboard/settings/security',
+    icon: Shield,
+    description: 'Sessions & logout options',
   },
   {
     title: 'API Tokens',

@@ -2,6 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 
 export type IntegrationType = 'github' | 'slack' | 'discord'
 
@@ -276,6 +278,9 @@ export function useConnectIntegration() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: integrationsQueryKey })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -297,6 +302,9 @@ export function useDisconnectIntegration() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: integrationsQueryKey })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -316,6 +324,9 @@ export function useConfigureWebhook() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: integrationsQueryKey })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }
@@ -350,6 +361,9 @@ export function useUpdateNotificationPreferences() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: integrationsQueryKey })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -370,6 +384,9 @@ export function useTestWebhook() {
         `/integrations/${data.type}/${data.integrationId}/test`
       )
       return response
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

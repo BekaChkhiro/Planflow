@@ -1,11 +1,6 @@
-import jwt from 'jsonwebtoken'
 import { and, eq } from 'drizzle-orm'
 import { getDbClient, schema } from '../db/index.js'
-
-interface JwtPayload {
-  userId: string
-  email: string
-}
+import { verifyJwtWithDetails } from '../utils/helpers.js'
 
 interface AuthResult {
   success: true
@@ -20,32 +15,22 @@ interface AuthError {
 
 /**
  * Verify JWT token for WebSocket connections
+ * Uses shared JWT verification logic from helpers
  */
 export function verifyToken(token: string): AuthResult | AuthError {
-  const jwtSecret = process.env['JWT_SECRET']
+  const result = verifyJwtWithDetails(token)
 
-  if (!jwtSecret) {
-    console.error('[WS Auth] JWT_SECRET not configured')
-    return { success: false, error: 'Server configuration error' }
+  if (!result.success) {
+    if (result.error === 'missing_secret') {
+      console.error('[WS Auth] JWT_SECRET not configured')
+    }
+    return { success: false, error: result.message }
   }
 
-  try {
-    const decoded = jwt.verify(token, jwtSecret) as JwtPayload
-    return {
-      success: true,
-      userId: decoded.userId,
-      email: decoded.email,
-    }
-  } catch (err) {
-    // Check error name instead of instanceof (ESM bundling issue with jsonwebtoken)
-    const errorName = err instanceof Error ? err.name : ''
-    if (errorName === 'TokenExpiredError') {
-      return { success: false, error: 'Token expired' }
-    }
-    if (errorName === 'JsonWebTokenError') {
-      return { success: false, error: 'Invalid token' }
-    }
-    return { success: false, error: 'Token verification failed' }
+  return {
+    success: true,
+    userId: result.payload.userId,
+    email: result.payload.email,
   }
 }
 

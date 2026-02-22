@@ -11,6 +11,12 @@ export {
   type TaskLock,
   type TaskLockInfo,
 } from './connection-manager.js'
+
+// Also export types directly for new consumers
+export type { ConnectionStore } from './types.js'
+
+// Export managers for direct use if needed
+export { PresenceManager, WorkingOnManager, TypingManager, TaskLockManager } from './managers/index.js'
 export { verifyToken, verifyProjectAccess, authenticateWebSocket } from './auth.js'
 export {
   broadcastTaskUpdated,

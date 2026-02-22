@@ -46,7 +46,7 @@ export function getVapidPublicKey(): string | null {
   return VAPID_PUBLIC_KEY || null
 }
 
-interface PushPayload {
+export interface PushPayload {
   title: string
   body?: string
   icon?: string

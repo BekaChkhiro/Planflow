@@ -32,6 +32,10 @@ export {
   sanitizeString,
   validateRedirectUrl,
   timingSafeEqual,
+  // Cleanup functions for graceful shutdown
+  startRateLimitCleanup,
+  stopRateLimitCleanup,
+  clearRateLimitStore,
 } from './security.js'
 
 export { sentryMiddleware, sentryErrorHandler } from './sentry.js'

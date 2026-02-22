@@ -13,7 +13,7 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
     <AuthGuard>
       <div className="flex min-h-screen flex-col bg-gray-50">
         <Navbar />
-        <main className="flex flex-1 items-center justify-center px-4 py-12">
+        <main id="main-content" className="flex flex-1 items-center justify-center px-4 py-12" tabIndex={-1}>
           <div className="w-full max-w-md">{children}</div>
         </main>
         <Footer />

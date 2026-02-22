@@ -3,6 +3,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef } from 'react'
 import { authApi } from '@/lib/auth-api'
+import { toast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/error-utils'
 import { useProjectWebSocket } from './use-websocket'
 
 // Types
@@ -90,6 +92,9 @@ export function useCreateComment(projectId: string, taskId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: commentsQueryKey(projectId, taskId) })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -110,6 +115,9 @@ export function useUpdateComment(projectId: string, taskId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: commentsQueryKey(projectId, taskId) })
     },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
   })
 }
 
@@ -126,6 +134,9 @@ export function useDeleteComment(projectId: string, taskId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: commentsQueryKey(projectId, taskId) })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
     },
   })
 }

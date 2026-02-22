@@ -105,7 +105,9 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
 
     if (!auth.success) {
       const error = (auth as { success: false; error: string }).error
-      log.warn({ error }, 'Connection rejected')
+      const hasToken = !!token
+      const hasProjectId = !!projectId
+      log.warn({ error, hasToken, hasProjectId, url: request.url }, 'Connection rejected')
       ws.close(4001, error)
       return
     }

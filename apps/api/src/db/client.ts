@@ -1,7 +1,11 @@
-import { neon, Pool } from '@neondatabase/serverless'
+import { neon, neonConfig, Pool } from '@neondatabase/serverless'
 import { drizzle as drizzleHttp } from 'drizzle-orm/neon-http'
 import { drizzle as drizzleServerless } from 'drizzle-orm/neon-serverless'
+import ws from 'ws'
 import * as schema from './schema'
+
+// Configure WebSocket for Node.js environment (required for Pool/transactions)
+neonConfig.webSocketConstructor = ws
 
 // HTTP client singleton (for regular queries - faster)
 let httpDbInstance: ReturnType<typeof drizzleHttp<typeof schema>> | null = null

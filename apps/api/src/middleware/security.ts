@@ -17,8 +17,6 @@ function getAllowedOrigins(): string[] {
 
   // Always allow the configured app URL
   const appUrl = process.env['NEXT_PUBLIC_APP_URL'] || process.env['APP_URL']
-  console.log('[CORS DEBUG] APP_URL:', appUrl)
-  console.log('[CORS DEBUG] ALLOWED_ORIGINS env:', process.env['ALLOWED_ORIGINS'])
   if (appUrl) {
     origins.push(appUrl)
   }
@@ -47,7 +45,6 @@ function getAllowedOrigins(): string[] {
  */
 export const secureCors = cors({
   origin: (origin) => {
-    console.log('[CORS DEBUG] Incoming origin:', origin)
     // Allow requests with no origin (same-origin, mobile apps, etc.)
     if (!origin) return null
 
@@ -55,7 +52,6 @@ export const secureCors = cors({
 
     // Check if origin is allowed
     if (allowedOrigins.includes(origin)) {
-      console.log(`[CORS DEBUG] Origin allowed: ${origin}`)
       return origin
     }
 

@@ -63,7 +63,7 @@
 
 ### Current Focus
 🚀 **Active**: Phase 15 (Documentation)
-📋 **Next Task**: T15.1 (Update API Reference with Team APIs)
+🔄 **In Progress**: T15.1 (Update API Reference with Team APIs), T15.5 (Create Plugin Commands reference), T15.7 (Write User Guide - Dashboard walkthrough)
 📊 **Total Tasks**: 179 (165 დასრულებული, 14 ახალი)
 
 ---
@@ -745,13 +745,13 @@ Project Archiving (T14.5):
 
 | ID     | Task                                                    | Complexity | Status | Dependencies |
 | ------ | ------------------------------------------------------- | ---------- | ------ | ------------ |
-| T15.1  | Update API Reference with Organizations/Teams API       | High       | TODO   | -            |
+| T15.1  | Update API Reference with Organizations/Teams API       | High       | IN_PROGRESS 🔄 | -            |
 | T15.2  | Document Integrations API (GitHub, Slack, Discord)      | High       | TODO   | T15.1        |
 | T15.3  | Add WebSocket/Real-time API documentation               | Medium     | TODO   | T15.1        |
 | T15.4  | Document Notifications API endpoints                    | Low        | TODO   | T15.1        |
-| T15.5  | Create Plugin Commands reference (/plan commands)       | High       | TODO   | -            |
+| T15.5  | Create Plugin Commands reference (/plan commands)       | High       | IN_PROGRESS 🔄 | -            |
 | T15.6  | Document MCP Server tools in detail                     | Medium     | TODO   | T15.5        |
-| T15.7  | Write User Guide - Dashboard walkthrough                | Medium     | TODO   | -            |
+| T15.7  | Write User Guide - Dashboard walkthrough                | Medium     | IN_PROGRESS 🔄 | -            |
 | T15.8  | Write User Guide - Team collaboration features          | Medium     | TODO   | T15.7        |
 | T15.9  | Write Developer Docs - Architecture overview            | High       | TODO   | -            |
 | T15.10 | Write Developer Docs - Local development setup          | Medium     | TODO   | T15.9        |

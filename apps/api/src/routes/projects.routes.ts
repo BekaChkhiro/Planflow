@@ -1377,19 +1377,9 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    // Check if user has access (owner or team member)
+    // Check if user has access (owner only for now)
     if (project.userId !== user.id) {
-      const [membership] = await db
-        .select({ id: schema.projectMembers.id })
-        .from(schema.projectMembers)
-        .where(and(
-          eq(schema.projectMembers.projectId, projectId),
-          eq(schema.projectMembers.userId, user.id)
-        ))
-        .limit(1)
-      if (!membership) {
-        return c.json({ success: false, error: 'Project not found' }, 404)
-      }
+      return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
     // Find the task by taskId
@@ -1422,20 +1412,8 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
         return c.json({ success: false, error: 'Assignee not found' }, 404)
       }
 
-      // Verify assignee has access to the project
-      if (assignee.id !== project.userId) {
-        const [membership] = await db
-          .select({ id: schema.projectMembers.id })
-          .from(schema.projectMembers)
-          .where(and(
-            eq(schema.projectMembers.projectId, projectId),
-            eq(schema.projectMembers.userId, assignee.id)
-          ))
-          .limit(1)
-        if (!membership) {
-          return c.json({ success: false, error: 'Assignee does not have access to this project' }, 400)
-        }
-      }
+      // For now, allow assigning to any valid user
+      // TODO: Add proper team membership check when projectMembers table exists
 
       assigneeName = assignee.name || assignee.email
     }

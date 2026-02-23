@@ -37,11 +37,11 @@ function getNotificationIcon(type: string) {
     case 'assignment':
       return <UserPlus className="h-4 w-4 text-green-500" aria-hidden="true" />
     case 'comment':
-      return <MessageSquare className="h-4 w-4 text-gray-500" aria-hidden="true" />
+      return <MessageSquare className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
     case 'status_change':
       return <RefreshCw className="h-4 w-4 text-blue-500" aria-hidden="true" />
     default:
-      return <Bell className="h-4 w-4 text-gray-500" aria-hidden="true" />
+      return <Bell className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
   }
 }
 

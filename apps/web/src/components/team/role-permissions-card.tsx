@@ -85,8 +85,8 @@ export const ROLE_DEFINITIONS: {
     label: 'Viewer',
     description: 'View-only access to projects',
     icon: Eye,
-    color: 'text-gray-600',
-    bgColor: 'bg-gray-100',
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted',
     permissions: [
       { label: 'View all projects and tasks', allowed: true },
       { label: 'Edit projects and tasks', allowed: false },
@@ -130,7 +130,7 @@ export function RolePermissionsCard({ currentUserRole, compact = false }: RolePe
                         className={`flex flex-col items-center gap-1 rounded-lg border p-3 transition-colors ${
                           isCurrentRole
                             ? 'border-blue-200 bg-blue-50'
-                            : 'border-gray-200 hover:bg-gray-50'
+                            : 'border-gray-200 hover:bg-muted/50'
                         }`}
                       >
                         <div className={`rounded-full p-1.5 ${roleDef.bgColor}`}>
@@ -146,16 +146,16 @@ export function RolePermissionsCard({ currentUserRole, compact = false }: RolePe
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="max-w-xs">
                       <p className="font-medium">{roleDef.label}</p>
-                      <p className="text-xs text-gray-400">{roleDef.description}</p>
+                      <p className="text-xs text-muted-foreground">{roleDef.description}</p>
                       <div className="mt-2 space-y-1">
                         {roleDef.permissions.slice(0, 3).map((perm) => (
                           <div key={perm.label} className="flex items-center gap-1.5 text-xs">
                             {perm.allowed ? (
                               <Check className="h-3 w-3 text-green-500" />
                             ) : (
-                              <X className="h-3 w-3 text-gray-400" />
+                              <X className="h-3 w-3 text-muted-foreground" />
                             )}
-                            <span className={perm.allowed ? '' : 'text-gray-400'}>
+                            <span className={perm.allowed ? '' : 'text-muted-foreground'}>
                               {perm.label}
                             </span>
                           </div>
@@ -188,7 +188,7 @@ export function RolePermissionsCard({ currentUserRole, compact = false }: RolePe
           <table className="w-full">
             <thead>
               <tr className="border-b">
-                <th className="pb-3 text-left text-sm font-medium text-gray-500">Permission</th>
+                <th className="pb-3 text-left text-sm font-medium text-muted-foreground">Permission</th>
                 {ROLE_DEFINITIONS.map((roleDef) => {
                   const Icon = roleDef.icon
                   const isCurrentRole = currentUserRole === roleDef.role
@@ -196,7 +196,7 @@ export function RolePermissionsCard({ currentUserRole, compact = false }: RolePe
                     <th
                       key={roleDef.role}
                       className={`pb-3 text-center text-sm font-medium ${
-                        isCurrentRole ? 'text-blue-600' : 'text-gray-500'
+                        isCurrentRole ? 'text-blue-600' : 'text-muted-foreground'
                       }`}
                     >
                       <div className="flex flex-col items-center gap-1">

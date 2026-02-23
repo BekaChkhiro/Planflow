@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useAuthAnalytics } from '@/hooks/use-analytics'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ValidatedInput } from '@/components/ui/validated-input'
 import {
   Card,
   CardContent,
@@ -42,6 +42,7 @@ export default function LoginPage() {
 
   const form = useForm<LoginRequest>({
     resolver: zodResolver(LoginRequestSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       email: '',
       password: '',
@@ -94,15 +95,17 @@ export default function LoginPage() {
             <FormField
               control={form.control}
               name="email"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="email"
                       placeholder="name@example.com"
                       autoComplete="email"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -114,7 +117,7 @@ export default function LoginPage() {
             <FormField
               control={form.control}
               name="password"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <div className="flex items-center justify-between">
                     <FormLabel>Password</FormLabel>
@@ -126,11 +129,13 @@ export default function LoginPage() {
                     </Link>
                   </div>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="password"
                       placeholder="Enter your password"
                       autoComplete="current-password"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>

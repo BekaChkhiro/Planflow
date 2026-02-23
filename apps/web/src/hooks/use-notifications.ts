@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
 import { toast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/error-utils'
@@ -20,14 +20,24 @@ export interface Notification {
   createdAt: string
 }
 
+interface NotificationsPagination {
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
 interface NotificationsResponse {
   success: boolean
   data: {
     notifications: Notification[]
     unreadCount: number
-    total: number
+    pagination: NotificationsPagination
   }
 }
+
+// Page size for infinite scroll
+export const NOTIFICATIONS_PAGE_SIZE = 20
 
 interface MarkReadResponse {
   success: boolean
@@ -37,8 +47,9 @@ interface MarkReadResponse {
   }
 }
 
-// Query key for notifications
+// Query keys for notifications
 export const notificationsQueryKey = (limit?: number) => ['notifications', { limit }]
+export const notificationsInfiniteQueryKey = (pageSize?: number) => ['notifications', 'infinite', { pageSize }]
 export const unreadCountQueryKey = ['notifications', 'unread-count']
 
 /**
@@ -60,8 +71,10 @@ export function useNotifications(options?: { limit?: number; enabled?: boolean }
       return response.data
     },
     enabled,
-    staleTime: 30000, // Consider data stale after 30 seconds
-    refetchInterval: 60000, // Refetch every minute
+    // T13.1: Optimized caching - WebSocket handles real-time updates
+    staleTime: 2 * 60 * 1000, // 2 minutes - data is fresh
+    gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache longer
+    refetchInterval: 5 * 60 * 1000, // 5 minutes - fallback polling when WS unavailable
   })
 
   // Clear realtime notifications when query refetches
@@ -145,7 +158,7 @@ export function useNotifications(options?: { limit?: number; enabled?: boolean }
   return {
     notifications: allNotifications,
     unreadCount,
-    total: query.data?.total || 0,
+    total: query.data?.pagination?.total || 0,
     isLoading: query.isLoading,
     isError: query.isError,
     error: query.error,
@@ -171,13 +184,114 @@ export function useUnreadNotificationCount(enabled = true) {
       return response.data.unreadCount
     },
     enabled,
-    staleTime: 30000,
-    refetchInterval: 60000,
+    // T13.1: Optimized caching - WebSocket handles real-time count updates
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchInterval: 5 * 60 * 1000, // 5 minutes fallback
   })
 
   return {
     count: query.data || 0,
     isLoading: query.isLoading,
     refetch: query.refetch,
+  }
+}
+
+/**
+ * Hook for paginated notifications with infinite scroll (T13.4)
+ * Uses offset-based pagination with "Load More" pattern
+ */
+export interface UseNotificationsInfiniteOptions {
+  pageSize?: number
+  enabled?: boolean
+}
+
+export function useNotificationsInfinite(options: UseNotificationsInfiniteOptions = {}) {
+  const { pageSize = NOTIFICATIONS_PAGE_SIZE, enabled = true } = options
+  const queryClient = useQueryClient()
+
+  const query = useInfiniteQuery({
+    queryKey: notificationsInfiniteQueryKey(pageSize),
+    queryFn: async ({ pageParam = 0 }) => {
+      const params = new URLSearchParams()
+      params.set('limit', String(pageSize))
+      params.set('offset', String(pageParam))
+
+      const response = await authApi.get<NotificationsResponse>(
+        `/notifications?${params.toString()}`
+      )
+      return response.data
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      // Calculate the next offset based on current pagination
+      const { pagination } = lastPage
+      if (pagination.hasMore) {
+        return pagination.offset + pagination.limit
+      }
+      return undefined // No more pages
+    },
+    enabled,
+    // T13.1: Optimized caching
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  })
+
+  // Mutation to mark single notification as read
+  const markAsReadMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      return authApi.patch<MarkReadResponse>(`/notifications/${notificationId}/read`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: notificationsInfiniteQueryKey(pageSize) })
+      queryClient.invalidateQueries({ queryKey: unreadCountQueryKey })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
+  })
+
+  // Mutation to mark all notifications as read
+  const markAllAsReadMutation = useMutation({
+    mutationFn: async () => {
+      return authApi.patch<MarkReadResponse>('/notifications/read-all')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: notificationsInfiniteQueryKey(pageSize) })
+      queryClient.invalidateQueries({ queryKey: unreadCountQueryKey })
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
+  })
+
+  // Flatten all pages into a single notifications array
+  const notifications = query.data?.pages.flatMap((page) => page.notifications) ?? []
+
+  // Get pagination info from the last page
+  const lastPage = query.data?.pages[query.data.pages.length - 1]
+  const pagination = lastPage?.pagination
+
+  // Calculate total unread from first page (most accurate)
+  const unreadCount = query.data?.pages[0]?.unreadCount ?? 0
+
+  return {
+    notifications,
+    unreadCount,
+    total: pagination?.total ?? 0,
+    pagination,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+    // Infinite scroll helpers
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    // Mutation actions
+    markAsRead: markAsReadMutation.mutate,
+    markAllAsRead: markAllAsReadMutation.mutate,
+    isMarkingRead: markAsReadMutation.isPending,
+    isMarkingAllRead: markAllAsReadMutation.isPending,
   }
 }

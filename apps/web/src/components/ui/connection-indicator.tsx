@@ -36,8 +36,8 @@ const statusConfig: Record<
   disconnected: {
     icon: WifiOff,
     label: 'Offline',
-    color: 'text-gray-400',
-    bgColor: 'bg-gray-100',
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted',
   },
   error: {
     icon: WifiOff,

@@ -9,7 +9,7 @@ import { Loader2, ArrowLeft, Mail } from 'lucide-react'
 import { ForgotPasswordRequestSchema, type ForgotPasswordRequest, type ApiResponse } from '@planflow/shared'
 import { api, ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ValidatedInput } from '@/components/ui/validated-input'
 import {
   Card,
   CardContent,
@@ -34,6 +34,7 @@ export default function ForgotPasswordPage() {
 
   const form = useForm<ForgotPasswordRequest>({
     resolver: zodResolver(ForgotPasswordRequestSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       email: '',
     },
@@ -136,15 +137,17 @@ export default function ForgotPasswordPage() {
             <FormField
               control={form.control}
               name="email"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="email"
                       placeholder="name@example.com"
                       autoComplete="email"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>

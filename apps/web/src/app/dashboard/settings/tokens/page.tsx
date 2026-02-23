@@ -16,7 +16,8 @@ import {
 
 import { useTokens, useCreateToken, useRevokeToken, type ApiToken } from '@/hooks/use-tokens'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ValidatedInput } from '@/components/ui/validated-input'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   Card,
   CardContent,
@@ -109,6 +110,7 @@ function CreateTokenDialog() {
 
   const form = useForm<CreateTokenFormData>({
     resolver: zodResolver(CreateTokenSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       name: '',
       expiresInDays: '',
@@ -177,7 +179,7 @@ function CreateTokenDialog() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <code className="flex-1 rounded-md bg-gray-100 p-3 text-sm font-mono break-all">
+                <code className="flex-1 rounded-md bg-muted p-3 text-sm font-mono break-all">
                   {createdToken}
                 </code>
                 <Button
@@ -211,13 +213,15 @@ function CreateTokenDialog() {
                 <FormField
                   control={form.control}
                   name="name"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Token Name</FormLabel>
                       <FormControl>
-                        <Input
+                        <ValidatedInput
                           placeholder="e.g., MacBook Pro, Work Laptop"
                           disabled={isLoading}
+                          isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                          isError={!!fieldState.error}
                           {...field}
                         />
                       </FormControl>
@@ -231,16 +235,18 @@ function CreateTokenDialog() {
                 <FormField
                   control={form.control}
                   name="expiresInDays"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Expiration (Optional)</FormLabel>
                       <FormControl>
-                        <Input
+                        <ValidatedInput
                           type="number"
                           placeholder="e.g., 30, 90, 365"
                           min={1}
                           max={365}
                           disabled={isLoading}
+                          isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                          isError={!!fieldState.error}
                           {...field}
                         />
                       </FormControl>
@@ -287,14 +293,14 @@ function TokenRow({ token }: { token: ApiToken }) {
     <div className="flex items-center justify-between py-4">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900">{token.name}</span>
+          <span className="font-medium text-foreground">{token.name}</span>
           {expired && (
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
               Expired
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4 text-sm text-gray-500">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span>Created {formatDate(token.createdAt)}</span>
           <span>Last used: {formatDateTime(token.lastUsedAt)}</span>
           {token.expiresAt && (
@@ -306,7 +312,7 @@ function TokenRow({ token }: { token: ApiToken }) {
       </div>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-gray-400 hover:text-red-600">
+          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-red-600">
             <Trash2 className="h-4 w-4" />
           </Button>
         </AlertDialogTrigger>
@@ -341,7 +347,7 @@ function TokenList() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -356,15 +362,12 @@ function TokenList() {
 
   if (!tokens || tokens.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="rounded-full bg-gray-100 p-3">
-          <Key className="h-6 w-6 text-gray-400" />
-        </div>
-        <h3 className="mt-4 text-sm font-medium text-gray-900">No API tokens</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          Create a token to authenticate with the MCP server.
-        </p>
-      </div>
+      <EmptyState
+        illustration="tokens"
+        title="No API tokens"
+        description="Create a token to authenticate with the MCP server from Claude Code."
+        size="md"
+      />
     )
   }
 
@@ -381,8 +384,8 @@ export default function TokensSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900">API Tokens</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-lg font-medium text-foreground">API Tokens</h2>
+        <p className="text-sm text-muted-foreground">
           Manage API tokens for authenticating with the MCP server from Claude Code
         </p>
       </div>
@@ -424,7 +427,7 @@ export default function TokensSettingsPage() {
           <CardTitle className="text-base">Security Tips</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-2 text-sm text-gray-600">
+          <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
               <span className="text-green-600">•</span>
               Create separate tokens for each device or application

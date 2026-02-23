@@ -18,6 +18,7 @@ import {
   sentryMiddleware,
   sentryErrorHandler,
   stopRateLimitCleanup,
+  apiEtagMiddleware,
 } from './middleware/index.js'
 import {
   startDigestScheduler,
@@ -67,6 +68,9 @@ app.use('*', sentryMiddleware)
 app.use('*', secureCors)
 app.use('*', securityHeaders)
 app.use('*', defaultBodyLimit)
+
+// Middleware - Caching (ETag for GET requests)
+app.use('*', apiEtagMiddleware)
 
 // Global error handler for Sentry
 app.onError(sentryErrorHandler)

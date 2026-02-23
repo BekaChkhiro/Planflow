@@ -52,7 +52,7 @@ function PhaseProgress({ phases, className }: PhaseProgressProps) {
                     'flex h-10 w-10 items-center justify-center rounded-full border-2 transition-colors',
                     isComplete && 'border-green-500 bg-green-50 text-green-600',
                     hasInProgress && !isComplete && 'border-blue-500 bg-blue-50 text-blue-600',
-                    notStarted && 'border-gray-300 bg-gray-50 text-gray-400'
+                    notStarted && 'border-gray-300 bg-muted/50 text-muted-foreground'
                   )}
                 >
                   {isComplete ? (

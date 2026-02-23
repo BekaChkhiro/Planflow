@@ -47,7 +47,7 @@ function getTierLabel(tier: string): string {
 function getTierBadgeClass(tier: string): string {
   switch (tier) {
     case 'free':
-      return 'bg-gray-100 text-gray-700 border-gray-200'
+      return 'bg-muted text-gray-700 border-gray-200'
     case 'pro':
       return 'bg-blue-100 text-blue-700 border-blue-200'
     case 'team':
@@ -55,7 +55,7 @@ function getTierBadgeClass(tier: string): string {
     case 'enterprise':
       return 'bg-amber-100 text-amber-700 border-amber-200'
     default:
-      return 'bg-gray-100 text-gray-700 border-gray-200'
+      return 'bg-muted text-gray-700 border-gray-200'
   }
 }
 
@@ -68,9 +68,9 @@ function getStatusBadgeClass(status: string): string {
     case 'past_due':
       return 'bg-yellow-100 text-yellow-700 border-yellow-200'
     case 'canceled':
-      return 'bg-gray-100 text-gray-500 border-gray-200'
+      return 'bg-muted text-muted-foreground border-gray-200'
     default:
-      return 'bg-gray-100 text-gray-700 border-gray-200'
+      return 'bg-muted text-gray-700 border-gray-200'
   }
 }
 
@@ -104,7 +104,7 @@ function SubscriptionStatusCard() {
             <Skeleton className="h-6 w-16 rounded-full" />
             <Skeleton className="h-6 w-16 rounded-full" />
           </div>
-          <div className="rounded-lg border bg-gray-50 p-4 space-y-2">
+          <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-3/4" />
           </div>
@@ -154,10 +154,10 @@ function SubscriptionStatusCard() {
 
         {/* Canceled notice */}
         {subscription.status === 'canceled' && subscription.currentPeriodEnd && (
-          <div className="rounded-md bg-gray-50 border border-gray-200 p-4">
+          <div className="rounded-md bg-muted/50 border border-gray-200 p-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-gray-500 shrink-0 mt-0.5" />
-              <div className="text-sm text-gray-600">
+              <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="text-sm text-muted-foreground">
                 <p className="font-medium">Subscription canceled</p>
                 <p className="mt-1">
                   Your access continues until {formatDate(subscription.currentPeriodEnd)}.
@@ -179,17 +179,17 @@ function SubscriptionStatusCard() {
 
         {/* Billing period for paid users */}
         {isPaid && subscription.currentPeriodStart && subscription.currentPeriodEnd && (
-          <div className="rounded-lg border bg-gray-50 p-4">
+          <div className="rounded-lg border bg-muted/50 p-4">
             <div className="grid gap-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-gray-500">Current period</span>
+                <span className="text-muted-foreground">Current period</span>
                 <span className="text-gray-700">
                   {formatDate(subscription.currentPeriodStart)} - {formatDate(subscription.currentPeriodEnd)}
                 </span>
               </div>
               {subscription.canceledAt && (
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-500">Canceled on</span>
+                  <span className="text-muted-foreground">Canceled on</span>
                   <span className="text-gray-700">{formatDate(subscription.canceledAt)}</span>
                 </div>
               )}
@@ -241,10 +241,10 @@ function BillingActionsCard() {
           </div>
         ) : (
           <>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               In the billing portal, you can:
             </p>
-            <ul className="space-y-2 text-sm text-gray-600">
+            <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-center gap-2">
                 <Check className="h-4 w-4 text-green-600" />
                 View and download invoices
@@ -312,12 +312,12 @@ function UpgradeCard() {
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-semibold text-gray-900">Pro</h3>
-              <p className="text-sm text-gray-500">For individuals and small teams</p>
+              <h3 className="font-semibold text-foreground">Pro</h3>
+              <p className="text-sm text-muted-foreground">For individuals and small teams</p>
             </div>
             <Badge className="bg-blue-100 text-blue-700 border-blue-200">Popular</Badge>
           </div>
-          <ul className="space-y-2 text-sm text-gray-600">
+          <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">
               <Check className="h-4 w-4 text-green-600" />
               Unlimited projects
@@ -346,10 +346,10 @@ function UpgradeCard() {
         {/* Team Plan */}
         <div className="rounded-lg border p-4 space-y-3">
           <div>
-            <h3 className="font-semibold text-gray-900">Team</h3>
-            <p className="text-sm text-gray-500">For growing teams and organizations</p>
+            <h3 className="font-semibold text-foreground">Team</h3>
+            <p className="text-sm text-muted-foreground">For growing teams and organizations</p>
           </div>
-          <ul className="space-y-2 text-sm text-gray-600">
+          <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">
               <Check className="h-4 w-4 text-green-600" />
               Everything in Pro
@@ -390,8 +390,8 @@ export default function BillingSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900">Billing</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-lg font-medium text-foreground">Billing</h2>
+        <p className="text-sm text-muted-foreground">
           Manage your subscription and billing settings
         </p>
       </div>

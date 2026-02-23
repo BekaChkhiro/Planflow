@@ -11,6 +11,7 @@ export const projects = pgTable('projects', {
   plan: text('plan'), // Markdown content of PROJECT_PLAN.md
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp('archived_at', { withTimezone: true }), // Soft delete timestamp
 })
 
 export type Project = typeof projects.$inferSelect

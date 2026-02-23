@@ -19,8 +19,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState, ErrorIllustration } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
-import { useNotifications, type Notification } from '@/hooks/use-notifications'
+import { useNotificationsInfinite, NOTIFICATIONS_PAGE_SIZE, type Notification } from '@/hooks/use-notifications'
 
 // Get icon based on notification type
 function getNotificationIcon(type: string) {
@@ -30,11 +31,11 @@ function getNotificationIcon(type: string) {
     case 'assignment':
       return <UserPlus className="h-5 w-5 text-green-500" />
     case 'comment':
-      return <MessageSquare className="h-5 w-5 text-gray-500" />
+      return <MessageSquare className="h-5 w-5 text-muted-foreground" />
     case 'status_change':
       return <RefreshCw className="h-5 w-5 text-blue-500" />
     default:
-      return <Bell className="h-5 w-5 text-gray-500" />
+      return <Bell className="h-5 w-5 text-muted-foreground" />
   }
 }
 
@@ -93,8 +94,8 @@ function NotificationCard({
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-4">
-              <div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
@@ -107,7 +108,7 @@ function NotificationCard({
                     {getTypeLabel(notification.type)}
                   </span>
                   {isUnread && (
-                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
                   )}
                 </div>
                 <h3
@@ -119,7 +120,7 @@ function NotificationCard({
                   {notification.title}
                 </h3>
                 {notification.body && (
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                     {notification.body}
                   </p>
                 )}
@@ -131,7 +132,7 @@ function NotificationCard({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="flex-shrink-0 h-8 px-2"
+                  className="shrink-0 h-8 px-2 self-start"
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -139,7 +140,8 @@ function NotificationCard({
                   }}
                 >
                   <Check className="h-4 w-4 mr-1" />
-                  Mark read
+                  <span className="hidden sm:inline">Mark read</span>
+                  <span className="sm:hidden">Read</span>
                 </Button>
               )}
             </div>
@@ -183,27 +185,28 @@ function LoadingSkeleton() {
 }
 
 // Empty state
-function EmptyState() {
+function NotificationsEmptyState() {
   return (
     <Card>
-      <CardContent className="flex flex-col items-center justify-center py-16">
-        <Bell className="h-16 w-16 text-muted-foreground/30 mb-4" />
-        <h3 className="text-lg font-medium text-muted-foreground">No notifications</h3>
-        <p className="text-sm text-muted-foreground/70 mt-1">
-          You&apos;re all caught up! New notifications will appear here.
-        </p>
+      <CardContent>
+        <EmptyState
+          illustration="notifications"
+          title="No notifications"
+          description="You're all caught up! New notifications will appear here."
+          size="lg"
+        />
       </CardContent>
     </Card>
   )
 }
 
 // Error state
-function ErrorState({ onRetry }: { onRetry: () => void }) {
+function NotificationsErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <Card>
       <CardContent className="flex flex-col items-center justify-center py-16">
-        <AlertCircle className="h-16 w-16 text-red-400 mb-4" />
-        <h3 className="text-lg font-medium text-muted-foreground">
+        <ErrorIllustration className="h-32 w-32" />
+        <h3 className="mt-4 text-lg font-medium text-muted-foreground">
           Failed to load notifications
         </h3>
         <p className="text-sm text-muted-foreground/70 mt-1">
@@ -222,26 +225,30 @@ export default function NotificationsPage() {
   const {
     notifications,
     unreadCount,
+    total,
     isLoading,
     isError,
     refetch,
     markAsRead,
     markAllAsRead,
     isMarkingAllRead,
-  } = useNotifications({ limit: 50 })
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useNotificationsInfinite({ pageSize: NOTIFICATIONS_PAGE_SIZE })
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" asChild>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Button variant="ghost" size="icon" asChild className="shrink-0">
             <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Notifications</h1>
             <p className="text-sm text-muted-foreground">
               {unreadCount > 0
                 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
@@ -255,6 +262,7 @@ export default function NotificationsPage() {
             size="sm"
             onClick={() => markAllAsRead()}
             disabled={isMarkingAllRead}
+            className="self-start sm:self-auto"
           >
             {isMarkingAllRead ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -270,9 +278,9 @@ export default function NotificationsPage() {
       {isLoading ? (
         <LoadingSkeleton />
       ) : isError ? (
-        <ErrorState onRetry={refetch} />
+        <NotificationsErrorState onRetry={refetch} />
       ) : notifications.length === 0 ? (
-        <EmptyState />
+        <NotificationsEmptyState />
       ) : (
         <div className="space-y-3">
           {notifications.map((notification) => (
@@ -282,6 +290,33 @@ export default function NotificationsPage() {
               onMarkRead={markAsRead}
             />
           ))}
+
+          {/* Load More Button (T13.4) */}
+          {hasNextPage && (
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="min-w-[200px]"
+              >
+                {isFetchingNextPage ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Load More Notifications
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Showing {notifications.length} of {total} notifications
+              </p>
+            </div>
+          )}
+
+          {/* Show count when all loaded */}
+          {!hasNextPage && notifications.length > 0 && (
+            <p className="mt-4 text-center text-xs text-muted-foreground">
+              Showing all {notifications.length} notifications
+            </p>
+          )}
         </div>
       )}
     </div>

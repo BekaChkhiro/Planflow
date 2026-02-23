@@ -12,7 +12,9 @@ import { RegisterRequestSchema } from '@planflow/shared'
 import { useAuth } from '@/hooks/use-auth'
 import { useAnalytics } from '@/hooks/use-analytics'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ValidatedInput } from '@/components/ui/validated-input'
+import { PasswordRequirements, minimalRequirements } from '@/components/ui/password-requirements'
+import { PasswordStrengthIndicator } from '@/components/ui/password-strength-indicator'
 import {
   Card,
   CardContent,
@@ -48,6 +50,7 @@ export default function RegisterPage() {
 
   const form = useForm<RegisterFormData>({
     resolver: zodResolver(RegisterFormSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       name: '',
       email: '',
@@ -55,6 +58,9 @@ export default function RegisterPage() {
       confirmPassword: '',
     },
   })
+
+  // Watch password for real-time requirements display
+  const password = form.watch('password')
 
   const isLoading = form.formState.isSubmitting || authLoading
 
@@ -98,15 +104,17 @@ export default function RegisterPage() {
             <FormField
               control={form.control}
               name="name"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Name</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="text"
                       placeholder="John Doe"
                       autoComplete="name"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -118,15 +126,17 @@ export default function RegisterPage() {
             <FormField
               control={form.control}
               name="email"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Email</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="email"
                       placeholder="name@example.com"
                       autoComplete="email"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -138,18 +148,29 @@ export default function RegisterPage() {
             <FormField
               control={form.control}
               name="password"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Password</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="password"
                       placeholder="Create a password"
                       autoComplete="new-password"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value.length >= 8}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
+                  {password && (
+                    <div className="mt-2 space-y-2">
+                      <PasswordStrengthIndicator password={password} />
+                      <PasswordRequirements
+                        password={password}
+                        requirements={minimalRequirements}
+                      />
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -158,15 +179,17 @@ export default function RegisterPage() {
             <FormField
               control={form.control}
               name="confirmPassword"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Confirm Password</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="password"
                       placeholder="Confirm your password"
                       autoComplete="new-password"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== '' && field.value === password}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>

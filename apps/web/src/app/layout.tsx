@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import { Providers } from './providers'
 import { Toaster } from '@/components/ui/toaster'
 import { LiveAnnouncerProvider } from '@/components/ui/live-announcer'
+import { FocusVisibleProvider } from '@/components/focus-visible-provider'
 import './globals.css'
 
 const inter = Inter({
@@ -48,10 +49,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <Providers>
-          <LiveAnnouncerProvider>
-            {children}
-            <Toaster />
-          </LiveAnnouncerProvider>
+          <FocusVisibleProvider>
+            <LiveAnnouncerProvider>
+              {children}
+              <Toaster />
+            </LiveAnnouncerProvider>
+          </FocusVisibleProvider>
         </Providers>
       </body>
     </html>

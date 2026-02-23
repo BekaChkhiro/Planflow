@@ -27,8 +27,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { ValidatedInput } from '@/components/ui/validated-input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState, ErrorIllustration } from '@/components/ui/empty-state'
 import {
   Dialog,
   DialogContent,
@@ -74,7 +75,7 @@ import {
 import {
   useOrganizations,
   useCreateOrganization,
-  useTeamMembers,
+  useTeamMembersInfinite,
   useTeamInvitations,
   useInviteMember,
   useUpdateMemberRole,
@@ -85,6 +86,7 @@ import {
   canManageMembers,
   canChangeRoles,
   getInitials,
+  TEAM_MEMBERS_PAGE_SIZE,
   type TeamMember,
   type TeamInvitation,
   type MemberRole,
@@ -149,28 +151,28 @@ function MemberCard({
   const canChangeRole = canChangeRoles(currentUserRole) && member.role !== 'owner'
 
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-white p-4 transition-colors hover:bg-gray-50">
-      <div className="flex items-center gap-4">
-        <Avatar className="h-10 w-10">
+    <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Avatar className="h-10 w-10 shrink-0">
           <AvatarFallback className="bg-blue-100 text-blue-700">
             {getInitials(member.userName, member.userEmail)}
           </AvatarFallback>
         </Avatar>
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium text-gray-900">
+            <span className="truncate font-medium text-foreground">
               {member.userName || member.userEmail}
             </span>
             {isCurrentUser && (
-              <Badge variant="outline" className="text-xs">You</Badge>
+              <Badge variant="outline" className="shrink-0 text-xs">You</Badge>
             )}
           </div>
-          <span className="text-sm text-gray-500">{member.userEmail}</span>
+          <span className="block truncate text-sm text-muted-foreground">{member.userEmail}</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Badge variant={getRoleBadgeVariant(member.role)} className="flex items-center gap-1">
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
+        <Badge variant={getRoleBadgeVariant(member.role)} className="flex shrink-0 items-center gap-1">
           <RoleIcon role={member.role} className="h-3 w-3" />
           {getRoleLabel(member.role)}
         </Badge>
@@ -227,7 +229,7 @@ function InvitationCard({
 }: {
   invitation: TeamInvitation
   canManage: boolean
-  onRevoke: (invitationId: string) => void
+  onRevoke: () => void
   isRevoking: boolean
 }) {
   const expiresAt = new Date(invitation.expiresAt)
@@ -235,10 +237,10 @@ function InvitationCard({
   const daysUntilExpiry = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
+    <div className="flex items-center justify-between rounded-lg border border-dashed border-gray-300 bg-muted/50 p-4">
       <div className="flex items-center gap-4">
         <Avatar className="h-10 w-10">
-          <AvatarFallback className="bg-gray-200 text-gray-500">
+          <AvatarFallback className="bg-gray-200 text-muted-foreground">
             <Mail className="h-4 w-4" />
           </AvatarFallback>
         </Avatar>
@@ -250,10 +252,10 @@ function InvitationCard({
               Pending
             </Badge>
           </div>
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-muted-foreground">
             Invited by {invitation.inviterName}
             {!isExpired && daysUntilExpiry > 0 && (
-              <span className="ml-2 text-gray-400">
+              <span className="ml-2 text-muted-foreground">
                 · Expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}
               </span>
             )}
@@ -272,8 +274,8 @@ function InvitationCard({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-gray-400 hover:text-red-600"
-            onClick={() => onRevoke(invitation.id)}
+            className="h-8 w-8 text-muted-foreground hover:text-red-600"
+            onClick={onRevoke}
             disabled={isRevoking}
           >
             {isRevoking ? (
@@ -303,6 +305,7 @@ function InviteMemberDialog({
 
   const form = useForm<InviteFormData>({
     resolver: zodResolver(inviteFormSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       email: '',
       role: 'editor',
@@ -322,7 +325,7 @@ function InviteMemberDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Invite Team Member</DialogTitle>
           <DialogDescription>
@@ -336,11 +339,17 @@ function InviteMemberDialog({
             <FormField
               control={form.control}
               name="email"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Email address</FormLabel>
                   <FormControl>
-                    <Input placeholder="colleague@company.com" {...field} />
+                    <ValidatedInput
+                      type="email"
+                      placeholder="colleague@company.com"
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -365,7 +374,7 @@ function InviteMemberDialog({
                           <Shield className="h-4 w-4" />
                           <div>
                             <div>Admin</div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               Can manage team and settings
                             </div>
                           </div>
@@ -376,7 +385,7 @@ function InviteMemberDialog({
                           <Edit3 className="h-4 w-4" />
                           <div>
                             <div>Editor</div>
-                            <div className="text-xs text-gray-500">Can edit projects and tasks</div>
+                            <div className="text-xs text-muted-foreground">Can edit projects and tasks</div>
                           </div>
                         </div>
                       </SelectItem>
@@ -385,7 +394,7 @@ function InviteMemberDialog({
                           <Eye className="h-4 w-4" />
                           <div>
                             <div>Viewer</div>
-                            <div className="text-xs text-gray-500">Can view projects only</div>
+                            <div className="text-xs text-muted-foreground">Can view projects only</div>
                           </div>
                         </div>
                       </SelectItem>
@@ -433,6 +442,7 @@ function CreateOrganizationDialog({
 
   const form = useForm<CreateOrgFormData>({
     resolver: zodResolver(createOrgFormSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       name: '',
       slug: '',
@@ -456,7 +466,7 @@ function CreateOrganizationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Create Organization</DialogTitle>
           <DialogDescription>
@@ -469,11 +479,16 @@ function CreateOrganizationDialog({
             <FormField
               control={form.control}
               name="name"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Organization Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="My Organization" {...field} />
+                    <ValidatedInput
+                      placeholder="My Organization"
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -483,11 +498,17 @@ function CreateOrganizationDialog({
             <FormField
               control={form.control}
               name="slug"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Slug (optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="my-organization" {...field} />
+                    <ValidatedInput
+                      placeholder="my-organization"
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
+                      showValidation={field.value !== ''} // Only show validation if user entered something
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -497,11 +518,17 @@ function CreateOrganizationDialog({
             <FormField
               control={form.control}
               name="description"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Description (optional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="A brief description of your organization" {...field} />
+                    <ValidatedInput
+                      placeholder="A brief description of your organization"
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
+                      showValidation={field.value !== ''} // Only show validation if user entered something
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -569,22 +596,18 @@ function TeamPageSkeleton() {
 }
 
 // Empty state
-function EmptyState({ onCreateOrg }: { onCreateOrg: () => void }) {
+function TeamEmptyState({ onCreateOrg }: { onCreateOrg: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="rounded-full bg-gray-100 p-4">
-        <Building2 className="h-8 w-8 text-gray-400" />
-      </div>
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No organizations yet</h3>
-      <p className="mt-2 max-w-sm text-sm text-gray-500">
-        You&apos;re not a member of any organizations. Create one to start collaborating with your
-        team.
-      </p>
-      <Button className="mt-6" onClick={onCreateOrg}>
-        <Building2 className="mr-2 h-4 w-4" />
-        Create Organization
-      </Button>
-    </div>
+    <EmptyState
+      illustration="team"
+      title="No organizations yet"
+      description="You're not a member of any organizations. Create one to start collaborating with your team."
+      size="lg"
+      action={{
+        label: "Create Organization",
+        onClick: onCreateOrg,
+      }}
+    />
   )
 }
 
@@ -596,6 +619,7 @@ export default function TeamPage() {
   const [createOrgDialogOpen, setCreateOrgDialogOpen] = useState(false)
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null)
   const [memberToManageRole, setMemberToManageRole] = useState<TeamMember | null>(null)
+  const [invitationToRevoke, setInvitationToRevoke] = useState<TeamInvitation | null>(null)
 
   // Fetch organizations
   const { data: organizations, isLoading: orgsLoading, error: orgsError } = useOrganizations()
@@ -604,9 +628,19 @@ export default function TeamPage() {
   const currentOrgId = selectedOrgId || organizations?.[0]?.id
   const currentOrg = organizations?.find((org) => org.id === currentOrgId)
 
-  // Fetch team data
-  const { data: members, isLoading: membersLoading } = useTeamMembers(currentOrgId)
+  // Fetch team data with pagination
+  const {
+    data: membersData,
+    isLoading: membersLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useTeamMembersInfinite(currentOrgId, { pageSize: TEAM_MEMBERS_PAGE_SIZE })
   const { data: invitations, isLoading: invitationsLoading } = useTeamInvitations(currentOrgId)
+
+  // Flatten paginated members
+  const members = membersData?.pages.flatMap((page) => page.members) ?? []
+  const pagination = membersData?.pages[membersData.pages.length - 1]?.pagination
 
   // Mutations
   const updateRole = useUpdateMemberRole(currentOrgId || '')
@@ -628,6 +662,17 @@ export default function TeamPage() {
     }
   }
 
+  // Handle revoke invitation
+  const handleRevokeInvitation = async () => {
+    if (!invitationToRevoke) return
+    try {
+      await revokeInvitation.mutateAsync(invitationToRevoke.id)
+      setInvitationToRevoke(null)
+    } catch (error) {
+      console.error('Failed to revoke invitation:', error)
+    }
+  }
+
   // Loading state
   if (orgsLoading) {
     return <TeamPageSkeleton />
@@ -637,11 +682,9 @@ export default function TeamPage() {
   if (orgsError) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="rounded-full bg-red-100 p-4">
-          <Users className="h-8 w-8 text-red-600" />
-        </div>
-        <h3 className="mt-4 text-lg font-medium text-gray-900">Failed to load team</h3>
-        <p className="mt-2 text-sm text-gray-500">
+        <ErrorIllustration className="h-32 w-32" />
+        <h3 className="mt-4 text-lg font-medium text-foreground">Failed to load team</h3>
+        <p className="mt-2 text-sm text-muted-foreground">
           There was an error loading your organizations. Please try again.
         </p>
         <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
@@ -655,7 +698,7 @@ export default function TeamPage() {
   if (!organizations || organizations.length === 0) {
     return (
       <>
-        <EmptyState onCreateOrg={() => setCreateOrgDialogOpen(true)} />
+        <TeamEmptyState onCreateOrg={() => setCreateOrgDialogOpen(true)} />
         <CreateOrganizationDialog
           open={createOrgDialogOpen}
           onOpenChange={setCreateOrgDialogOpen}
@@ -671,8 +714,8 @@ export default function TeamPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Team Members</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Team Members</h1>
+          <p className="text-sm text-muted-foreground">
             Manage your team and control access to your projects
           </p>
         </div>
@@ -681,7 +724,7 @@ export default function TeamPage() {
           {/* Organization selector */}
           {organizations.length > 1 && (
             <Select value={currentOrgId} onValueChange={setSelectedOrgId}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <Building2 className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Select organization" />
               </SelectTrigger>
@@ -740,9 +783,9 @@ export default function TeamPage() {
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
                 Members
-                {members && (
+                {pagination && (
                   <Badge variant="secondary" className="ml-2">
-                    {members.length}
+                    {pagination.totalCount}
                   </Badge>
                 )}
               </CardTitle>
@@ -782,9 +825,35 @@ export default function TeamPage() {
                   isRemoving={removeMember.isPending}
                 />
               ))}
+
+              {/* Load More button */}
+              {hasNextPage && (
+                <div className="flex flex-col items-center gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                    className="w-full sm:w-auto"
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load More Members'
+                    )}
+                  </Button>
+                  {pagination && (
+                    <p className="text-xs text-muted-foreground">
+                      Showing {members.length} of {pagination.totalCount} members
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="py-8 text-center text-gray-500">No members found</div>
+            <div className="py-8 text-center text-muted-foreground">No members found</div>
           )}
         </CardContent>
       </Card>
@@ -816,8 +885,8 @@ export default function TeamPage() {
                     key={invitation.id}
                     invitation={invitation}
                     canManage={canInvite}
-                    onRevoke={(invitationId) => revokeInvitation.mutate(invitationId)}
-                    isRevoking={revokeInvitation.isPending}
+                    onRevoke={() => setInvitationToRevoke(invitation)}
+                    isRevoking={revokeInvitation.isPending && invitationToRevoke?.id === invitation.id}
                   />
                 ))}
               </div>
@@ -881,6 +950,37 @@ export default function TeamPage() {
                 </>
               ) : (
                 'Remove Member'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revoke Invitation Confirmation Dialog */}
+      <AlertDialog open={!!invitationToRevoke} onOpenChange={() => setInvitationToRevoke(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke invitation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to revoke the invitation sent to{' '}
+              <strong>{invitationToRevoke?.email}</strong>? They will no longer be able to join the
+              team using this invitation link.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevokeInvitation}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={revokeInvitation.isPending}
+            >
+              {revokeInvitation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Revoking...
+                </>
+              ) : (
+                'Revoke Invitation'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

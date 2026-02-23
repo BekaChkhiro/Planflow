@@ -29,13 +29,13 @@ function TaskDistributionBar({
     { label: 'Done', count: done, color: 'bg-green-500', textColor: 'text-green-600' },
     { label: 'In Progress', count: inProgress, color: 'bg-blue-500', textColor: 'text-blue-600' },
     { label: 'Blocked', count: blocked, color: 'bg-red-500', textColor: 'text-red-600' },
-    { label: 'To Do', count: todo, color: 'bg-gray-300', textColor: 'text-gray-600' },
+    { label: 'To Do', count: todo, color: 'bg-gray-300', textColor: 'text-muted-foreground' },
   ].filter((s) => s.count > 0)
 
   return (
     <div className={cn('w-full', className)}>
       {/* Stacked bar */}
-      <div className="flex h-4 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className="flex h-4 w-full overflow-hidden rounded-full bg-muted">
         {segments.map((segment) => {
           const percentage = (segment.count / total) * 100
           return (

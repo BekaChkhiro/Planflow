@@ -2,6 +2,7 @@
 
 import { ReactNode, useState, Suspense } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ThemeProvider } from 'next-themes'
 import { PostHogProvider } from '@/components/analytics/posthog-provider'
 import { ServiceWorkerRegistration } from '@/components/notifications/service-worker-registration'
 
@@ -9,16 +10,30 @@ interface ProvidersProps {
   children: ReactNode
 }
 
+// Cache timing constants (T13.1 - Performance Optimization)
+const CACHE_TIME = {
+  // How long data is considered fresh (won't refetch)
+  staleTime: 5 * 60 * 1000, // 5 minutes
+  // How long inactive data stays in cache before garbage collection
+  gcTime: 30 * 60 * 1000, // 30 minutes
+} as const
+
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // SSR: Prevent refetching immediately on the client
-        staleTime: 60 * 1000, // 1 minute
+        // Data is considered fresh for 5 minutes - reduces unnecessary refetches
+        staleTime: CACHE_TIME.staleTime,
+        // Keep inactive query data in cache for 30 minutes
+        gcTime: CACHE_TIME.gcTime,
         // Retry failed requests up to 1 time
         retry: 1,
-        // Don't refetch on window focus by default
+        // Don't refetch on window focus - user can manually refresh if needed
         refetchOnWindowFocus: false,
+        // Don't refetch on reconnect - prevents thundering herd on reconnection
+        refetchOnReconnect: false,
+        // Refetch on mount only if data is stale
+        refetchOnMount: true,
       },
       mutations: {
         // Retry mutations once on failure
@@ -50,14 +65,20 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense fallback={null}>
-        <PostHogProvider>
-          {children}
-        </PostHogProvider>
-      </Suspense>
-      {/* Service Worker for Push Notifications (T6.8) */}
-      <ServiceWorkerRegistration />
-      {/* Theme Provider can be added here if dark mode is needed */}
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <Suspense fallback={null}>
+          <PostHogProvider>
+            {children}
+          </PostHogProvider>
+        </Suspense>
+        {/* Service Worker for Push Notifications (T6.8) */}
+        <ServiceWorkerRegistration />
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }

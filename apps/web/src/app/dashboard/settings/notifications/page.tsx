@@ -108,8 +108,8 @@ export default function NotificationsSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900">Notification Settings</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-lg font-medium text-foreground">Notification Settings</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           Choose how and when you want to be notified about activity.
         </p>
       </div>
@@ -121,7 +121,7 @@ export default function NotificationsSettingsPage() {
             {isSubscribed ? (
               <Bell className="h-5 w-5 text-green-600" />
             ) : (
-              <BellOff className="h-5 w-5 text-gray-400" />
+              <BellOff className="h-5 w-5 text-muted-foreground" />
             )}
             Browser Push Notifications
           </CardTitle>
@@ -153,7 +153,7 @@ export default function NotificationsSettingsPage() {
                   <Label htmlFor="push-toggle" className="text-base">
                     Enable Push Notifications
                   </Label>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     {isSubscribed
                       ? 'You will receive browser notifications'
                       : 'Enable to receive browser notifications'}
@@ -203,7 +203,7 @@ export default function NotificationsSettingsPage() {
               </div>
               <div>
                 <Label>Mentions</Label>
-                <p className="text-sm text-gray-500">When someone @mentions you</p>
+                <p className="text-sm text-muted-foreground">When someone @mentions you</p>
               </div>
             </div>
             <Switch
@@ -222,7 +222,7 @@ export default function NotificationsSettingsPage() {
               </div>
               <div>
                 <Label>Task Assignments</Label>
-                <p className="text-sm text-gray-500">When a task is assigned to you</p>
+                <p className="text-sm text-muted-foreground">When a task is assigned to you</p>
               </div>
             </div>
             <Switch
@@ -241,7 +241,7 @@ export default function NotificationsSettingsPage() {
               </div>
               <div>
                 <Label>Comments</Label>
-                <p className="text-sm text-gray-500">When someone comments on your tasks</p>
+                <p className="text-sm text-muted-foreground">When someone comments on your tasks</p>
               </div>
             </div>
             <Switch
@@ -260,7 +260,7 @@ export default function NotificationsSettingsPage() {
               </div>
               <div>
                 <Label>Status Changes</Label>
-                <p className="text-sm text-gray-500">When task status is updated</p>
+                <p className="text-sm text-muted-foreground">When task status is updated</p>
               </div>
             </div>
             <Switch
@@ -279,7 +279,7 @@ export default function NotificationsSettingsPage() {
               </div>
               <div>
                 <Label>Team Invitations</Label>
-                <p className="text-sm text-gray-500">When you receive team invitations</p>
+                <p className="text-sm text-muted-foreground">When you receive team invitations</p>
               </div>
             </div>
             <Switch
@@ -295,7 +295,7 @@ export default function NotificationsSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5 text-gray-600" />
+            <Mail className="h-5 w-5 text-muted-foreground" />
             Email Notifications
           </CardTitle>
           <CardDescription>
@@ -306,7 +306,7 @@ export default function NotificationsSettingsPage() {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label>Email Notifications</Label>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 Receive important updates via email
               </p>
             </div>
@@ -324,7 +324,7 @@ export default function NotificationsSettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Mention Emails</Label>
-                  <p className="text-sm text-gray-500">Email when someone @mentions you</p>
+                  <p className="text-sm text-muted-foreground">Email when someone @mentions you</p>
                 </div>
                 <Switch
                   checked={preferences.emailMentions}
@@ -338,7 +338,7 @@ export default function NotificationsSettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Assignment Emails</Label>
-                  <p className="text-sm text-gray-500">Email when tasks are assigned to you</p>
+                  <p className="text-sm text-muted-foreground">Email when tasks are assigned to you</p>
                 </div>
                 <Switch
                   checked={preferences.emailAssignments}
@@ -352,7 +352,7 @@ export default function NotificationsSettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Email Digest</Label>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     Receive periodic summaries of your activity
                   </p>
                 </div>
@@ -365,10 +365,10 @@ export default function NotificationsSettingsPage() {
 
               {preferences.emailDigest && (
                 <>
-                  <div className="ml-4 space-y-4 rounded-lg border border-gray-100 bg-gray-50 p-4">
+                  <div className="ml-4 space-y-4 rounded-lg border border-gray-100 bg-muted/50 p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-500" />
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
                         <Label>Frequency</Label>
                       </div>
                       <Select
@@ -390,7 +390,7 @@ export default function NotificationsSettingsPage() {
 
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-500" />
+                        <Clock className="h-4 w-4 text-muted-foreground" />
                         <Label>Send Time (UTC)</Label>
                       </div>
                       <Select
@@ -417,7 +417,7 @@ export default function NotificationsSettingsPage() {
                     </div>
 
                     {preferences.lastDigestSentAt && (
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         Last digest sent:{' '}
                         {new Date(preferences.lastDigestSentAt).toLocaleString()}
                       </p>
@@ -434,7 +434,7 @@ export default function NotificationsSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5 text-gray-600" />
+            <Bell className="h-5 w-5 text-muted-foreground" />
             In-App Notifications
           </CardTitle>
           <CardDescription>
@@ -445,7 +445,7 @@ export default function NotificationsSettingsPage() {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label>Toast Notifications</Label>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 Show pop-up notifications while using the app
               </p>
             </div>
@@ -459,7 +459,7 @@ export default function NotificationsSettingsPage() {
       </Card>
 
       {isUpdating && (
-        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Saving preferences...
         </div>

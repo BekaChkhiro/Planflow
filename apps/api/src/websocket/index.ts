@@ -53,6 +53,8 @@ export {
   broadcastTaskLockExtended,
   sendLocksList,
   getTaskLock,
+  // Task reorder broadcast (T14.3)
+  broadcastTasksReordered,
   getProjectLocks,
   acquireTaskLock,
   releaseTaskLock,

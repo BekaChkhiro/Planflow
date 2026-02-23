@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, pgEnum, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, uuid, pgEnum, jsonb, index } from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { organizations } from './organizations'
 import { projects } from './projects'
@@ -77,7 +77,14 @@ export const activityLog = pgTable('activity_log', {
   description: text('description'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+}, (table) => ({
+  // Performance index for fetching project activity feed sorted by time (T13.7)
+  projectCreatedAtIdx: index('activity_log_project_id_created_at_idx').on(table.projectId, table.createdAt),
+  // Index for organization-level activity feed
+  orgCreatedAtIdx: index('activity_log_org_id_created_at_idx').on(table.organizationId, table.createdAt),
+  // Index for actor lookups
+  actorIdx: index('activity_log_actor_id_idx').on(table.actorId),
+}))
 
 export type ActivityLog = typeof activityLog.$inferSelect
 export type NewActivityLog = typeof activityLog.$inferInsert

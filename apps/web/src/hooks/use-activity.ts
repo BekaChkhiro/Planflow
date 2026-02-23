@@ -96,7 +96,9 @@ export function useProjectActivity(projectId: string, params?: ActivityQueryPara
       return response.data
     },
     enabled: !!projectId,
-    staleTime: 30000, // Consider data stale after 30 seconds
+    // T13.1: Optimized caching - useActivitySubscription handles real-time updates
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes - activity data is valuable for history
   })
 }
 
@@ -129,7 +131,9 @@ export function useProjectActivityInfinite(
       return undefined
     },
     enabled: !!projectId,
-    staleTime: 30000,
+    // T13.1: Optimized caching for infinite scroll
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes
   })
 }
 
@@ -146,7 +150,9 @@ export function useTaskActivity(projectId: string, taskId: string) {
       return response.data
     },
     enabled: !!projectId && !!taskId,
-    staleTime: 30000,
+    // T13.1: Optimized caching - task activity is updated via WebSocket
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes
   })
 }
 

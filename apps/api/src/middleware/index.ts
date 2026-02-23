@@ -39,3 +39,13 @@ export {
 } from './security.js'
 
 export { sentryMiddleware, sentryErrorHandler } from './sentry.js'
+
+export {
+  etagMiddleware,
+  apiEtagMiddleware,
+  staticEtagMiddleware,
+  dynamicEtagMiddleware,
+  generateResourceETag,
+  shouldReturn304,
+  setETagHeaders,
+} from './etag.js'

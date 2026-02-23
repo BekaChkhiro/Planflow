@@ -62,7 +62,7 @@ function StatusIcon({ status }: { status: string }) {
     case 'BLOCKED':
       return <XCircle className="h-3 w-3 text-red-500" />
     default:
-      return <CircleDot className="h-3 w-3 text-gray-400" />
+      return <CircleDot className="h-3 w-3 text-muted-foreground" />
   }
 }
 
@@ -97,12 +97,12 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
             </Avatar>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">{member.name}</span>
+                <span className="font-semibold text-foreground">{member.name}</span>
                 <Badge variant={getRoleBadgeVariant(member.role)} className="text-xs">
                   {getRoleLabel(member.role)}
                 </Badge>
               </div>
-              <span className="text-sm text-gray-500">{member.email}</span>
+              <span className="text-sm text-muted-foreground">{member.email}</span>
             </div>
           </div>
           <WorkloadStatusBadge status={member.workloadStatus} />
@@ -112,7 +112,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700">Active Tasks</span>
-            <span className="text-sm font-bold text-gray-900">{member.taskCount}</span>
+            <span className="text-sm font-bold text-foreground">{member.taskCount}</span>
           </div>
           <WorkloadBar
             current={member.taskCount}
@@ -127,7 +127,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">All Tasks</span>
-              <span className="text-sm text-gray-500">{totalTasks} total</span>
+              <span className="text-sm text-muted-foreground">{totalTasks} total</span>
             </div>
             <TaskDistributionBar
               done={member.completedCount}
@@ -140,7 +140,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         )}
 
         {/* Stats grid */}
-        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+        <div className="mt-4 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -186,9 +186,9 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="rounded-lg bg-gray-50 p-2">
-                  <div className="text-lg font-bold text-gray-600">{member.todoCount}</div>
-                  <div className="text-xs text-gray-600">To Do</div>
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <div className="text-lg font-bold text-muted-foreground">{member.todoCount}</div>
+                  <div className="text-xs text-muted-foreground">To Do</div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
@@ -201,20 +201,20 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         {/* Current tasks */}
         {member.currentTasks.length > 0 && (
           <div className="mt-4">
-            <div className="text-xs font-medium text-gray-500 mb-2">Current Tasks</div>
+            <div className="text-xs font-medium text-muted-foreground mb-2">Current Tasks</div>
             <div className="space-y-1">
               {member.currentTasks.slice(0, 3).map((task) => (
                 <div
                   key={task.taskId}
-                  className="flex items-center gap-2 text-sm text-gray-600"
+                  className="flex items-center gap-2 text-sm text-muted-foreground"
                 >
                   <StatusIcon status={task.status} />
-                  <span className="font-mono text-xs text-gray-400">{task.taskId}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{task.taskId}</span>
                   <span className="truncate">{task.name}</span>
                 </div>
               ))}
               {member.currentTasks.length > 3 && (
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-muted-foreground">
                   +{member.currentTasks.length - 3} more tasks
                 </div>
               )}
@@ -225,8 +225,8 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         {/* Completion rate */}
         {totalTasks > 0 && (
           <div className="mt-4 flex items-center justify-between text-sm">
-            <span className="text-gray-500">Completion Rate</span>
-            <span className="font-medium text-gray-900">{member.completionRate}%</span>
+            <span className="text-muted-foreground">Completion Rate</span>
+            <span className="font-medium text-foreground">{member.completionRate}%</span>
           </div>
         )}
       </CardContent>
@@ -255,9 +255,9 @@ function StatCard({
       <CardContent className="pt-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">{title}</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-            {description && <p className="mt-1 text-xs text-gray-500">{description}</p>}
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
+            {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
           </div>
           <div className="rounded-full bg-blue-100 p-3">
             <Icon className="h-5 w-5 text-blue-600" />
@@ -288,13 +288,13 @@ function WorkloadPageSkeleton() {
         <Skeleton className="h-10 w-32" />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 sm:gap-4">
         {[1, 2, 3, 4].map((i) => (
           <Skeleton key={i} className="h-28" />
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <Skeleton key={i} className="h-80" />
         ))}
@@ -308,11 +308,11 @@ function EmptyState({ hasOrganization }: { hasOrganization: boolean }) {
   if (!hasOrganization) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="rounded-full bg-gray-100 p-4">
-          <Building2 className="h-8 w-8 text-gray-400" />
+        <div className="rounded-full bg-muted p-4">
+          <Building2 className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="mt-4 text-lg font-medium text-gray-900">No organizations</h3>
-        <p className="mt-2 max-w-sm text-sm text-gray-500">
+        <h3 className="mt-4 text-lg font-medium text-foreground">No organizations</h3>
+        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
           You need to be part of an organization to view team workload.
         </p>
         <Link href="/dashboard/team">
@@ -324,11 +324,11 @@ function EmptyState({ hasOrganization }: { hasOrganization: boolean }) {
 
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="rounded-full bg-gray-100 p-4">
-        <BarChart3 className="h-8 w-8 text-gray-400" />
+      <div className="rounded-full bg-muted p-4">
+        <BarChart3 className="h-8 w-8 text-muted-foreground" />
       </div>
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No workload data</h3>
-      <p className="mt-2 max-w-sm text-sm text-gray-500">
+      <h3 className="mt-4 text-lg font-medium text-foreground">No workload data</h3>
+      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
         There are no tasks assigned to team members yet. Start by creating tasks and assigning
         them to team members.
       </p>
@@ -361,8 +361,8 @@ export default function WorkloadPage() {
         <div className="rounded-full bg-red-100 p-4">
           <AlertTriangle className="h-8 w-8 text-red-600" />
         </div>
-        <h3 className="mt-4 text-lg font-medium text-gray-900">Failed to load workload</h3>
-        <p className="mt-2 text-sm text-gray-500">
+        <h3 className="mt-4 text-lg font-medium text-foreground">Failed to load workload</h3>
+        <p className="mt-2 text-sm text-muted-foreground">
           There was an error loading workload data. Please try again.
         </p>
         <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
@@ -391,8 +391,8 @@ export default function WorkloadPage() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900">Team Workload</h1>
-              <p className="text-sm text-gray-500">
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">Team Workload</h1>
+              <p className="text-sm text-muted-foreground">
                 Monitor task distribution and team capacity
               </p>
             </div>
@@ -403,7 +403,7 @@ export default function WorkloadPage() {
           {/* Organization selector */}
           {organizations.length > 1 && (
             <Select value={currentOrgId} onValueChange={setSelectedOrgId}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <Building2 className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Select organization" />
               </SelectTrigger>
@@ -423,7 +423,7 @@ export default function WorkloadPage() {
       {workloadLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <span className="ml-3 text-gray-500">Loading workload data...</span>
+          <span className="ml-3 text-muted-foreground">Loading workload data...</span>
         </div>
       )}
 
@@ -431,7 +431,7 @@ export default function WorkloadPage() {
       {!workloadLoading && summary && (
         <>
           {/* Summary cards */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 sm:gap-4">
             <StatCard
               title="Total Tasks"
               value={summary.totalTasks}
@@ -496,10 +496,10 @@ export default function WorkloadPage() {
           {/* Member workload cards */}
           {members.length > 0 ? (
             <div>
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">
+              <h2 className="mb-4 text-lg font-semibold text-foreground">
                 Team Members ({members.length})
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {members.map((member) => (
                   <MemberWorkloadCard key={member.memberId} member={member} />
                 ))}
@@ -527,11 +527,11 @@ export default function WorkloadPage() {
                   {unassignedTasks.slice(0, 10).map((task) => (
                     <div
                       key={task.id}
-                      className="flex items-center justify-between rounded-lg border bg-white p-3 hover:bg-gray-50"
+                      className="flex items-center justify-between rounded-lg border bg-card p-3 hover:bg-muted/50"
                     >
                       <div className="flex items-center gap-3">
                         <StatusIcon status={task.status} />
-                        <span className="font-mono text-xs text-gray-400">{task.taskId}</span>
+                        <span className="font-mono text-xs text-muted-foreground">{task.taskId}</span>
                         <span className="text-sm text-gray-700">{task.name}</span>
                       </div>
                       <Badge variant="outline" className="text-xs">
@@ -540,7 +540,7 @@ export default function WorkloadPage() {
                     </div>
                   ))}
                   {unassignedTasks.length > 10 && (
-                    <div className="text-center text-sm text-gray-500 py-2">
+                    <div className="text-center text-sm text-muted-foreground py-2">
                       +{unassignedTasks.length - 10} more unassigned tasks
                     </div>
                   )}

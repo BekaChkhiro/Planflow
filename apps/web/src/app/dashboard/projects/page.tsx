@@ -5,23 +5,30 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, FolderOpen, Calendar, Clock, MoreVertical, Trash2, Loader2 } from 'lucide-react'
+import { Plus, Calendar, Clock, MoreVertical, Archive, ArchiveRestore, Trash2, Loader2, Search, X } from 'lucide-react'
 
 import {
-  useProjects,
-  useDeleteProject,
+  useProjectsInfinite,
+  useArchiveProject,
+  useRestoreProject,
   useCreateProject,
   ProjectLimitError,
   isAtProjectLimit,
+  PROJECTS_PAGE_SIZE,
   type Project,
+  type PaginationMeta,
+  type ArchiveFilter,
 } from '@/hooks/use-projects'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { Input } from '@/components/ui/input'
 import { useProjectAnalytics } from '@/hooks/use-analytics'
 import { CreateProjectRequestSchema, type CreateProjectRequest, type ProjectLimits } from '@planflow/shared'
 import { UpgradePrompt, ProjectLimitBadge } from '@/components/upgrade-prompt'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Input } from '@/components/ui/input'
+import { EmptyState, ErrorIllustration } from '@/components/ui/empty-state'
+import { ValidatedInput } from '@/components/ui/validated-input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -55,6 +62,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -100,22 +109,74 @@ function ProjectCardSkeleton() {
   )
 }
 
-function EmptyState({ onCreateClick, canCreate }: { onCreateClick: () => void; canCreate: boolean }) {
+function ProjectsEmptyState({
+  onCreateClick,
+  canCreate,
+  isSearching,
+  searchQuery,
+  onClearSearch,
+  archiveFilter,
+  onShowActive,
+}: {
+  onCreateClick: () => void
+  canCreate: boolean
+  isSearching?: boolean
+  searchQuery?: string
+  onClearSearch?: () => void
+  archiveFilter?: ArchiveFilter
+  onShowActive?: () => void
+}) {
+  if (isSearching) {
+    return (
+      <Card className="border-dashed">
+        <CardContent>
+          <EmptyState
+            illustration="search"
+            title="No projects found"
+            description={`No projects match "${searchQuery}". Try a different search term or clear the search.`}
+            size="lg"
+            action={onClearSearch ? {
+              label: "Clear Search",
+              onClick: onClearSearch,
+            } : undefined}
+          />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (archiveFilter === 'archived') {
+    return (
+      <Card className="border-dashed">
+        <CardContent>
+          <EmptyState
+            illustration="projects"
+            title="No archived projects"
+            description="You don't have any archived projects. Projects you archive will appear here."
+            size="lg"
+            action={onShowActive ? {
+              label: "View Active Projects",
+              onClick: onShowActive,
+            } : undefined}
+          />
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="rounded-full bg-gray-100 p-4">
-          <FolderOpen className="h-8 w-8 text-gray-400" />
-        </div>
-        <h3 className="mt-4 text-lg font-semibold text-gray-900">No projects yet</h3>
-        <p className="mt-2 max-w-sm text-center text-sm text-gray-500">
-          Get started by creating your first project. You can sync your PROJECT_PLAN.md files
-          from the terminal using the MCP integration.
-        </p>
-        <Button className="mt-6" onClick={onCreateClick} disabled={!canCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Project
-        </Button>
+      <CardContent>
+        <EmptyState
+          illustration="projects"
+          title="No projects yet"
+          description="Get started by creating your first project. You can sync your PROJECT_PLAN.md files from the terminal using the MCP integration."
+          size="lg"
+          action={canCreate ? {
+            label: "Create Project",
+            onClick: onCreateClick,
+          } : undefined}
+        />
       </CardContent>
     </Card>
   )
@@ -136,6 +197,7 @@ function CreateProjectDialog({
 
   const form = useForm<CreateProjectRequest>({
     resolver: zodResolver(CreateProjectRequestSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       name: '',
       description: '',
@@ -178,7 +240,7 @@ function CreateProjectDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Create Project</DialogTitle>
           <DialogDescription>
@@ -204,13 +266,15 @@ function CreateProjectDialog({
             <FormField
               control={form.control}
               name="name"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Project Name</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       placeholder="My Awesome Project"
                       disabled={createProject.isPending}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -267,9 +331,7 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
   return (
     <Card className="border-red-200 bg-red-50">
       <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="rounded-full bg-red-100 p-4">
-          <FolderOpen className="h-8 w-8 text-red-400" />
-        </div>
+        <ErrorIllustration className="h-32 w-32" />
         <h3 className="mt-4 text-lg font-semibold text-red-900">Failed to load projects</h3>
         <p className="mt-2 max-w-sm text-center text-sm text-red-600">
           {error.message || 'An unexpected error occurred. Please try again.'}
@@ -282,16 +344,33 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
   )
 }
 
-function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string, name: string) => void }) {
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+function ProjectCard({
+  project,
+  onArchive,
+  onRestore,
+}: {
+  project: Project
+  onArchive: (id: string, name: string) => void
+  onRestore: (id: string, name: string) => void
+}) {
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false)
+  const isArchived = !!project.archivedAt
 
   return (
     <>
-      <Card className="transition-shadow hover:shadow-md">
+      <Card className={`transition-shadow hover:shadow-md ${isArchived ? 'opacity-75' : ''}`}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <Link href={`/dashboard/projects/${project.id}`} className="flex-1">
-              <CardTitle className="text-lg hover:text-primary">{project.name}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg hover:text-primary">{project.name}</CardTitle>
+                {isArchived && (
+                  <Badge variant="secondary" className="text-xs">
+                    <Archive className="mr-1 h-3 w-3" />
+                    Archived
+                  </Badge>
+                )}
+              </div>
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -304,16 +383,28 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
                 <DropdownMenuItem asChild>
                   <Link href={`/dashboard/projects/${project.id}`}>View project</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href={`/dashboard/projects/${project.id}/settings`}>Settings</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-red-600 focus:bg-red-50 focus:text-red-600"
-                  onClick={() => setShowDeleteDialog(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
+                {!isArchived && (
+                  <DropdownMenuItem asChild>
+                    <Link href={`/dashboard/projects/${project.id}/settings`}>Settings</Link>
+                  </DropdownMenuItem>
+                )}
+                {isArchived ? (
+                  <DropdownMenuItem
+                    className="text-green-600 focus:bg-green-50 focus:text-green-600"
+                    onClick={() => onRestore(project.id, project.name)}
+                  >
+                    <ArchiveRestore className="mr-2 h-4 w-4" />
+                    Restore
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    className="text-orange-600 focus:bg-orange-50 focus:text-orange-600"
+                    onClick={() => setShowArchiveDialog(true)}
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    Archive
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -322,7 +413,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
           )}
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
               <span>Created {formatDate(project.createdAt)}</span>
@@ -331,26 +422,32 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
               <Clock className="h-4 w-4" />
               <span>Updated {formatRelativeTime(project.updatedAt)}</span>
             </div>
+            {isArchived && project.archivedAt && (
+              <div className="flex items-center gap-1 text-orange-600">
+                <Archive className="h-4 w-4" />
+                <span>Archived {formatRelativeTime(project.archivedAt)}</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete project</AlertDialogTitle>
+            <AlertDialogTitle>Archive project</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{project.name}&quot;? This action cannot be
-              undone and will permanently delete all project data including tasks and plans.
+              Are you sure you want to archive &quot;{project.name}&quot;? The project will be
+              hidden from your active projects but can be restored later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => onDelete(project.id, project.name)}
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={() => onArchive(project.id, project.name)}
             >
-              Delete
+              Archive
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -360,21 +457,50 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
 }
 
 export default function ProjectsPage() {
-  const { data, isLoading, error, refetch } = useProjects()
-  const deleteProject = useDeleteProject()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('active')
+  const debouncedSearch = useDebouncedValue(searchQuery, 300)
+
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useProjectsInfinite({ search: debouncedSearch, pageSize: PROJECTS_PAGE_SIZE, archived: archiveFilter })
+  const archiveProject = useArchiveProject()
+  const restoreProject = useRestoreProject()
   const { trackProjectDeleted } = useProjectAnalytics()
   const [showCreateDialog, setShowCreateDialog] = useState(false)
 
-  const projects = data?.projects
-  const limits = data?.limits
+  // Flatten all pages of projects into a single array
+  const projects = data?.pages.flatMap((page) => page.projects) ?? []
+  // Get limits from the first page (they're the same across all pages)
+  const limits = data?.pages[0]?.limits
+  // Get archived count from the first page
+  const archivedCount = data?.pages[0]?.archivedCount ?? 0
+  // Get pagination info from the last page
+  const pagination = data?.pages[data.pages.length - 1]?.pagination
+  // Check if we're searching
+  const isSearching = searchQuery.trim() !== ''
 
-  const handleDelete = async (projectId: string, projectName: string) => {
+  const handleArchive = async (projectId: string, projectName: string) => {
     try {
-      await deleteProject.mutateAsync(projectId)
-      // Track project deletion
+      await archiveProject.mutateAsync(projectId)
+      // Track as "deleted" for analytics (it's a soft delete)
       trackProjectDeleted(projectId, projectName)
     } catch (err) {
-      console.error('Failed to delete project:', err)
+      console.error('Failed to archive project:', err)
+    }
+  }
+
+  const handleRestore = async (projectId: string, _projectName: string) => {
+    try {
+      await restoreProject.mutateAsync(projectId)
+    } catch (err) {
+      console.error('Failed to restore project:', err)
     }
   }
 
@@ -384,20 +510,63 @@ export default function ProjectsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage your projects and sync plans from your local development environment.
-            </p>
+      <div className="mb-6 flex flex-col gap-4 sm:mb-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Projects</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Manage your projects and sync plans from your local development environment.
+              </p>
+            </div>
+            {limits && <ProjectLimitBadge limits={limits} />}
           </div>
-          {limits && <ProjectLimitBadge limits={limits} />}
+          <Button onClick={() => setShowCreateDialog(true)} disabled={!canCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Project
+          </Button>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)} disabled={!canCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Project
-        </Button>
+
+        {/* Search and Filter */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-9"
+              aria-label="Search projects"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Archive Filter Tabs */}
+          <Tabs value={archiveFilter} onValueChange={(v) => setArchiveFilter(v as ArchiveFilter)}>
+            <TabsList>
+              <TabsTrigger value="active">Active</TabsTrigger>
+              <TabsTrigger value="archived" className="gap-1">
+                Archived
+                {archivedCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                    {archivedCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="all">All</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
       {/* Upgrade Prompt */}
@@ -405,7 +574,7 @@ export default function ProjectsPage() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <ProjectCardSkeleton />
           <ProjectCardSkeleton />
           <ProjectCardSkeleton />
@@ -413,13 +582,61 @@ export default function ProjectsPage() {
       ) : error ? (
         <ErrorState error={error as Error} onRetry={() => refetch()} />
       ) : projects && projects.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} onDelete={handleDelete} />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {projects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onArchive={handleArchive}
+                onRestore={handleRestore}
+              />
+            ))}
+          </div>
+
+          {/* Load More / Pagination */}
+          {hasNextPage && (
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="min-w-[200px]"
+              >
+                {isFetchingNextPage ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Load More Projects'
+                )}
+              </Button>
+              {pagination && (
+                <p className="text-xs text-muted-foreground">
+                  Showing {projects.length} of {pagination.totalCount} projects
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* All loaded indicator */}
+          {!hasNextPage && pagination && pagination.totalCount > PROJECTS_PAGE_SIZE && (
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              All {pagination.totalCount} projects loaded
+            </p>
+          )}
+        </>
       ) : (
-        <EmptyState onCreateClick={() => setShowCreateDialog(true)} canCreate={canCreate} />
+        <ProjectsEmptyState
+          onCreateClick={() => setShowCreateDialog(true)}
+          canCreate={canCreate}
+          isSearching={isSearching}
+          searchQuery={searchQuery}
+          onClearSearch={() => setSearchQuery('')}
+          archiveFilter={archiveFilter}
+          onShowActive={() => setArchiveFilter('active')}
+        />
       )}
 
       {/* Create Project Modal */}

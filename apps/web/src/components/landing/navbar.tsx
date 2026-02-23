@@ -2,8 +2,8 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare, Users, Bell, BarChart3 } from "lucide-react"
+import { usePathname, useRouter } from "next/navigation"
+import { Menu, LayoutDashboard, User, Settings, LogOut, MessageSquare, Users, Bell, BarChart3, Keyboard } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -20,12 +20,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuShortcut,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAuthStore } from "@/stores/auth-store"
 import { FeedbackDialog } from "@/components/feedback-dialog"
 import { NotificationCenter } from "@/components/notifications"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { SkipLink } from "@/components/ui/skip-link"
+import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog"
+import { useKeyboardShortcut } from "@/lib/accessibility"
 
 function getInitials(name: string | undefined): string {
   if (!name) return 'U'
@@ -46,8 +50,62 @@ const navLinks = [
 export function Navbar() {
   const [isOpen, setIsOpen] = React.useState(false)
   const [feedbackOpen, setFeedbackOpen] = React.useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
   const { user, isAuthenticated, isInitialized, logout } = useAuthStore()
   const pathname = usePathname()
+  const router = useRouter()
+
+  // Navigation keyboard shortcuts (g + letter)
+  // These use a two-key sequence pattern
+  const [pendingG, setPendingG] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!isAuthenticated) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger in inputs
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return
+      }
+
+      if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setPendingG(true)
+        // Reset after 1 second
+        setTimeout(() => setPendingG(false), 1000)
+        return
+      }
+
+      if (pendingG) {
+        setPendingG(false)
+        switch (e.key) {
+          case 'h':
+            e.preventDefault()
+            router.push('/dashboard')
+            break
+          case 'p':
+            e.preventDefault()
+            router.push('/dashboard/projects')
+            break
+          case 's':
+            e.preventDefault()
+            router.push('/dashboard/settings')
+            break
+          case 't':
+            e.preventDefault()
+            router.push('/dashboard/team')
+            break
+          case 'n':
+            e.preventDefault()
+            router.push('/dashboard/notifications')
+            break
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isAuthenticated, pendingG, router])
 
   // Check if a nav link is current
   const isCurrentPage = (href: string) => {
@@ -108,6 +166,7 @@ export function Navbar() {
               Feedback
             </Button>
             <NotificationCenter />
+            <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -137,12 +196,14 @@ export function Navbar() {
                   <Link href="/dashboard" className="flex items-center">
                     <LayoutDashboard className="mr-2 h-4 w-4" />
                     Dashboard
+                    <DropdownMenuShortcut>G H</DropdownMenuShortcut>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard/team" className="flex items-center">
                     <Users className="mr-2 h-4 w-4" />
                     Team
+                    <DropdownMenuShortcut>G T</DropdownMenuShortcut>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
@@ -155,6 +216,7 @@ export function Navbar() {
                   <Link href="/dashboard/notifications" className="flex items-center">
                     <Bell className="mr-2 h-4 w-4" />
                     Notifications
+                    <DropdownMenuShortcut>G N</DropdownMenuShortcut>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
@@ -167,12 +229,21 @@ export function Navbar() {
                   <Link href="/dashboard/settings" className="flex items-center">
                     <Settings className="mr-2 h-4 w-4" />
                     Settings
+                    <DropdownMenuShortcut>G S</DropdownMenuShortcut>
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                  onClick={() => setShortcutsOpen(true)}
+                >
+                  <Keyboard className="mr-2 h-4 w-4" />
+                  Keyboard shortcuts
+                  <DropdownMenuShortcut>?</DropdownMenuShortcut>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onClick={logout}
-                  className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                  className="text-red-600 focus:bg-red-50 focus:text-red-600 dark:focus:bg-red-950"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out
@@ -182,6 +253,7 @@ export function Navbar() {
             </>
           ) : (
             <>
+              <ThemeToggle />
               <Button variant="ghost" asChild>
                 <Link href="/login">Sign In</Link>
               </Button>
@@ -286,7 +358,7 @@ export function Navbar() {
                     </Button>
                     <Button
                       variant="ghost"
-                      className="justify-start text-red-600 hover:text-red-600 hover:bg-red-50"
+                      className="justify-start text-red-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                       onClick={() => {
                         logout()
                         setIsOpen(false)
@@ -317,6 +389,7 @@ export function Navbar() {
       </div>
     </header>
     <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+    <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </>
   )
 }

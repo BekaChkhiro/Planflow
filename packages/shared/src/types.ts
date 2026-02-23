@@ -202,6 +202,29 @@ export const BulkUpdateTasksRequestSchema = z.object({
 
 export type BulkUpdateTasksRequest = z.infer<typeof BulkUpdateTasksRequestSchema>
 
+// Bulk assign tasks request schema (T14.6)
+export const BulkAssignTasksRequestSchema = z.object({
+  taskIds: z.array(z.string().uuid('Invalid task ID format')).min(1, 'At least one task must be provided').max(100, 'Maximum 100 tasks allowed'),
+  assigneeId: z.string().uuid('Invalid assignee ID format').nullable(),
+})
+
+export type BulkAssignTasksRequest = z.infer<typeof BulkAssignTasksRequestSchema>
+
+// Bulk delete tasks request schema (T14.6)
+export const BulkDeleteTasksRequestSchema = z.object({
+  taskIds: z.array(z.string().uuid('Invalid task ID format')).min(1, 'At least one task must be provided').max(100, 'Maximum 100 tasks allowed'),
+})
+
+export type BulkDeleteTasksRequest = z.infer<typeof BulkDeleteTasksRequestSchema>
+
+// Bulk status update request schema (T14.6)
+export const BulkStatusUpdateRequestSchema = z.object({
+  taskIds: z.array(z.string().uuid('Invalid task ID format')).min(1, 'At least one task must be provided').max(100, 'Maximum 100 tasks allowed'),
+  status: TaskStatusSchema,
+})
+
+export type BulkStatusUpdateRequest = z.infer<typeof BulkStatusUpdateRequestSchema>
+
 // API Token types
 export const ApiTokenSchema = z.object({
   id: z.string().uuid(),

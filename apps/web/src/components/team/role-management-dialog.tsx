@@ -123,17 +123,17 @@ export function RoleManagementDialog({
         </DialogHeader>
 
         {/* Member info */}
-        <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+        <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
           <Avatar className="h-10 w-10">
             <AvatarFallback className="bg-blue-100 text-blue-700">
               {getInitials(member.userName, member.userEmail)}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <div className="font-medium text-gray-900">
+            <div className="font-medium text-foreground">
               {member.userName || member.userEmail}
             </div>
-            <div className="text-sm text-gray-500">{member.userEmail}</div>
+            <div className="text-sm text-muted-foreground">{member.userEmail}</div>
           </div>
           <Badge
             variant={
@@ -172,8 +172,8 @@ export function RoleManagementDialog({
                         isSelected
                           ? 'border-blue-500 bg-blue-50'
                           : isCurrentRole
-                            ? 'border-gray-300 bg-gray-50'
-                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                            ? 'border-gray-300 bg-muted/50'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-muted/50'
                       }`}
                       onClick={() => !isCurrentRole && handleRoleSelect(roleDef.role)}
                     >
@@ -191,7 +191,7 @@ export function RoleManagementDialog({
                           <Label
                             htmlFor={roleDef.role}
                             className={`cursor-pointer font-medium ${
-                              isCurrentRole ? 'text-gray-400' : ''
+                              isCurrentRole ? 'text-muted-foreground' : ''
                             }`}
                           >
                             {roleDef.label}
@@ -202,7 +202,7 @@ export function RoleManagementDialog({
                             </Badge>
                           )}
                         </div>
-                        <p className="mt-1 text-sm text-gray-500">{roleDef.description}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{roleDef.description}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {roleDef.permissions
                             .filter((p) => p.allowed)
@@ -210,7 +210,7 @@ export function RoleManagementDialog({
                             .map((perm) => (
                               <span
                                 key={perm.label}
-                                className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+                                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                               >
                                 <Check className="h-3 w-3 text-green-500" />
                                 {perm.label}
@@ -242,14 +242,14 @@ export function RoleManagementDialog({
             {/* Confirmation view */}
             <div className="space-y-4">
               {/* Role change visualization */}
-              <div className="flex items-center justify-center gap-4 rounded-lg bg-gray-50 py-6">
+              <div className="flex items-center justify-center gap-4 rounded-lg bg-muted/50 py-6">
                 <div className="flex flex-col items-center gap-1">
                   <div className={`rounded-full p-2 ${currentRoleDef?.bgColor}`}>
                     <RoleIcon role={member.role} className={`h-5 w-5 ${currentRoleDef?.color}`} />
                   </div>
                   <span className="text-sm font-medium">{getRoleLabel(member.role)}</span>
                 </div>
-                <ArrowRight className="h-5 w-5 text-gray-400" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground" />
                 <div className="flex flex-col items-center gap-1">
                   <div className={`rounded-full p-2 ${selectedRoleDef?.bgColor}`}>
                     <RoleIcon

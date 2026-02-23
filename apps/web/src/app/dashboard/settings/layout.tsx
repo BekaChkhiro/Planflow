@@ -62,16 +62,17 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Manage your account settings and preferences
         </p>
       </div>
 
-      <div className="flex flex-col gap-8 lg:flex-row">
+      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
         {/* Sidebar Navigation */}
-        <aside className="lg:w-64">
-          <nav className="space-y-1">
+        <aside className="md:w-56 lg:w-64 shrink-0">
+          {/* Mobile: horizontal scroll, Desktop: vertical list */}
+          <nav className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 md:mx-0 md:flex-col md:gap-1 md:overflow-visible md:px-0 md:pb-0">
             {settingsNavItems.map((item) => {
               const isActive = pathname === item.href
               return (
@@ -79,16 +80,16 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors md:gap-3',
                     isActive
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
-                  <div>
+                  <item.icon className="h-5 w-5 shrink-0" />
+                  <div className="whitespace-nowrap md:whitespace-normal">
                     <div>{item.title}</div>
-                    <div className="text-xs font-normal text-gray-500">
+                    <div className="hidden text-xs font-normal text-muted-foreground md:block">
                       {item.description}
                     </div>
                   </div>

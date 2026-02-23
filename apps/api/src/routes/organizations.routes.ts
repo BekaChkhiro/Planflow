@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, count, desc, eq, gt, isNull, ne } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNull, ne, sql } from 'drizzle-orm'
 import crypto from 'crypto'
 import {
   CreateOrganizationRequestSchema,
@@ -359,7 +359,7 @@ organizationsRoutes.delete('/:id', auth, async (c) => {
   }
 })
 
-// GET /organizations/:id/members - List organization members
+// GET /organizations/:id/members - List organization members with pagination
 organizationsRoutes.get('/:id/members', auth, async (c) => {
   try {
     const { user } = getAuth(c)
@@ -369,6 +369,13 @@ organizationsRoutes.get('/:id/members', auth, async (c) => {
     if (!uuidRegex.test(orgId)) {
       return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
     }
+
+    // Parse pagination parameters
+    const pageParam = c.req.query('page')
+    const limitParam = c.req.query('limit')
+    const page = Math.max(1, parseInt(pageParam || '1', 10) || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(limitParam || '20', 10) || 20))
+    const offset = (page - 1) * limit
 
     const db = getDbClient()
 
@@ -388,7 +395,14 @@ organizationsRoutes.get('/:id/members', auth, async (c) => {
       return c.json({ success: false, error: 'Organization not found' }, 404)
     }
 
-    // Get all members with user info
+    // Get total count
+    const countResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.organizationMembers)
+      .where(eq(schema.organizationMembers.organizationId, orgId))
+    const totalCount = countResult[0]?.count ?? 0
+
+    // Get paginated members with user info
     const members = await db
       .select({
         id: schema.organizationMembers.id,
@@ -404,10 +418,24 @@ organizationsRoutes.get('/:id/members', auth, async (c) => {
       .innerJoin(schema.users, eq(schema.organizationMembers.userId, schema.users.id))
       .where(eq(schema.organizationMembers.organizationId, orgId))
       .orderBy(schema.organizationMembers.createdAt)
+      .limit(limit)
+      .offset(offset)
+
+    const totalPages = Math.ceil(totalCount / limit)
 
     return c.json({
       success: true,
-      data: { members },
+      data: {
+        members,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      },
     })
   } catch (error) {
     console.error('List organization members error:', error)

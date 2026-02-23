@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
 import { toast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/error-utils'
@@ -13,6 +13,16 @@ export interface Project {
   plan: string | null
   createdAt: string
   updatedAt: string
+  archivedAt: string | null
+}
+
+export interface PaginationMeta {
+  page: number
+  limit: number
+  totalCount: number
+  totalPages: number
+  hasNextPage: boolean
+  hasPrevPage: boolean
 }
 
 interface ProjectsResponse {
@@ -20,6 +30,8 @@ interface ProjectsResponse {
   data: {
     projects: Project[]
     limits: ProjectLimits
+    archivedCount?: number
+    pagination?: PaginationMeta
   }
 }
 
@@ -85,15 +97,89 @@ export function isAtProjectLimit(limits: ProjectLimits): boolean {
 
 export const projectsQueryKey = ['projects']
 
-export function useProjects() {
+// Default page size for pagination
+export const PROJECTS_PAGE_SIZE = 20
+
+// Archive filter type: 'active' (default), 'archived', or 'all'
+export type ArchiveFilter = 'active' | 'archived' | 'all'
+
+// Search options for projects
+export interface UseProjectsOptions {
+  search?: string
+  limit?: number
+  archived?: ArchiveFilter
+}
+
+// Standard query for getting all projects with optional search and archive filter
+export function useProjects(options: UseProjectsOptions = {}) {
+  const { search, limit = 100, archived = 'active' } = options
+
   return useQuery({
-    queryKey: projectsQueryKey,
+    queryKey: search
+      ? [...projectsQueryKey, { search, archived }]
+      : [...projectsQueryKey, { archived }],
     queryFn: async () => {
-      const response = await authApi.get<ProjectsResponse>('/projects')
+      const params = new URLSearchParams()
+      params.set('limit', String(limit))
+      params.set('archived', archived)
+      if (search?.trim()) {
+        params.set('search', search.trim())
+      }
+
+      const response = await authApi.get<ProjectsResponse>(`/projects?${params.toString()}`)
       return {
         projects: response.data.projects,
         limits: response.data.limits,
+        archivedCount: response.data.archivedCount,
+        pagination: response.data.pagination,
       }
+    },
+  })
+}
+
+// Infinite query for paginated projects with "Load More" support, search, and archive filter
+export interface UseProjectsInfiniteOptions {
+  search?: string
+  pageSize?: number
+  archived?: ArchiveFilter
+}
+
+export function useProjectsInfinite(options: UseProjectsInfiniteOptions = {}) {
+  const { search, pageSize = PROJECTS_PAGE_SIZE, archived = 'active' } = options
+
+  return useInfiniteQuery({
+    queryKey: search
+      ? [...projectsQueryKey, 'infinite', pageSize, { search, archived }]
+      : [...projectsQueryKey, 'infinite', pageSize, { archived }],
+    queryFn: async ({ pageParam = 1 }) => {
+      const params = new URLSearchParams()
+      params.set('page', String(pageParam))
+      params.set('limit', String(pageSize))
+      params.set('archived', archived)
+      if (search?.trim()) {
+        params.set('search', search.trim())
+      }
+
+      const response = await authApi.get<ProjectsResponse>(`/projects?${params.toString()}`)
+      return {
+        projects: response.data.projects,
+        limits: response.data.limits,
+        archivedCount: response.data.archivedCount,
+        pagination: response.data.pagination,
+      }
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination?.hasNextPage) {
+        return (lastPage.pagination.page || 1) + 1
+      }
+      return undefined
+    },
+    getPreviousPageParam: (firstPage) => {
+      if (firstPage.pagination?.hasPrevPage) {
+        return (firstPage.pagination.page || 1) - 1
+      }
+      return undefined
     },
   })
 }
@@ -134,6 +220,7 @@ export function useCreateProject() {
       }
     },
     onSuccess: () => {
+      // Invalidate both standard and infinite queries
       queryClient.invalidateQueries({ queryKey: projectsQueryKey })
     },
     onError: (error: unknown) => {
@@ -144,22 +231,71 @@ export function useCreateProject() {
   })
 }
 
-export function useDeleteProject() {
+// Archive project (soft delete)
+export function useArchiveProject() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (projectId: string) => {
-      await authApi.delete<DeleteProjectResponse>(`/projects/${projectId}`)
-      return projectId
+      const response = await authApi.delete<{
+        success: boolean
+        data: { message: string; project: { id: string; name: string; archivedAt: string } }
+      }>(`/projects/${projectId}`)
+      return response.data.project
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey })
+      toast.success('Project archived')
     },
     onError: (error: unknown) => {
       toast.error(getErrorMessage(error))
     },
   })
 }
+
+// Restore an archived project
+export function useRestoreProject() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (projectId: string) => {
+      const response = await authApi.post<{
+        success: boolean
+        data: { message: string; project: Project }
+      }>(`/projects/${projectId}/restore`)
+      return response.data.project
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey })
+      toast.success('Project restored')
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
+  })
+}
+
+// Permanently delete an archived project
+export function usePermanentDeleteProject() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (projectId: string) => {
+      await authApi.delete<DeleteProjectResponse>(`/projects/${projectId}?permanent=true`)
+      return projectId
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey })
+      toast.success('Project permanently deleted')
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
+  })
+}
+
+// Legacy alias for backward compatibility (now does soft delete/archive)
+export const useDeleteProject = useArchiveProject
 
 // Single project query
 interface ProjectResponse {
@@ -233,6 +369,7 @@ export interface Task {
   complexity: 'Low' | 'Medium' | 'High'
   estimatedHours: number | null
   dependencies: string[]
+  displayOrder?: number // For drag-and-drop ordering (T14.3)
   assigneeId: string | null
   assignedBy: string | null
   assignedAt: string | null
@@ -290,6 +427,104 @@ export function useAssignTask(projectId: string) {
     },
     onError: (error: unknown) => {
       toast.error(getErrorMessage(error))
+    },
+  })
+}
+
+// Duplicate task mutation (T14.4)
+interface DuplicateTaskResponse {
+  success: boolean
+  data: {
+    projectId: string
+    projectName: string
+    originalTaskId: string
+    task: Task
+  }
+}
+
+export function useDuplicateTask(projectId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ taskId, name }: { taskId: string; name?: string }) => {
+      const response = await authApi.post<DuplicateTaskResponse>(
+        `/projects/${projectId}/tasks/${taskId}/duplicate`,
+        name ? { name } : {}
+      )
+      return response.data
+    },
+    onSuccess: (data) => {
+      // Invalidate tasks query to refetch with the new duplicated task
+      queryClient.invalidateQueries({ queryKey: projectTasksQueryKey(projectId) })
+      toast.success(`Task duplicated as ${data.task.taskId}`)
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error))
+    },
+  })
+}
+
+// Reorder tasks mutation (T14.3 - Drag and Drop)
+interface ReorderTasksResponse {
+  success: boolean
+  data: {
+    projectId: string
+    projectName: string
+    updatedCount: number
+    tasks: Array<{ taskId: string; displayOrder: number; status?: string }>
+  }
+}
+
+export interface TaskReorderItem {
+  taskId: string
+  displayOrder: number
+  status?: string
+}
+
+export function useReorderTasks(projectId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (tasks: TaskReorderItem[]) => {
+      const response = await authApi.post<ReorderTasksResponse>(
+        `/projects/${projectId}/tasks/reorder`,
+        { tasks }
+      )
+      return response.data
+    },
+    onMutate: async (tasks) => {
+      // Optimistic update: update task order in cache
+      await queryClient.cancelQueries({ queryKey: projectTasksQueryKey(projectId) })
+
+      const previousTasks = queryClient.getQueryData<Task[]>(projectTasksQueryKey(projectId))
+
+      if (previousTasks) {
+        const updatedTasks = previousTasks.map(task => {
+          const update = tasks.find(t => t.taskId === task.taskId)
+          if (update) {
+            return {
+              ...task,
+              displayOrder: update.displayOrder,
+              status: update.status || task.status,
+            }
+          }
+          return task
+        })
+        queryClient.setQueryData(projectTasksQueryKey(projectId), updatedTasks)
+      }
+
+      return { previousTasks }
+    },
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousTasks) {
+        queryClient.setQueryData(projectTasksQueryKey(projectId), context.previousTasks)
+      }
+      toast.error(getErrorMessage(error))
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: projectTasksQueryKey(projectId) })
     },
   })
 }

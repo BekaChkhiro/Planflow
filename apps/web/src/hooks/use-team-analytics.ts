@@ -248,7 +248,9 @@ export function useTeamAnalytics(organizationId: string | undefined) {
       return response.data.members
     },
     enabled: !!organizationId,
-    staleTime: 60000,
+    // T13.1: Team membership doesn't change frequently
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
   })
 
   // Fetch activities
@@ -259,7 +261,9 @@ export function useTeamAnalytics(organizationId: string | undefined) {
       return fetchAllOrgActivities(organizationId)
     },
     enabled: !!organizationId,
-    staleTime: 60000,
+    // T13.1: Analytics data is expensive to compute, cache longer
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes
   })
 
   // Compute analytics

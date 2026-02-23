@@ -11,7 +11,9 @@ import type { ApiResponse, User } from '@planflow/shared'
 import { useUser, useAuthStore } from '@/stores/auth-store'
 import { authApi } from '@/lib/auth-api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { ValidatedInput } from '@/components/ui/validated-input'
+import { PasswordRequirements, minimalRequirements } from '@/components/ui/password-requirements'
+import { PasswordStrengthIndicator } from '@/components/ui/password-strength-indicator'
 import {
   Card,
   CardContent,
@@ -56,6 +58,7 @@ function ProfileForm() {
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(ProfileFormSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       name: user?.name || '',
       email: user?.email || '',
@@ -104,7 +107,7 @@ function ProfileForm() {
             )}
 
             {success && (
-              <div className="flex items-center gap-2 rounded-md bg-green-50 p-3 text-sm text-green-700">
+              <div className="flex items-center gap-2 rounded-md bg-green-50 dark:bg-green-950 p-3 text-sm text-green-700 dark:text-green-400">
                 <Check className="h-4 w-4" />
                 Profile updated successfully
               </div>
@@ -113,15 +116,17 @@ function ProfileForm() {
             <FormField
               control={form.control}
               name="name"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="text"
                       placeholder="John Doe"
                       autoComplete="name"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -133,15 +138,17 @@ function ProfileForm() {
             <FormField
               control={form.control}
               name="email"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Email Address</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="email"
                       placeholder="name@example.com"
                       autoComplete="email"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -172,12 +179,16 @@ function PasswordForm() {
 
   const form = useForm<PasswordFormData>({
     resolver: zodResolver(PasswordFormSchema),
+    mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       currentPassword: '',
       newPassword: '',
       confirmPassword: '',
     },
   })
+
+  // Watch newPassword for real-time requirements display
+  const newPassword = form.watch('newPassword')
 
   const isLoading = form.formState.isSubmitting
 
@@ -221,7 +232,7 @@ function PasswordForm() {
             )}
 
             {success && (
-              <div className="flex items-center gap-2 rounded-md bg-green-50 p-3 text-sm text-green-700">
+              <div className="flex items-center gap-2 rounded-md bg-green-50 dark:bg-green-950 p-3 text-sm text-green-700 dark:text-green-400">
                 <Check className="h-4 w-4" />
                 Password changed successfully
               </div>
@@ -230,15 +241,17 @@ function PasswordForm() {
             <FormField
               control={form.control}
               name="currentPassword"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Current Password</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="password"
                       placeholder="Enter your current password"
                       autoComplete="current-password"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== ''}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -250,21 +263,29 @@ function PasswordForm() {
             <FormField
               control={form.control}
               name="newPassword"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>New Password</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="password"
                       placeholder="Enter your new password"
                       autoComplete="new-password"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value.length >= 8}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    Must be at least 8 characters long
-                  </FormDescription>
+                  {newPassword && (
+                    <div className="mt-2 space-y-2">
+                      <PasswordStrengthIndicator password={newPassword} />
+                      <PasswordRequirements
+                        password={newPassword}
+                        requirements={minimalRequirements}
+                      />
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -273,15 +294,17 @@ function PasswordForm() {
             <FormField
               control={form.control}
               name="confirmPassword"
-              render={({ field }) => (
+              render={({ field, fieldState }) => (
                 <FormItem>
                   <FormLabel>Confirm New Password</FormLabel>
                   <FormControl>
-                    <Input
+                    <ValidatedInput
                       type="password"
                       placeholder="Confirm your new password"
                       autoComplete="new-password"
                       disabled={isLoading}
+                      isValid={fieldState.isTouched && !fieldState.error && field.value !== '' && field.value === newPassword}
+                      isError={!!fieldState.error}
                       {...field}
                     />
                   </FormControl>
@@ -309,8 +332,8 @@ export default function ProfileSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900">Profile</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-lg font-medium text-foreground">Profile</h2>
+        <p className="text-sm text-muted-foreground">
           Manage your personal information and account security
         </p>
       </div>
@@ -318,15 +341,15 @@ export default function ProfileSettingsPage() {
       <Separator />
 
       {/* Account Info Display */}
-      <div className="rounded-lg border bg-gray-50 p-4">
+      <div className="rounded-lg border bg-muted/50 p-4">
         <div className="grid gap-1 text-sm">
           <div className="flex items-center justify-between">
-            <span className="text-gray-500">Account ID</span>
-            <span className="font-mono text-gray-700">{user?.id?.slice(0, 8)}...</span>
+            <span className="text-muted-foreground">Account ID</span>
+            <span className="font-mono text-foreground">{user?.id?.slice(0, 8)}...</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-gray-500">Member since</span>
-            <span className="text-gray-700">
+            <span className="text-muted-foreground">Member since</span>
+            <span className="text-foreground">
               {user?.createdAt
                 ? new Date(user.createdAt).toLocaleDateString('en-US', {
                     year: 'numeric',

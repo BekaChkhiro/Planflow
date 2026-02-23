@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { MessageSquare } from 'lucide-react'
 import { CommentItem } from './comment-item'
 import { CommentListSkeleton } from '@/components/ui/loading-skeletons'
+import { EmptyState } from '@/components/ui/empty-state'
 import type { Comment } from '@/hooks/use-comments'
 import type { PresenceStatus } from '@/hooks/use-presence'
 
@@ -66,14 +66,12 @@ export function CommentList({
   return (
     <div className="space-y-6">
       {topLevelComments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="rounded-full bg-gray-100 p-3">
-            <MessageSquare className="h-6 w-6 text-gray-400" />
-          </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            No comments yet. Be the first to comment!
-          </p>
-        </div>
+        <EmptyState
+          illustration="comments"
+          title="No comments yet"
+          description="Be the first to comment on this task!"
+          size="sm"
+        />
       ) : (
         <div className="space-y-4">
           {topLevelComments.map((comment) => (

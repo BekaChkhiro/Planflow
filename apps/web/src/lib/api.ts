@@ -30,7 +30,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     requestHeaders['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+  // Ensure no double slashes in URL
+  const baseUrl = env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+
+  const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: requestHeaders,
     body: body ? JSON.stringify(body) : undefined,

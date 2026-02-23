@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -14,32 +15,19 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  RefreshCw,
-  CheckCircle2,
-  Circle,
-  AlertCircle,
-  Loader2,
-  LayoutGrid,
-  List,
-  Ban,
-  ChevronRight,
-  GripVertical,
   Activity,
   PanelRight,
   PanelRightClose,
 } from 'lucide-react'
 
-import { useProject, useDeleteProject, useUpdateProject, useProjectTasks, useAssignTask, type Task, type TaskAssignee } from '@/hooks/use-projects'
-import { useOrganizations, useTeamMembers, type TeamMember } from '@/hooks/use-team'
-import { TaskAssigneeSelector, TaskDetailSheet, type TaskDetail } from '@/components/tasks'
+import { useProject, useDeleteProject, useUpdateProject, useProjectTasks } from '@/hooks/use-projects'
 import { useProjectWebSocket } from '@/hooks/use-websocket'
 import { useNotificationToasts } from '@/hooks/use-notification-toasts'
-import { usePresence, type PresenceStatus } from '@/hooks/use-presence'
+import { usePresence } from '@/hooks/use-presence'
 import { ConnectionIndicator } from '@/components/ui/connection-indicator'
 import { PresenceAvatarStack } from '@/components/presence'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
@@ -60,1121 +48,53 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { MarkdownViewer } from '@/components/markdown-viewer'
-import { ProgressRing } from '@/components/ui/progress-ring'
-import { PhaseProgress, type PhaseData } from '@/components/ui/phase-progress'
-import { TaskDistributionBar } from '@/components/ui/task-distribution-bar'
-import { ComplexityBreakdown } from '@/components/ui/complexity-breakdown'
 import { ActivityFeed, ActivityFeedSidebar } from '@/components/activity'
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
+// Import non-lazy-loaded components
+import {
+  ProjectDetailSkeleton,
+  ErrorState,
+  NotFoundState,
+  formatDate,
+  formatRelativeTime,
+  computeTaskStats,
+} from './components'
 
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / (1000 * 60))
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays < 7) return `${diffDays}d ago`
-  return formatDate(dateString)
-}
-
-
-// Task display interface (extends API Task with computed phase)
-interface DisplayTask {
-  id: string
-  taskId: string
-  name: string
-  description: string | null
-  complexity: 'Low' | 'Medium' | 'High'
-  status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
-  dependencies: string[]
-  phase: number
-  updatedAt: string
-  estimatedHours: number | null
-  assignee: TaskAssignee | null
-}
-
-// Convert API tasks to display tasks with computed phase
-function toDisplayTasks(tasks: Task[]): DisplayTask[] {
-  return tasks.map((task) => {
-    // Extract phase from taskId (T1.1 -> 1, T2.3 -> 2, T5A.1 -> 5, T8B.2 -> 8)
-    // Updated regex to handle sub-phase letters (T5A, T8B, etc.)
-    const phaseMatch = task.taskId.match(/T(\d+)/)
-    const phase = phaseMatch && phaseMatch[1] ? parseInt(phaseMatch[1], 10) : 1
-
-    return {
-      id: task.id,
-      taskId: task.taskId,
-      name: task.name,
-      description: task.description,
-      complexity: task.complexity,
-      status: task.status,
-      dependencies: task.dependencies,
-      phase,
-      updatedAt: task.updatedAt,
-      estimatedHours: task.estimatedHours,
-      assignee: task.assignee,
-    }
-  })
-}
-
-// Compute task stats from API tasks
-function computeTaskStats(tasks: Task[]): {
-  total: number
-  done: number
-  inProgress: number
-  blocked: number
-  todo: number
-} {
-  const stats = { total: tasks.length, done: 0, inProgress: 0, blocked: 0, todo: 0 }
-
-  tasks.forEach((task) => {
-    if (task.status === 'DONE') stats.done++
-    else if (task.status === 'IN_PROGRESS') stats.inProgress++
-    else if (task.status === 'BLOCKED') stats.blocked++
-    else stats.todo++
-  })
-
-  return stats
-}
-
-// Group tasks by phase number
-function groupTasksByPhase(tasks: DisplayTask[]): PhaseData[] {
-  const phaseMap = new Map<number, { total: number; done: number; inProgress: number }>()
-
-  tasks.forEach((task) => {
-    const existing = phaseMap.get(task.phase) || { total: 0, done: 0, inProgress: 0 }
-    existing.total++
-    if (task.status === 'DONE') existing.done++
-    if (task.status === 'IN_PROGRESS') existing.inProgress++
-    phaseMap.set(task.phase, existing)
-  })
-
-  return Array.from(phaseMap.entries())
-    .map(([phase, data]) => ({ phase, ...data }))
-    .sort((a, b) => a.phase - b.phase)
-}
-
-// Count tasks by complexity
-function calculateComplexityDistribution(tasks: DisplayTask[]): { low: number; medium: number; high: number } {
-  return tasks.reduce(
-    (acc, task) => {
-      if (task.complexity === 'Low') acc.low++
-      else if (task.complexity === 'Medium') acc.medium++
-      else if (task.complexity === 'High') acc.high++
-      return acc
-    },
-    { low: 0, medium: 0, high: 0 }
-  )
-}
-
-// Status configuration
-const statusConfig = {
-  TODO: {
-    label: 'To Do',
-    color: 'bg-slate-100 text-slate-700 border-slate-200',
-    icon: Circle,
-    columnColor: 'bg-slate-50',
-  },
-  IN_PROGRESS: {
-    label: 'In Progress',
-    color: 'bg-blue-100 text-blue-700 border-blue-200',
-    icon: Loader2,
-    columnColor: 'bg-blue-50',
-  },
-  DONE: {
-    label: 'Done',
-    color: 'bg-green-100 text-green-700 border-green-200',
-    icon: CheckCircle2,
-    columnColor: 'bg-green-50',
-  },
-  BLOCKED: {
-    label: 'Blocked',
-    color: 'bg-red-100 text-red-700 border-red-200',
-    icon: Ban,
-    columnColor: 'bg-red-50',
-  },
-}
-
-const complexityConfig = {
-  Low: { color: 'bg-emerald-100 text-emerald-700', label: 'Low' },
-  Medium: { color: 'bg-amber-100 text-amber-700', label: 'Medium' },
-  High: { color: 'bg-rose-100 text-rose-700', label: 'High' },
-}
-
-interface TaskCardProps {
-  task: DisplayTask
-  view: 'kanban' | 'list'
-  teamMembers?: TeamMember[]
-  onAssign?: (taskId: string, userId: string | null) => void
-  isAssigning?: boolean
-  assigningTaskId?: string | null
-  onClick?: (task: DisplayTask) => void
-  /** Function to get presence status for a user (T7.8) */
-  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
-}
-
-function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigningTaskId, onClick, getPresenceStatus }: TaskCardProps) {
-  const StatusIcon = statusConfig[task.status].icon
-  const isThisTaskAssigning = isAssigning && assigningTaskId === task.taskId
-
-  const handleAssign = (userId: string | null) => {
-    if (onAssign) {
-      onAssign(task.taskId, userId)
-    }
+// Lazy load heavy tab components with loading skeletons
+const OverviewTab = dynamic(
+  () => import('./components/overview-tab').then((mod) => ({ default: mod.OverviewTab })),
+  {
+    loading: () => <OverviewTabSkeleton />,
+    ssr: false,
   }
+)
 
-  const handleClick = () => {
-    onClick?.(task)
+const PlanTab = dynamic(
+  () => import('./components/plan-tab').then((mod) => ({ default: mod.PlanTab })),
+  {
+    loading: () => <PlanTabSkeleton />,
+    ssr: false,
   }
+)
 
-  if (view === 'list') {
-    const statusLabel = statusConfig[task.status].label
-    const taskLabel = `${task.taskId}: ${task.name}, Status: ${statusLabel}, Complexity: ${task.complexity}, Phase ${task.phase}${task.assignee ? `, Assigned to ${task.assignee.name || task.assignee.email}` : ', Unassigned'}`
-
-    return (
-      <article
-        className="flex items-center gap-4 rounded-lg border bg-white p-4 transition-colors hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-        onClick={handleClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            handleClick()
-          }
-        }}
-        tabIndex={0}
-        role="button"
-        aria-label={taskLabel}
-      >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100" aria-hidden="true">
-          <StatusIcon
-            className={`h-4 w-4 ${
-              task.status === 'IN_PROGRESS' ? 'animate-spin text-blue-500' : ''
-            } ${task.status === 'DONE' ? 'text-green-500' : ''} ${
-              task.status === 'BLOCKED' ? 'text-red-500' : ''
-            } ${task.status === 'TODO' ? 'text-gray-400' : ''}`}
-          />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm text-muted-foreground">{task.taskId}</span>
-            <ChevronRight className="h-3 w-3 text-muted-foreground" />
-            <span className="truncate font-medium">{task.name}</span>
-          </div>
-          {task.dependencies.length > 0 && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Depends on: {task.dependencies.join(', ')}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {teamMembers.length > 0 && onAssign && (
-            <TaskAssigneeSelector
-              assignee={task.assignee}
-              teamMembers={teamMembers}
-              onAssign={handleAssign}
-              isLoading={isThisTaskAssigning}
-              size="md"
-              getPresenceStatus={getPresenceStatus}
-            />
-          )}
-          <Badge variant="outline" className={complexityConfig[task.complexity].color}>
-            {task.complexity}
-          </Badge>
-          <Badge className="text-xs" variant="outline">
-            Phase {task.phase}
-          </Badge>
-        </div>
-      </article>
-    )
+const TasksTab = dynamic(
+  () => import('./components/tasks-tab').then((mod) => ({ default: mod.TasksTab })),
+  {
+    loading: () => <TasksTabSkeleton />,
+    ssr: false,
   }
+)
 
-  // Kanban card
-  const statusLabel = statusConfig[task.status].label
-  const kanbanTaskLabel = `${task.taskId}: ${task.name}, Complexity: ${task.complexity}, Phase ${task.phase}${task.assignee ? `, Assigned to ${task.assignee.name || task.assignee.email}` : ''}`
+// Lazy load edit dialog (only needed when editing)
+const EditProjectDialog = dynamic(
+  () => import('./components/edit-project-dialog').then((mod) => ({ default: mod.EditProjectDialog })),
+  { ssr: false }
+)
 
-  return (
-    <article
-      className="group rounded-lg border bg-white p-3 shadow-sm transition-all hover:shadow-md cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-      onClick={handleClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          handleClick()
-        }
-      }}
-      tabIndex={0}
-      role="button"
-      aria-label={kanbanTaskLabel}
-    >
-      <div className="mb-2 flex items-start justify-between">
-        <span className="font-mono text-xs text-muted-foreground" aria-hidden="true">{task.taskId}</span>
-        <div className="flex items-center gap-1.5">
-          {teamMembers.length > 0 && onAssign && (
-            <TaskAssigneeSelector
-              assignee={task.assignee}
-              teamMembers={teamMembers}
-              onAssign={handleAssign}
-              isLoading={isThisTaskAssigning}
-              size="sm"
-              getPresenceStatus={getPresenceStatus}
-            />
-          )}
-          <Badge variant="outline" className={`text-xs ${complexityConfig[task.complexity].color}`}>
-            {task.complexity}
-          </Badge>
-        </div>
-      </div>
-      <p className="mb-3 text-sm font-medium leading-snug">{task.name}</p>
-      <div className="flex items-center justify-between">
-        <Badge variant="outline" className="text-xs">
-          Phase {task.phase}
-        </Badge>
-        {task.dependencies.length > 0 && (
-          <span className="text-xs text-muted-foreground" title={`Depends on: ${task.dependencies.join(', ')}`}>
-            {task.dependencies.length} dep{task.dependencies.length > 1 ? 's' : ''}
-          </span>
-        )}
-      </div>
-    </article>
-  )
-}
-
-interface KanbanColumnProps {
-  status: DisplayTask['status']
-  tasks: DisplayTask[]
-  teamMembers?: TeamMember[]
-  onAssign?: (taskId: string, userId: string | null) => void
-  isAssigning?: boolean
-  assigningTaskId?: string | null
-  onTaskClick?: (task: DisplayTask) => void
-  /** Function to get presence status for a user (T7.8) */
-  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
-}
-
-function KanbanColumn({
-  status,
-  tasks,
-  teamMembers,
-  onAssign,
-  isAssigning,
-  assigningTaskId,
-  onTaskClick,
-  getPresenceStatus,
-}: KanbanColumnProps) {
-  const config = statusConfig[status]
-  const StatusIcon = config.icon
-
-  const columnId = `kanban-column-${status.toLowerCase()}`
-
-  return (
-    <section
-      className={`flex min-w-[280px] flex-col rounded-lg ${config.columnColor} p-3`}
-      aria-labelledby={columnId}
-    >
-      <div className="mb-3 flex items-center gap-2">
-        <StatusIcon
-          className={`h-4 w-4 ${status === 'IN_PROGRESS' ? 'animate-spin' : ''}`}
-          aria-hidden="true"
-        />
-        <h3 id={columnId} className="font-semibold">{config.label}</h3>
-        <Badge variant="secondary" className="ml-auto" aria-label={`${tasks.length} tasks`}>
-          {tasks.length}
-        </Badge>
-      </div>
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto" role="list" aria-label={`${config.label} tasks`}>
-        {tasks.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-gray-200 p-4 text-center" role="status">
-            <p className="text-sm text-muted-foreground">No tasks</p>
-          </div>
-        ) : (
-          tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              view="kanban"
-              teamMembers={teamMembers}
-              onAssign={onAssign}
-              isAssigning={isAssigning}
-              assigningTaskId={assigningTaskId}
-              onClick={onTaskClick}
-              getPresenceStatus={getPresenceStatus}
-            />
-          ))
-        )}
-      </div>
-    </section>
-  )
-}
-
-interface KanbanViewProps {
-  tasks: DisplayTask[]
-  teamMembers?: TeamMember[]
-  onAssign?: (taskId: string, userId: string | null) => void
-  isAssigning?: boolean
-  assigningTaskId?: string | null
-  onTaskClick?: (task: DisplayTask) => void
-  /** Function to get presence status for a user (T7.8) */
-  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
-}
-
-function KanbanView({ tasks, teamMembers, onAssign, isAssigning, assigningTaskId, onTaskClick, getPresenceStatus }: KanbanViewProps) {
-  // Helper to sort by taskId (T1.1, T1.2, T2.1, etc.)
-  const sortByTaskId = (a: DisplayTask, b: DisplayTask) => a.taskId.localeCompare(b.taskId, undefined, { numeric: true })
-  // Helper to sort by updatedAt descending (most recent first)
-  const sortByUpdatedAtDesc = (a: DisplayTask, b: DisplayTask) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-
-  const tasksByStatus = {
-    // TODO, IN_PROGRESS, BLOCKED - sort by taskId for logical order
-    TODO: tasks.filter((t) => t.status === 'TODO').sort(sortByTaskId),
-    IN_PROGRESS: tasks.filter((t) => t.status === 'IN_PROGRESS').sort(sortByTaskId),
-    BLOCKED: tasks.filter((t) => t.status === 'BLOCKED').sort(sortByTaskId),
-    // DONE - sort by updatedAt descending (most recently completed first)
-    DONE: tasks.filter((t) => t.status === 'DONE').sort(sortByUpdatedAtDesc),
-  }
-
-  const totalTasks = tasks.length
-  return (
-    <div
-      className="flex gap-4 overflow-x-auto pb-4"
-      role="region"
-      aria-label={`Kanban board with ${totalTasks} tasks across 4 columns`}
-    >
-      <KanbanColumn status="TODO" tasks={tasksByStatus.TODO} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
-      <KanbanColumn status="IN_PROGRESS" tasks={tasksByStatus.IN_PROGRESS} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
-      <KanbanColumn status="BLOCKED" tasks={tasksByStatus.BLOCKED} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
-      <KanbanColumn status="DONE" tasks={tasksByStatus.DONE} teamMembers={teamMembers} onAssign={onAssign} isAssigning={isAssigning} assigningTaskId={assigningTaskId} onTaskClick={onTaskClick} getPresenceStatus={getPresenceStatus} />
-    </div>
-  )
-}
-
-interface ListViewProps {
-  tasks: DisplayTask[]
-  groupBy: 'status' | 'phase'
-  teamMembers?: TeamMember[]
-  onAssign?: (taskId: string, userId: string | null) => void
-  isAssigning?: boolean
-  assigningTaskId?: string | null
-  onTaskClick?: (task: DisplayTask) => void
-  /** Function to get presence status for a user (T7.8) */
-  getPresenceStatus?: (userId: string) => PresenceStatus | undefined
-}
-
-function ListView({
-  tasks,
-  groupBy,
-  teamMembers,
-  onAssign,
-  isAssigning,
-  assigningTaskId,
-  onTaskClick,
-  getPresenceStatus,
-}: ListViewProps) {
-  if (groupBy === 'status') {
-    const statuses: DisplayTask['status'][] = ['TODO', 'IN_PROGRESS', 'BLOCKED', 'DONE']
-
-    return (
-      <div className="space-y-6" role="region" aria-label="Tasks grouped by status">
-        {statuses.map((status) => {
-          const statusTasks = tasks.filter((t) => t.status === status)
-          if (statusTasks.length === 0) return null
-
-          const config = statusConfig[status]
-          const StatusIcon = config.icon
-          const sectionId = `status-section-${status.toLowerCase()}`
-
-          return (
-            <section key={status} aria-labelledby={sectionId}>
-              <div className="mb-3 flex items-center gap-2">
-                <StatusIcon
-                  className={`h-4 w-4 ${status === 'IN_PROGRESS' ? 'animate-spin' : ''}`}
-                  aria-hidden="true"
-                />
-                <h3 id={sectionId} className="font-semibold">{config.label}</h3>
-                <Badge variant="secondary" aria-label={`${statusTasks.length} tasks`}>{statusTasks.length}</Badge>
-              </div>
-              <div className="space-y-2" role="list" aria-label={`${config.label} tasks`}>
-                {statusTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    view="list"
-                    teamMembers={teamMembers}
-                    onAssign={onAssign}
-                    isAssigning={isAssigning}
-                    assigningTaskId={assigningTaskId}
-                    onClick={onTaskClick}
-                    getPresenceStatus={getPresenceStatus}
-                  />
-                ))}
-              </div>
-            </section>
-          )
-        })}
-      </div>
-    )
-  }
-
-  // Group by phase
-  const phases = [...new Set(tasks.map((t) => t.phase))].sort((a, b) => a - b)
-
-  return (
-    <div className="space-y-6" role="region" aria-label="Tasks grouped by phase">
-      {phases.map((phase) => {
-        const phaseTasks = tasks.filter((t) => t.phase === phase)
-        const phaseId = `phase-section-${phase}`
-        const completedCount = phaseTasks.filter((t) => t.status === 'DONE').length
-
-        return (
-          <section key={phase} aria-labelledby={phaseId}>
-            <div className="mb-3 flex items-center gap-2">
-              <h3 id={phaseId} className="font-semibold">Phase {phase}</h3>
-              <Badge variant="secondary" aria-label={`${phaseTasks.length} tasks`}>{phaseTasks.length}</Badge>
-              <span className="ml-2 text-sm text-muted-foreground" aria-label={`${completedCount} of ${phaseTasks.length} completed`}>
-                {completedCount}/{phaseTasks.length} completed
-              </span>
-            </div>
-            <div className="space-y-2" role="list" aria-label={`Phase ${phase} tasks`}>
-              {phaseTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  view="list"
-                  teamMembers={teamMembers}
-                  onAssign={onAssign}
-                  isAssigning={isAssigning}
-                  assigningTaskId={assigningTaskId}
-                  onClick={onTaskClick}
-                  getPresenceStatus={getPresenceStatus}
-                />
-              ))}
-            </div>
-          </section>
-        )
-      })}
-    </div>
-  )
-}
-
-function ProjectDetailSkeleton() {
-  return (
-    <div>
-      {/* Header skeleton */}
-      <div className="mb-6">
-        <Skeleton className="mb-4 h-5 w-24" />
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="mt-2 h-4 w-96" />
-          </div>
-          <Skeleton className="h-10 w-10 rounded" />
-        </div>
-        <div className="mt-4 flex items-center gap-4">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-32" />
-        </div>
-      </div>
-
-      {/* Tabs skeleton */}
-      <Skeleton className="mb-4 h-10 w-80" />
-
-      {/* Content skeleton */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Skeleton className="h-32" />
-        <Skeleton className="h-32" />
-        <Skeleton className="h-32" />
-        <Skeleton className="h-32" />
-      </div>
-    </div>
-  )
-}
-
-function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
-  return (
-    <Card className="border-red-200 bg-red-50">
-      <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="rounded-full bg-red-100 p-4">
-          <AlertCircle className="h-8 w-8 text-red-400" />
-        </div>
-        <h3 className="mt-4 text-lg font-semibold text-red-900">Failed to load project</h3>
-        <p className="mt-2 max-w-sm text-center text-sm text-red-600">
-          {error.message || 'An unexpected error occurred. Please try again.'}
-        </p>
-        <div className="mt-6 flex gap-3">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/projects">Back to Projects</Link>
-          </Button>
-          <Button onClick={onRetry}>Try again</Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function NotFoundState() {
-  return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="rounded-full bg-gray-100 p-4">
-          <FileText className="h-8 w-8 text-gray-400" />
-        </div>
-        <h3 className="mt-4 text-lg font-semibold text-gray-900">Project not found</h3>
-        <p className="mt-2 max-w-sm text-center text-sm text-gray-500">
-          The project you&apos;re looking for doesn&apos;t exist or you don&apos;t have access to it.
-        </p>
-        <Button className="mt-6" asChild>
-          <Link href="/dashboard/projects">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Projects
-          </Link>
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function StatCard({
-  title,
-  value,
-  icon: Icon,
-  description,
-  variant = 'default',
-}: {
-  title: string
-  value: number | string
-  icon: React.ElementType
-  description?: string
-  variant?: 'default' | 'success' | 'warning' | 'info'
-}) {
-  const variantStyles = {
-    default: 'bg-gray-100 text-gray-600',
-    success: 'bg-green-100 text-green-600',
-    warning: 'bg-yellow-100 text-yellow-600',
-    info: 'bg-blue-100 text-blue-600',
-  }
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center gap-4">
-          <div className={`rounded-lg p-3 ${variantStyles[variant]}`}>
-            <Icon className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">{value}</p>
-            {description && <p className="text-xs text-muted-foreground">{description}</p>}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ProgressBar({ progress }: { progress: number }) {
-  return (
-    <div className="w-full">
-      <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Progress</span>
-        <span className="font-medium">{progress}%</span>
-      </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
-        <div
-          className="h-full rounded-full bg-primary transition-all duration-300"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
-function OverviewTab({ tasks: apiTasks }: { tasks: Task[] }) {
-  const stats = computeTaskStats(apiTasks)
-  const tasks = toDisplayTasks(apiTasks)
-  const progress = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0
-  const phases = groupTasksByPhase(tasks)
-  const complexity = calculateComplexityDistribution(tasks)
-
-  if (stats.total === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <div className="rounded-full bg-gray-100 p-4">
-            <ListTodo className="h-8 w-8 text-gray-400" />
-          </div>
-          <h3 className="mt-4 text-lg font-semibold text-gray-900">No tasks found</h3>
-          <p className="mt-2 max-w-sm text-center text-sm text-gray-500">
-            This project doesn&apos;t have any tasks yet. Sync your PROJECT_PLAN.md file using the
-            MCP integration to see task statistics here.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Row 1: Progress Ring + Stats Grid */}
-      <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
-        {/* Progress Ring Card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Overall Progress</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center pb-6">
-            <ProgressRing progress={progress} size={140} strokeWidth={10} />
-            <p className="mt-3 text-sm text-muted-foreground">
-              {stats.done} of {stats.total} tasks completed
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* 2x2 Stats Grid */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <StatCard title="Total Tasks" value={stats.total} icon={ListTodo} variant="info" />
-          <StatCard title="Completed" value={stats.done} icon={CheckCircle2} variant="success" />
-          <StatCard title="In Progress" value={stats.inProgress} icon={Loader2} variant="warning" />
-          <StatCard
-            title="To Do"
-            value={stats.todo + stats.blocked}
-            icon={Circle}
-            description={stats.blocked > 0 ? `${stats.blocked} blocked` : undefined}
-          />
-        </div>
-      </div>
-
-      {/* Row 2: Phase Progress Timeline */}
-      {phases.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Phase Progress</CardTitle>
-            <CardDescription>Progress across implementation phases</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PhaseProgress phases={phases} />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Row 3: Status Distribution + Complexity Breakdown */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Status Distribution Bar */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Status Distribution</CardTitle>
-            <CardDescription>Tasks by current status</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TaskDistributionBar
-              done={stats.done}
-              inProgress={stats.inProgress}
-              blocked={stats.blocked}
-              todo={stats.todo}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Complexity Breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Complexity Breakdown</CardTitle>
-            <CardDescription>Tasks by estimated complexity</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ComplexityBreakdown low={complexity.low} medium={complexity.medium} high={complexity.high} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Row 4: Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          <Button variant="outline" size="sm" disabled>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Sync from Terminal
-          </Button>
-          <Button variant="outline" size="sm" disabled>
-            <FileText className="mr-2 h-4 w-4" />
-            Export Plan
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function PlanTab({ plan }: { plan: string | null | undefined }) {
-  if (!plan) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <div className="rounded-full bg-gray-100 p-4">
-            <FileText className="h-8 w-8 text-gray-400" />
-          </div>
-          <h3 className="mt-4 text-lg font-semibold text-gray-900">No plan content</h3>
-          <p className="mt-2 max-w-sm text-center text-sm text-gray-500">
-            This project doesn&apos;t have a plan yet. Use the MCP integration to sync your
-            PROJECT_PLAN.md file from the terminal.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Project Plan</CardTitle>
-        <CardDescription>Synced from PROJECT_PLAN.md</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <MarkdownViewer content={plan} />
-      </CardContent>
-    </Card>
-  )
-}
-
-function TasksTab({ tasks: apiTasks, projectId, isProjectOwner = false, getPresenceStatus }: { tasks: Task[]; projectId: string; isProjectOwner?: boolean; getPresenceStatus?: (userId: string) => PresenceStatus | undefined }) {
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
-  const [groupBy, setGroupBy] = useState<'status' | 'phase'>('status')
-  const [filterStatus, setFilterStatus] = useState<DisplayTask['status'] | 'ALL'>('ALL')
-  const [filterPhase, setFilterPhase] = useState<number | 'ALL'>('ALL')
-  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
-  const [selectedTask, setSelectedTask] = useState<DisplayTask | null>(null)
-
-  // Fetch organizations to get team members
-  const { data: organizations = [] } = useOrganizations()
-  const primaryOrg = organizations[0] // Use first organization
-  const { data: teamMembers = [] } = useTeamMembers(primaryOrg?.id)
-
-  // Assignment mutation
-  const assignTask = useAssignTask(projectId)
-
-  const handleAssign = async (taskId: string, userId: string | null) => {
-    setAssigningTaskId(taskId)
-    try {
-      await assignTask.mutateAsync({ taskId, assigneeId: userId })
-    } catch (error) {
-      console.error('Failed to assign task:', error)
-    } finally {
-      setAssigningTaskId(null)
-    }
-  }
-
-  const handleTaskClick = (task: DisplayTask) => {
-    setSelectedTask(task)
-  }
-
-  const tasks = toDisplayTasks(apiTasks)
-  const stats = computeTaskStats(apiTasks)
-
-  if (stats.total === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <div className="rounded-full bg-gray-100 p-4">
-            <ListTodo className="h-8 w-8 text-gray-400" />
-          </div>
-          <h3 className="mt-4 text-lg font-semibold text-gray-900">No tasks found</h3>
-          <p className="mt-2 max-w-sm text-center text-sm text-gray-500">
-            Tasks will appear here once you sync your PROJECT_PLAN.md file.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // Get unique phases for filter
-  const phases = [...new Set(tasks.map((t) => t.phase))].sort((a, b) => a - b)
-
-  // Apply filters
-  let filteredTasks = tasks
-  if (filterStatus !== 'ALL') {
-    filteredTasks = filteredTasks.filter((t) => t.status === filterStatus)
-  }
-  if (filterPhase !== 'ALL') {
-    filteredTasks = filteredTasks.filter((t) => t.phase === filterPhase)
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Toolbar */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-4 py-4">
-          {/* View Toggle */}
-          <div className="flex items-center gap-1 rounded-lg border p-1">
-            <Button
-              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
-              size="sm"
-              className="h-8 px-3"
-              onClick={() => setViewMode('kanban')}
-            >
-              <LayoutGrid className="mr-2 h-4 w-4" />
-              Kanban
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              className="h-8 px-3"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="mr-2 h-4 w-4" />
-              List
-            </Button>
-          </div>
-
-          {/* Group By (List view only) */}
-          {viewMode === 'list' && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Group by:</span>
-              <div className="flex items-center gap-1 rounded-lg border p-1">
-                <Button
-                  variant={groupBy === 'status' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setGroupBy('status')}
-                >
-                  Status
-                </Button>
-                <Button
-                  variant={groupBy === 'phase' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setGroupBy('phase')}
-                >
-                  Phase
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <Separator orientation="vertical" className="h-8" />
-
-          {/* Filters */}
-          <div className="flex items-center gap-2">
-            <span id="filter-label" className="text-sm text-muted-foreground">Filter:</span>
-            <label htmlFor="filter-status" className="sr-only">Filter by status</label>
-            <select
-              id="filter-status"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as DisplayTask['status'] | 'ALL')}
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-              aria-describedby="filter-label"
-            >
-              <option value="ALL">All Status</option>
-              <option value="TODO">To Do</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="BLOCKED">Blocked</option>
-              <option value="DONE">Done</option>
-            </select>
-            <label htmlFor="filter-phase" className="sr-only">Filter by phase</label>
-            <select
-              id="filter-phase"
-              value={filterPhase}
-              onChange={(e) =>
-                setFilterPhase(e.target.value === 'ALL' ? 'ALL' : parseInt(e.target.value, 10))
-              }
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-              aria-describedby="filter-label"
-            >
-              <option value="ALL">All Phases</option>
-              {phases.map((phase) => (
-                <option key={phase} value={phase}>
-                  Phase {phase}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stats Summary */}
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="text-muted-foreground">
-              Showing {filteredTasks.length} of {tasks.length} tasks
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                {stats.done}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-blue-500" />
-                {stats.inProgress}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-slate-300" />
-                {stats.todo}
-              </span>
-              {stats.blocked > 0 && (
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-red-500" />
-                  {stats.blocked}
-                </span>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Task Views */}
-      {filteredTasks.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <div className="rounded-full bg-gray-100 p-4">
-              <ListTodo className="h-8 w-8 text-gray-400" />
-            </div>
-            <h3 className="mt-4 text-lg font-semibold text-gray-900">No matching tasks</h3>
-            <p className="mt-2 max-w-sm text-center text-sm text-gray-500">
-              Try adjusting your filters to see more tasks.
-            </p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => {
-                setFilterStatus('ALL')
-                setFilterPhase('ALL')
-              }}
-            >
-              Clear filters
-            </Button>
-          </CardContent>
-        </Card>
-      ) : viewMode === 'kanban' ? (
-        <KanbanView
-          tasks={filteredTasks}
-          teamMembers={teamMembers}
-          onAssign={handleAssign}
-          isAssigning={assignTask.isPending}
-          assigningTaskId={assigningTaskId}
-          onTaskClick={handleTaskClick}
-          getPresenceStatus={getPresenceStatus}
-        />
-      ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <ListView
-              tasks={filteredTasks}
-              groupBy={groupBy}
-              teamMembers={teamMembers}
-              onAssign={handleAssign}
-              isAssigning={assignTask.isPending}
-              assigningTaskId={assigningTaskId}
-              onTaskClick={handleTaskClick}
-              getPresenceStatus={getPresenceStatus}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Task Detail Sheet with Comments */}
-      <TaskDetailSheet
-        task={selectedTask}
-        projectId={projectId}
-        isOpen={!!selectedTask}
-        onClose={() => setSelectedTask(null)}
-        isProjectOwner={isProjectOwner}
-        getPresenceStatus={getPresenceStatus}
-      />
-    </div>
-  )
-}
-
-function EditProjectDialog({
-  open,
-  onOpenChange,
-  project,
-  onSave,
-  isSaving,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  project: { id: string; name: string; description: string | null }
-  onSave: (data: { name: string; description: string | null }) => void
-  isSaving: boolean
-}) {
-  const [name, setName] = useState(project.name)
-  const [description, setDescription] = useState(project.description || '')
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave({ name, description: description || null })
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Project</DialogTitle>
-          <DialogDescription>Update your project details.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Project name"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Project description (optional)"
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSaving || !name.trim()}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                'Save changes'
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
+// Import skeletons for loading states
+import { OverviewTabSkeleton } from './components/overview-tab'
+import { PlanTabSkeleton } from './components/plan-tab'
+import { TasksTabSkeleton } from './components/tasks-tab'
 
 export default function ProjectDetailPage() {
   const params = useParams()
@@ -1271,7 +191,7 @@ export default function ProjectDetailPage() {
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
               {stats.total > 0 && (
                 <Badge variant={progress === 100 ? 'default' : 'secondary'}>{progress}%</Badge>
               )}
@@ -1291,14 +211,14 @@ export default function ProjectDetailPage() {
                     max={4}
                     size="xs"
                   />
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-muted-foreground">
                     {onlineCount} online
                   </span>
                 </div>
               )}
             </div>
             {project.description && (
-              <p className="mt-1 text-sm text-gray-500">{project.description}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>
             )}
           </div>
 
@@ -1399,7 +319,12 @@ export default function ProjectDetailPage() {
             </TabsContent>
 
             <TabsContent value="plan">
-              <PlanTab plan={project.plan} />
+              <PlanTab
+                plan={project.plan}
+                projectId={projectId}
+                projectName={project.name}
+                updatedAt={project.updatedAt}
+              />
             </TabsContent>
 
             <TabsContent value="tasks">
@@ -1462,7 +387,7 @@ export default function ProjectDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Dialog */}
+      {/* Edit Dialog - Lazy loaded */}
       {showEditDialog && (
         <EditProjectDialog
           open={showEditDialog}

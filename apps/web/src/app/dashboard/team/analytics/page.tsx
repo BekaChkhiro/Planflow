@@ -131,7 +131,7 @@ function ActivityTrendChart({ data }: { data: ActivityTrend[] }) {
   const maxValue = Math.max(...data.map(d => d.count), 1)
 
   return (
-    <div className="flex h-[200px] items-end gap-1">
+    <div className="flex h-[150px] items-end gap-1 sm:h-[200px]">
       {data.map((item, index) => {
         const height = (item.count / maxValue) * 100
         const date = parseISO(item.date)
@@ -145,7 +145,7 @@ function ActivityTrendChart({ data }: { data: ActivityTrend[] }) {
             {/* Tooltip */}
             <div className="absolute -top-8 hidden rounded bg-gray-900 px-2 py-1 text-xs text-white group-hover:block">
               <div className="font-medium">{item.count} activities</div>
-              <div className="text-gray-400">{format(date, 'MMM d')}</div>
+              <div className="text-muted-foreground">{format(date, 'MMM d')}</div>
             </div>
 
             {/* Bar */}
@@ -255,9 +255,9 @@ function MemberLeaderboard({ members }: { members: MemberActivityStats[] }) {
             {/* Rank */}
             <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
               index === 0 ? 'bg-yellow-100 text-yellow-700' :
-              index === 1 ? 'bg-gray-100 text-gray-700' :
+              index === 1 ? 'bg-muted text-gray-700' :
               index === 2 ? 'bg-orange-100 text-orange-700' :
-              'bg-gray-50 text-gray-500'
+              'bg-muted/50 text-muted-foreground'
             }`}>
               {index + 1}
             </div>
@@ -295,7 +295,8 @@ function MemberLeaderboard({ members }: { members: MemberActivityStats[] }) {
 function MemberDetailsTable({ members }: { members: MemberActivityStats[] }) {
   return (
     <div className="rounded-lg border">
-      <div className="grid grid-cols-5 gap-4 border-b bg-muted/50 px-4 py-3 text-sm font-medium">
+      {/* Desktop table header - hidden on mobile */}
+      <div className="hidden grid-cols-5 gap-4 border-b bg-muted/50 px-4 py-3 text-sm font-medium sm:grid">
         <div className="col-span-2">Member</div>
         <div className="text-center">Actions</div>
         <div className="text-center">Tasks Done</div>
@@ -303,35 +304,65 @@ function MemberDetailsTable({ members }: { members: MemberActivityStats[] }) {
       </div>
       <ScrollArea className="h-[400px]">
         {members.map((member) => (
-          <div
-            key={member.memberId}
-            className="grid grid-cols-5 gap-4 border-b px-4 py-3 text-sm last:border-0 hover:bg-muted/50"
-          >
-            <div className="col-span-2 flex items-center gap-3">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-blue-100 text-xs text-blue-700">
-                  {getInitials(member.memberName, member.memberEmail)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <div className="truncate font-medium">{member.memberName}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {member.memberEmail}
+          <div key={member.memberId}>
+            {/* Mobile card view */}
+            <div className="border-b p-4 last:border-0 hover:bg-muted/50 sm:hidden">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-blue-100 text-sm text-blue-700">
+                    {getInitials(member.memberName, member.memberEmail)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{member.memberName}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {member.memberEmail}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <div className="text-lg font-semibold">{member.actionsCount}</div>
+                  <div className="text-xs text-muted-foreground">Actions</div>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <div className="text-lg font-semibold text-green-600">{member.tasksCompleted}</div>
+                  <div className="text-xs text-muted-foreground">Tasks</div>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <div className="text-lg font-semibold text-blue-600">{member.commentsCreated}</div>
+                  <div className="text-xs text-muted-foreground">Comments</div>
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-center">
-              <Badge variant="secondary">{member.actionsCount}</Badge>
-            </div>
-            <div className="flex items-center justify-center">
-              <Badge variant="outline" className="text-green-600">
-                {member.tasksCompleted}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-center">
-              <Badge variant="outline" className="text-blue-600">
-                {member.commentsCreated}
-              </Badge>
+            {/* Desktop table row */}
+            <div className="hidden grid-cols-5 gap-4 border-b px-4 py-3 text-sm last:border-0 hover:bg-muted/50 sm:grid">
+              <div className="col-span-2 flex items-center gap-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-blue-100 text-xs text-blue-700">
+                    {getInitials(member.memberName, member.memberEmail)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{member.memberName}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {member.memberEmail}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-center">
+                <Badge variant="secondary">{member.actionsCount}</Badge>
+              </div>
+              <div className="flex items-center justify-center">
+                <Badge variant="outline" className="text-green-600">
+                  {member.tasksCompleted}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-center">
+                <Badge variant="outline" className="text-blue-600">
+                  {member.commentsCreated}
+                </Badge>
+              </div>
             </div>
           </div>
         ))}
@@ -354,7 +385,7 @@ function AnalyticsSkeleton() {
       </div>
 
       {/* Stats cards skeleton */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 sm:gap-4">
         {[1, 2, 3, 4].map((i) => (
           <Card key={i}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -396,11 +427,11 @@ function AnalyticsSkeleton() {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="rounded-full bg-gray-100 p-4">
-        <BarChart3 className="h-8 w-8 text-gray-400" />
+      <div className="rounded-full bg-muted p-4">
+        <BarChart3 className="h-8 w-8 text-muted-foreground" />
       </div>
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No analytics available</h3>
-      <p className="mt-2 max-w-sm text-sm text-gray-500">
+      <h3 className="mt-4 text-lg font-medium text-foreground">No analytics available</h3>
+      <p className="mt-2 max-w-sm text-sm text-muted-foreground">
         Team analytics will appear here once there is activity in your organization.
       </p>
     </div>
@@ -433,8 +464,8 @@ export default function TeamAnalyticsPage() {
         <div className="rounded-full bg-red-100 p-4">
           <BarChart3 className="h-8 w-8 text-red-600" />
         </div>
-        <h3 className="mt-4 text-lg font-medium text-gray-900">Failed to load analytics</h3>
-        <p className="mt-2 text-sm text-gray-500">
+        <h3 className="mt-4 text-lg font-medium text-foreground">Failed to load analytics</h3>
+        <p className="mt-2 text-sm text-muted-foreground">
           There was an error loading your team analytics. Please try again.
         </p>
         <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
@@ -447,11 +478,11 @@ export default function TeamAnalyticsPage() {
   if (!organizations || organizations.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="rounded-full bg-gray-100 p-4">
-          <Building2 className="h-8 w-8 text-gray-400" />
+        <div className="rounded-full bg-muted p-4">
+          <Building2 className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="mt-4 text-lg font-medium text-gray-900">No organizations yet</h3>
-        <p className="mt-2 max-w-sm text-sm text-gray-500">
+        <h3 className="mt-4 text-lg font-medium text-foreground">No organizations yet</h3>
+        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
           You&apos;re not a member of any organizations. Create one to start tracking team analytics.
         </p>
       </div>
@@ -467,8 +498,8 @@ export default function TeamAnalyticsPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Team Analytics</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Team Analytics</h1>
+          <p className="text-sm text-muted-foreground">
             Insights into your team&apos;s activity and productivity
           </p>
         </div>
@@ -477,7 +508,7 @@ export default function TeamAnalyticsPage() {
           {/* Organization selector */}
           {organizations.length > 1 && (
             <Select value={currentOrgId} onValueChange={setSelectedOrgId}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <Building2 className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Select organization" />
               </SelectTrigger>
@@ -507,7 +538,7 @@ export default function TeamAnalyticsPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4 sm:gap-4">
         <StatsCard
           title="Total Members"
           value={analytics.totalMembers}

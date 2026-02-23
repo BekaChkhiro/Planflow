@@ -44,14 +44,14 @@ function WorkloadBar({
 
   return (
     <div className={cn('w-full', className)}>
-      <div className={cn('w-full overflow-hidden rounded-full bg-gray-100', heightClass)}>
+      <div className={cn('w-full overflow-hidden rounded-full bg-muted', heightClass)}>
         <div
           className={cn('transition-all duration-300 rounded-full', color, heightClass)}
           style={{ width: `${percentage}%` }}
         />
       </div>
       {showLabel && (
-        <div className="mt-1 flex justify-between text-xs text-gray-500">
+        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
           <span>{current} tasks</span>
           {current > max && (
             <span className="text-red-500 font-medium">+{current - max} over capacity</span>

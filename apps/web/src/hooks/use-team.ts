@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
 import { toast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/error-utils'
@@ -51,12 +51,25 @@ interface OrganizationsResponse {
   }
 }
 
+interface PaginationMeta {
+  page: number
+  limit: number
+  totalCount: number
+  totalPages: number
+  hasNextPage: boolean
+  hasPrevPage: boolean
+}
+
 interface MembersResponse {
   success: boolean
   data: {
     members: TeamMember[]
+    pagination?: PaginationMeta
   }
 }
+
+// Page size for team members pagination
+export const TEAM_MEMBERS_PAGE_SIZE = 20
 
 interface InvitationsResponse {
   success: boolean
@@ -134,7 +147,7 @@ export function useCreateOrganization() {
 }
 
 /**
- * Fetch members of an organization
+ * Fetch members of an organization (without pagination - for backwards compatibility)
  */
 export function useTeamMembers(organizationId: string | undefined) {
   return useQuery({
@@ -143,6 +156,65 @@ export function useTeamMembers(organizationId: string | undefined) {
       if (!organizationId) return []
       const response = await authApi.get<MembersResponse>(`/organizations/${organizationId}/members`)
       return response.data.members
+    },
+    enabled: !!organizationId,
+  })
+}
+
+/**
+ * Fetch members of an organization with infinite scroll pagination
+ */
+export interface UseTeamMembersInfiniteOptions {
+  pageSize?: number
+}
+
+export function useTeamMembersInfinite(
+  organizationId: string | undefined,
+  options: UseTeamMembersInfiniteOptions = {}
+) {
+  const { pageSize = TEAM_MEMBERS_PAGE_SIZE } = options
+
+  return useInfiniteQuery({
+    queryKey: [...membersQueryKey(organizationId || ''), 'infinite', pageSize],
+    queryFn: async ({ pageParam = 1 }) => {
+      if (!organizationId) {
+        return {
+          members: [],
+          pagination: {
+            page: 1,
+            limit: pageSize,
+            totalCount: 0,
+            totalPages: 0,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+        }
+      }
+
+      const params = new URLSearchParams()
+      params.set('page', String(pageParam))
+      params.set('limit', String(pageSize))
+
+      const response = await authApi.get<MembersResponse>(
+        `/organizations/${organizationId}/members?${params.toString()}`
+      )
+      return {
+        members: response.data.members,
+        pagination: response.data.pagination,
+      }
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.pagination?.hasNextPage) {
+        return (lastPage.pagination.page || 1) + 1
+      }
+      return undefined
+    },
+    getPreviousPageParam: (firstPage) => {
+      if (firstPage.pagination?.hasPrevPage) {
+        return (firstPage.pagination.page || 1) - 1
+      }
+      return undefined
     },
     enabled: !!organizationId,
   })

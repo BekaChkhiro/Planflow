@@ -18,10 +18,13 @@ import {
   Clock,
   GitBranch,
   Calendar,
+  Copy,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { CommentsSection } from '@/components/comments'
 import { GitHubLinkSection } from './github-link-section'
 import { GitHubPrSection } from './github-pr-section'
+import { TaskStatusSelector, type TaskStatus } from './task-status-selector'
 import type { PresenceStatus } from '@/hooks/use-presence'
 
 // Task type from the project page
@@ -57,6 +60,14 @@ interface TaskDetailSheetProps {
   isProjectOwner?: boolean
   /** Function to get presence status for a user (T7.8) */
   getPresenceStatus?: (userId: string) => PresenceStatus | undefined
+  /** Callback when task status is changed (T12.8) */
+  onStatusChange?: (task: TaskDetail, newStatus: TaskStatus) => void
+  /** Whether status change is in progress */
+  isUpdating?: boolean
+  /** Callback when task is duplicated (T14.4) */
+  onDuplicate?: (task: TaskDetail) => void
+  /** Whether duplication is in progress */
+  isDuplicating?: boolean
 }
 
 // Status configuration
@@ -106,10 +117,26 @@ export function TaskDetailSheet({
   onClose,
   isProjectOwner = false,
   getPresenceStatus,
+  onStatusChange,
+  isUpdating = false,
+  onDuplicate,
+  isDuplicating = false,
 }: TaskDetailSheetProps) {
   if (!task) return null
 
   const StatusIcon = statusConfig[task.status].icon
+
+  const handleStatusChange = (newStatus: TaskStatus) => {
+    if (onStatusChange && newStatus !== task.status) {
+      onStatusChange(task, newStatus)
+    }
+  }
+
+  const handleDuplicate = () => {
+    if (onDuplicate && !isDuplicating) {
+      onDuplicate(task)
+    }
+  }
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -132,6 +159,24 @@ export function TaskDetailSheet({
                 <span className="font-mono">{task.taskId}</span>
               </SheetDescription>
             </div>
+            {/* Duplicate button (T14.4) */}
+            {onDuplicate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDuplicate}
+                disabled={isDuplicating}
+                className="shrink-0"
+                aria-label="Duplicate task"
+              >
+                {isDuplicating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                <span className="ml-1.5 hidden sm:inline">Duplicate</span>
+              </Button>
+            )}
           </div>
         </SheetHeader>
 
@@ -143,9 +188,18 @@ export function TaskDetailSheet({
               role="group"
               aria-label="Task metadata"
             >
-              <Badge className={statusConfig[task.status].color} aria-label={`Status: ${statusConfig[task.status].label}`}>
-                {statusConfig[task.status].label}
-              </Badge>
+              {onStatusChange ? (
+                <TaskStatusSelector
+                  status={task.status}
+                  onStatusChange={handleStatusChange}
+                  disabled={isUpdating}
+                  size="sm"
+                />
+              ) : (
+                <Badge className={statusConfig[task.status].color} aria-label={`Status: ${statusConfig[task.status].label}`}>
+                  {statusConfig[task.status].label}
+                </Badge>
+              )}
               <Badge variant="outline" className={complexityConfig[task.complexity].color} aria-label={`Complexity: ${task.complexity}`}>
                 {task.complexity}
               </Badge>

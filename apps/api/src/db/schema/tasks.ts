@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, uuid, integer } from 'drizzle-orm/pg-core'
+import { pgEnum, pgTable, text, timestamp, uuid, integer, index } from 'drizzle-orm/pg-core'
 import { projects } from './projects'
 import { users } from './users'
 
@@ -17,6 +17,8 @@ export const tasks = pgTable('tasks', {
   complexity: taskComplexityEnum('complexity').notNull().default('Medium'),
   estimatedHours: integer('estimated_hours'),
   dependencies: text('dependencies').array(), // Array of task IDs like ["T1.1", "T1.2"]
+  // Manual ordering field for drag-and-drop reordering (T14.3)
+  displayOrder: integer('display_order').default(0),
   // Task assignment fields (T5.4)
   assigneeId: uuid('assignee_id').references(() => users.id, { onDelete: 'set null' }),
   assignedBy: uuid('assigned_by').references(() => users.id, { onDelete: 'set null' }),
@@ -45,7 +47,12 @@ export const tasks = pgTable('tasks', {
   githubPrLinkedAt: timestamp('github_pr_linked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-})
+}, (table) => ({
+  // Performance index for filtering tasks by project and status (T13.7)
+  projectStatusIdx: index('tasks_project_id_status_idx').on(table.projectId, table.status),
+  // Index for assignee lookups
+  assigneeIdx: index('tasks_assignee_id_idx').on(table.assigneeId),
+}))
 
 export type Task = typeof tasks.$inferSelect
 export type NewTask = typeof tasks.$inferInsert

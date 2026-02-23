@@ -639,6 +639,25 @@ export async function getTaskLock(projectId: string, taskId: string): Promise<Ta
 }
 
 /**
+ * Broadcast that tasks were reordered (T14.3 - Drag and Drop)
+ */
+export function broadcastTasksReordered(
+  projectId: string,
+  tasks: Array<{ taskId: string; displayOrder: number; status?: string }>,
+  updatedBy: UserInfo,
+  excludeUserId?: string
+): void {
+  const message: WebSocketMessage = {
+    type: 'tasks_reordered',
+    projectId,
+    timestamp: new Date().toISOString(),
+    data: { tasks, updatedBy },
+  }
+
+  connectionManager.broadcast(projectId, message, excludeUserId)
+}
+
+/**
  * Get all locks for a project
  */
 export async function getProjectLocks(projectId: string): Promise<TaskLockInfo[]> {

@@ -34,6 +34,11 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+
+    /* Illustration colors for empty states */
+    --illustration-bg: #F3F4F6;
+    --illustration-bg-secondary: #E5E7EB;
+    --illustration-stroke: #D1D5DB;
   }
 
   .dark {
@@ -63,6 +68,11 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
+
+    /* Illustration colors for empty states - dark mode */
+    --illustration-bg: #1f2937;
+    --illustration-bg-secondary: #374151;
+    --illustration-stroke: #4b5563;
   }
 
   * {
@@ -78,5 +88,97 @@
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+/* ============================================
+   KEYBOARD NAVIGATION STYLES
+   ============================================ */
+
+@layer base {
+  /* Enhanced focus styles when keyboard navigating */
+  .keyboard-user *:focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  /* Skip link styles */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100];
+    @apply focus:px-4 focus:py-2 focus:bg-background focus:border focus:rounded-md;
+    @apply focus:shadow-lg focus:ring-2 focus:ring-ring;
+  }
+
+  /* Focus within for container elements */
+  .focus-within-ring:focus-within {
+    @apply ring-2 ring-ring ring-offset-2;
+  }
+}
+
+@layer components {
+  /* Keyboard shortcut badge */
+  .kbd {
+    @apply inline-flex items-center justify-center min-w-[1.5rem] h-6;
+    @apply px-1.5 text-xs font-medium;
+    @apply bg-muted border rounded shadow-sm;
+    @apply text-muted-foreground;
+  }
+
+  /* Focus trap indicator */
+  .focus-trap-active {
+    @apply ring-2 ring-primary/20;
+  }
+
+  /* Roving tabindex item styles */
+  [role="listbox"] [role="option"]:focus,
+  [role="menu"] [role="menuitem"]:focus,
+  [role="tablist"] [role="tab"]:focus {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  /* Active item indicator for keyboard navigation */
+  [data-active="true"] {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  /* Enhanced button focus for keyboard users */
+  .keyboard-user button:focus-visible,
+  .keyboard-user [role="button"]:focus-visible {
+    @apply ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Enhanced link focus for keyboard users */
+  .keyboard-user a:focus-visible {
+    @apply ring-2 ring-ring ring-offset-2 ring-offset-background rounded;
+  }
+
+  /* Card focus styles */
+  .keyboard-user .card:focus-within,
+  .keyboard-user [role="article"]:focus-visible {
+    @apply ring-2 ring-ring;
+  }
+
+  /* Input focus enhancement */
+  .keyboard-user input:focus-visible,
+  .keyboard-user textarea:focus-visible,
+  .keyboard-user select:focus-visible {
+    @apply ring-2 ring-ring ring-offset-1;
+  }
+
+  /* Modal/dialog focus trap visual indicator */
+  [role="dialog"]:focus-visible,
+  [role="alertdialog"]:focus-visible {
+    @apply outline-none;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

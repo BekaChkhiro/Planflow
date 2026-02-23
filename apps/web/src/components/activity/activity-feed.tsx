@@ -5,6 +5,7 @@ import { Activity as ActivityIcon, Loader2, RefreshCw, Filter } from 'lucide-rea
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ActivityFeedSkeleton } from '@/components/ui/loading-skeletons'
+import { EmptyState, ActivityIllustration } from '@/components/ui/empty-state'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -239,9 +240,9 @@ export function ActivityFeed({
         {isLoading ? (
           <ActivityFeedSkeleton count={5} className="px-2" />
         ) : filteredActivities.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <ActivityIcon className="h-8 w-8 mb-2 opacity-50" />
-            <p className="text-sm">No activity yet</p>
+          <div className="flex flex-col items-center justify-center py-6">
+            <ActivityIllustration className="h-20 w-20" />
+            <p className="mt-3 text-sm text-muted-foreground">No activity yet</p>
             {selectedEntities.size > 0 && (
               <Button variant="link" size="sm" onClick={clearFilters} className="mt-1">
                 Clear filters

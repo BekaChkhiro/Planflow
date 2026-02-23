@@ -107,8 +107,8 @@ export function AsyncBoundary({
             />
           </svg>
         </div>
-        <p className="mt-3 text-sm font-medium text-gray-900">Something went wrong</p>
-        <p className="mt-1 text-sm text-gray-500">{error.message || 'Please try again later'}</p>
+        <p className="mt-3 text-sm font-medium text-foreground">Something went wrong</p>
+        <p className="mt-1 text-sm text-muted-foreground">{error.message || 'Please try again later'}</p>
         {onRetry && (
           <button
             onClick={onRetry}

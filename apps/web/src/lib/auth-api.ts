@@ -50,7 +50,11 @@ async function authRequest<T>(endpoint: string, options: RequestOptions = {}): P
     ...headers,
   }
 
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+  // Ensure no double slashes in URL
+  const baseUrl = env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+
+  const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers: requestHeaders,
     body: body ? JSON.stringify(body) : undefined,
@@ -68,7 +72,7 @@ async function authRequest<T>(endpoint: string, options: RequestOptions = {}): P
         // Retry the request with new token
         const newToken = store.getToken()
         if (newToken) {
-          const retryResponse = await fetch(`${env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+          const retryResponse = await fetch(`${baseUrl}${path}`, {
             method,
             headers: {
               ...requestHeaders,

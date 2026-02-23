@@ -177,11 +177,11 @@ export function PresenceAvatar({
         />
         <span>{getPresenceLabel(status)}</span>
         {status === 'offline' && lastActiveAt && (
-          <span className="text-gray-400">· {formatLastActive(lastActiveAt)}</span>
+          <span className="text-muted-foreground">· {formatLastActive(lastActiveAt)}</span>
         )}
       </div>
       {workingOn && (
-        <div className="mt-1 text-gray-400">
+        <div className="mt-1 text-muted-foreground">
           Working on: <span className="text-gray-200">{workingOn.taskId}</span>
         </div>
       )}
@@ -253,7 +253,7 @@ export function PresenceAvatarStack({
             'flex items-center justify-center rounded-full bg-gray-200 ring-2 ring-white',
             sizeClasses[size],
             textSizeClasses[size],
-            'font-medium text-gray-600'
+            'font-medium text-muted-foreground'
           )}
         >
           +{remainingCount}
@@ -287,7 +287,7 @@ export function OnlineBadge({
         )}
       />
       {showLabel && (
-        <span className={cn('text-gray-600', textSizeClasses[size])}>
+        <span className={cn('text-muted-foreground', textSizeClasses[size])}>
           {getPresenceLabel(status)}
         </span>
       )}

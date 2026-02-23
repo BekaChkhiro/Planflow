@@ -121,10 +121,10 @@ function getIntegrationColor(type: IntegrationType) {
   switch (type) {
     case 'github':
       return {
-        bg: 'bg-gray-100',
-        text: 'text-gray-900',
+        bg: 'bg-muted',
+        text: 'text-foreground',
         border: 'border-gray-200',
-        icon: 'text-gray-900',
+        icon: 'text-foreground',
       }
     case 'slack':
       return {
@@ -627,7 +627,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Features list */}
-          <ul className="grid gap-2 text-sm text-gray-600">
+          <ul className="grid gap-2 text-sm text-muted-foreground">
             {config.features.map((feature, index) => (
               <li key={index} className="flex items-center gap-2">
                 <Zap className="h-3.5 w-3.5 text-amber-500" />
@@ -638,10 +638,10 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
 
           {/* Connection details if connected */}
           {isConnected && integration?.metadata && (
-            <div className="rounded-md bg-gray-50 p-3 text-sm">
+            <div className="rounded-md bg-muted/50 p-3 text-sm">
               <div className="font-medium text-gray-700 mb-1">Connection Details</div>
               {config.type === 'github' && integration.metadata.username && (
-                <div className="text-gray-600">
+                <div className="text-muted-foreground">
                   Connected as: <span className="font-medium">@{integration.metadata.username}</span>
                   {integration.metadata.repository && (
                     <span> • {integration.metadata.repository}</span>
@@ -649,7 +649,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
                 </div>
               )}
               {config.type === 'slack' && integration.metadata.workspace && (
-                <div className="text-gray-600">
+                <div className="text-muted-foreground">
                   Workspace: <span className="font-medium">{integration.metadata.workspace}</span>
                   {integration.metadata.channel && (
                     <span> • {integration.metadata.channel}</span>
@@ -657,7 +657,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
                 </div>
               )}
               {config.type === 'discord' && integration.metadata.server && (
-                <div className="text-gray-600">
+                <div className="text-muted-foreground">
                   Server: <span className="font-medium">{integration.metadata.server}</span>
                 </div>
               )}
@@ -810,8 +810,8 @@ export default function IntegrationsSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900">Integrations</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-lg font-medium text-foreground">Integrations</h2>
+        <p className="text-sm text-muted-foreground">
           Connect external services to enhance your PlanFlow workflow
         </p>
       </div>
@@ -845,7 +845,7 @@ export default function IntegrationsSettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-2 text-sm text-gray-600">
+          <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
               <span className="text-blue-600">•</span>
               <span>

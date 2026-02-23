@@ -167,8 +167,8 @@ export default function SecuritySettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Security</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-foreground">Security</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
           Manage your active sessions and security settings
         </p>
       </div>
@@ -231,7 +231,7 @@ export default function SecuritySettingsPage() {
           {isLoading ? (
             <SessionListSkeleton count={3} />
           ) : sessions.length === 0 ? (
-            <p className="py-4 text-center text-sm text-gray-500">
+            <p className="py-4 text-center text-sm text-muted-foreground">
               No active sessions found
             </p>
           ) : (
@@ -248,18 +248,18 @@ export default function SecuritySettingsPage() {
                   <div className="flex items-center gap-3">
                     <div
                       className={`rounded-full p-2 ${
-                        session.isCurrent ? 'bg-blue-100' : 'bg-gray-100'
+                        session.isCurrent ? 'bg-blue-100' : 'bg-muted'
                       }`}
                     >
                       <Monitor
                         className={`h-5 w-5 ${
-                          session.isCurrent ? 'text-blue-600' : 'text-gray-600'
+                          session.isCurrent ? 'text-blue-600' : 'text-muted-foreground'
                         }`}
                       />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">
+                        <span className="font-medium text-foreground">
                           {session.isCurrent ? 'Current Session' : 'Session'}
                         </span>
                         {session.isCurrent && (
@@ -268,7 +268,7 @@ export default function SecuritySettingsPage() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-sm text-gray-500">
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" />
                           Created{' '}
@@ -334,7 +334,7 @@ export default function SecuritySettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Security Tips</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-gray-600">
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
             <strong>Review your sessions regularly</strong> - If you see any
             sessions you don't recognize, revoke them immediately.

@@ -45,7 +45,7 @@ function CodeBlock({ code, language = 'bash' }: { code: string; language?: strin
     <div className="relative rounded-lg bg-gray-900 p-4">
       <CopyButton
         text={code}
-        className="absolute right-2 top-2 text-gray-400 hover:text-white hover:bg-gray-800"
+        className="absolute right-2 top-2 text-muted-foreground hover:text-white hover:bg-gray-800"
       />
       <pre className="overflow-x-auto text-sm text-gray-100 pr-10">
         <code>{code}</code>
@@ -90,8 +90,8 @@ export default function MCPSetupPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-gray-900">MCP Setup</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-lg font-medium text-foreground">MCP Setup</h2>
+        <p className="text-sm text-muted-foreground">
           Connect Claude Code to PlanFlow for seamless project management
         </p>
       </div>
@@ -129,22 +129,22 @@ export default function MCPSetupPage() {
             <div className="flex items-start gap-3 rounded-lg border p-4">
               <StepNumber number={1} />
               <div>
-                <p className="font-medium text-gray-900">Create API Token</p>
-                <p className="text-sm text-gray-500">Generate a token for authentication</p>
+                <p className="font-medium text-foreground">Create API Token</p>
+                <p className="text-sm text-muted-foreground">Generate a token for authentication</p>
               </div>
             </div>
             <div className="flex items-start gap-3 rounded-lg border p-4">
               <StepNumber number={2} />
               <div>
-                <p className="font-medium text-gray-900">Configure Claude</p>
-                <p className="text-sm text-gray-500">Add MCP server to your config</p>
+                <p className="font-medium text-foreground">Configure Claude</p>
+                <p className="text-sm text-muted-foreground">Add MCP server to your config</p>
               </div>
             </div>
             <div className="flex items-start gap-3 rounded-lg border p-4">
               <StepNumber number={3} />
               <div>
-                <p className="font-medium text-gray-900">Start Using</p>
-                <p className="text-sm text-gray-500">Use PlanFlow tools in Claude</p>
+                <p className="font-medium text-foreground">Start Using</p>
+                <p className="text-sm text-muted-foreground">Use PlanFlow tools in Claude</p>
               </div>
             </div>
           </div>
@@ -165,7 +165,7 @@ export default function MCPSetupPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Go to the API Tokens page and create a new token. Give it a descriptive name
             like &quot;Claude Code - MacBook&quot; so you can identify it later.
           </p>
@@ -200,9 +200,9 @@ export default function MCPSetupPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Open your Claude Code settings file and add the PlanFlow MCP server configuration.
-            Replace <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">your-api-token-here</code> with
+            Replace <code className="rounded bg-muted px-1.5 py-0.5 text-sm">your-api-token-here</code> with
             the token you created in Step 1.
           </p>
 
@@ -241,8 +241,8 @@ export default function MCPSetupPage() {
             </TabsContent>
           </Tabs>
 
-          <div className="rounded-md bg-gray-50 border p-3">
-            <p className="text-sm text-gray-600">
+          <div className="rounded-md bg-muted/50 border p-3">
+            <p className="text-sm text-muted-foreground">
               <strong>Tip:</strong> If you already have other MCP servers configured,
               add the <code className="rounded bg-gray-200 px-1 py-0.5">&quot;planflow&quot;</code> entry
               inside your existing <code className="rounded bg-gray-200 px-1 py-0.5">&quot;mcpServers&quot;</code> object.
@@ -265,7 +265,7 @@ export default function MCPSetupPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">
             Restart Claude Code to load the new configuration. Then try one of these commands
             to verify the connection:
           </p>
@@ -273,7 +273,7 @@ export default function MCPSetupPage() {
           <div className="space-y-3">
             <div className="rounded-lg border p-4">
               <div className="flex items-center gap-2 mb-2">
-                <Terminal className="h-4 w-4 text-gray-500" />
+                <Terminal className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-medium text-gray-700">Check your account</p>
               </div>
               <CodeBlock code="Ask Claude: &quot;Use planflow_whoami to check my account&quot;" />
@@ -281,7 +281,7 @@ export default function MCPSetupPage() {
 
             <div className="rounded-lg border p-4">
               <div className="flex items-center gap-2 mb-2">
-                <Terminal className="h-4 w-4 text-gray-500" />
+                <Terminal className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-medium text-gray-700">List your projects</p>
               </div>
               <CodeBlock code="Ask Claude: &quot;Use planflow_projects to list my projects&quot;" />
@@ -321,10 +321,10 @@ export default function MCPSetupPage() {
               { name: 'planflow_notifications', desc: 'Check notifications' },
             ].map((tool) => (
               <div key={tool.name} className="flex items-center gap-3 rounded-lg border p-3">
-                <code className="rounded bg-gray-100 px-2 py-1 text-xs font-mono text-gray-800">
+                <code className="rounded bg-muted px-2 py-1 text-xs font-mono text-gray-800">
                   {tool.name}
                 </code>
-                <span className="text-sm text-gray-600">{tool.desc}</span>
+                <span className="text-sm text-muted-foreground">{tool.desc}</span>
               </div>
             ))}
           </div>
@@ -339,8 +339,8 @@ export default function MCPSetupPage() {
         <CardContent>
           <div className="space-y-4">
             <div>
-              <p className="font-medium text-gray-900 text-sm">MCP server not loading?</p>
-              <ul className="mt-1 list-disc list-inside text-sm text-gray-600 space-y-1">
+              <p className="font-medium text-foreground text-sm">MCP server not loading?</p>
+              <ul className="mt-1 list-disc list-inside text-sm text-muted-foreground space-y-1">
                 <li>Make sure Claude Code is fully restarted after config changes</li>
                 <li>Check that the JSON syntax is valid (no trailing commas)</li>
                 <li>Verify Node.js is installed and available in your PATH</li>
@@ -348,8 +348,8 @@ export default function MCPSetupPage() {
             </div>
             <Separator />
             <div>
-              <p className="font-medium text-gray-900 text-sm">Authentication errors?</p>
-              <ul className="mt-1 list-disc list-inside text-sm text-gray-600 space-y-1">
+              <p className="font-medium text-foreground text-sm">Authentication errors?</p>
+              <ul className="mt-1 list-disc list-inside text-sm text-muted-foreground space-y-1">
                 <li>Double-check your API token is correctly copied</li>
                 <li>Make sure the token hasn&apos;t expired</li>
                 <li>Try creating a new token if issues persist</li>
@@ -357,8 +357,8 @@ export default function MCPSetupPage() {
             </div>
             <Separator />
             <div>
-              <p className="font-medium text-gray-900 text-sm">Still having issues?</p>
-              <p className="mt-1 text-sm text-gray-600">
+              <p className="font-medium text-foreground text-sm">Still having issues?</p>
+              <p className="mt-1 text-sm text-muted-foreground">
                 Check our{' '}
                 <a
                   href="https://docs.planflow.tools/mcp"

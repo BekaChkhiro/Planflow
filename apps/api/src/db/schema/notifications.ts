@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, varchar, pgEnum } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, uuid, varchar, pgEnum, index } from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { projects } from './projects'
 import { organizations } from './organizations'
@@ -55,7 +55,12 @@ export const notifications = pgTable('notifications', {
   readAt: timestamp('read_at', { withTimezone: true }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+}, (table) => ({
+  // Performance index for fetching user notifications with read status filter (T13.7)
+  userReadAtIdx: index('notifications_user_id_read_at_idx').on(table.userId, table.readAt),
+  // Index for fetching user notifications sorted by time
+  userCreatedAtIdx: index('notifications_user_id_created_at_idx').on(table.userId, table.createdAt),
+}))
 
 export type Notification = typeof notifications.$inferSelect
 export type NewNotification = typeof notifications.$inferInsert

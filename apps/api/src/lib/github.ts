@@ -103,7 +103,8 @@ export interface GitHubPullRequestEvent {
 // - repo: Full control of private repositories (needed for issues, PRs)
 // - user:email: Access user email addresses
 // - read:user: Read user profile data
-export const GITHUB_SCOPES = ['repo', 'user:email', 'read:user']
+// - admin:repo_hook: Manage webhooks (needed for automatic webhook setup per project)
+export const GITHUB_SCOPES = ['repo', 'user:email', 'read:user', 'admin:repo_hook']
 
 /**
  * Check if GitHub OAuth is configured
@@ -1160,4 +1161,440 @@ export async function updateGitHubIssue(
     console.error('Error updating GitHub issue:', error)
     return null
   }
+}
+
+// ============================================
+// GitHub Webhook Management (Project Integration)
+// ============================================
+
+/**
+ * Generate a unique webhook secret for project-specific webhooks
+ */
+export function generateWebhookSecret(): string {
+  return crypto.randomBytes(32).toString('hex')
+}
+
+/**
+ * Verify GitHub webhook signature using a custom secret
+ * Use this for project-specific webhook verification
+ *
+ * @param payload - The raw request body as a string
+ * @param signature - The X-Hub-Signature-256 header value
+ * @param secret - The project-specific webhook secret
+ * @returns true if signature is valid
+ */
+export function verifyGitHubWebhookSignatureWithSecret(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  if (!secret || !signature) {
+    return false
+  }
+
+  // GitHub sends signature as "sha256=<signature>"
+  const expectedSignature = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(payload, 'utf8')
+    .digest('hex')
+
+  // Use timing-safe comparison to prevent timing attacks
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    )
+  } catch {
+    // If buffers have different lengths, timingSafeEqual throws
+    return false
+  }
+}
+
+/**
+ * GitHub Webhook type
+ */
+export interface GitHubWebhook {
+  id: number
+  name: string
+  active: boolean
+  events: string[]
+  config: {
+    content_type: string
+    url: string
+    insecure_ssl: string
+  }
+  created_at: string
+  updated_at: string
+  type: string
+  last_response?: {
+    code: number | null
+    status: string | null
+    message: string | null
+  }
+}
+
+/**
+ * Create a webhook on a GitHub repository
+ *
+ * @param accessToken - GitHub OAuth access token
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param webhookUrl - URL to receive webhook events
+ * @param secret - Webhook secret for signature verification
+ * @param events - Events to listen for (default: pull_request, issues, push)
+ * @returns Created webhook info or null on failure
+ */
+export async function createGitHubWebhook(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  webhookUrl: string,
+  secret: string,
+  events: string[] = ['pull_request', 'issues', 'push']
+): Promise<GitHubWebhook | null> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/hooks`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          name: 'web',
+          active: true,
+          events,
+          config: {
+            url: webhookUrl,
+            content_type: 'json',
+            secret,
+            insecure_ssl: '0',
+          },
+        }),
+      }
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Failed to create GitHub webhook:', response.status, errorText)
+      return null
+    }
+
+    return (await response.json()) as GitHubWebhook
+  } catch (error) {
+    console.error('Error creating GitHub webhook:', error)
+    return null
+  }
+}
+
+/**
+ * Delete a webhook from a GitHub repository
+ *
+ * @param accessToken - GitHub OAuth access token
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param webhookId - Webhook ID to delete
+ * @returns true if deleted successfully, false otherwise
+ */
+export async function deleteGitHubWebhook(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  webhookId: string
+): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/hooks/${webhookId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${accessToken}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      }
+    )
+
+    if (response.status === 204 || response.status === 404) {
+      // 204 = deleted, 404 = already gone
+      return true
+    }
+
+    const errorText = await response.text()
+    console.error('Failed to delete GitHub webhook:', response.status, errorText)
+    return false
+  } catch (error) {
+    console.error('Error deleting GitHub webhook:', error)
+    return false
+  }
+}
+
+/**
+ * Get webhook info from a GitHub repository
+ *
+ * @param accessToken - GitHub OAuth access token
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @param webhookId - Webhook ID to fetch
+ * @returns Webhook info or null if not found
+ */
+export async function getGitHubWebhook(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  webhookId: string
+): Promise<GitHubWebhook | null> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/hooks/${webhookId}`,
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${accessToken}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      }
+    )
+
+    if (response.status === 404) {
+      return null
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Failed to get GitHub webhook:', response.status, errorText)
+      return null
+    }
+
+    return (await response.json()) as GitHubWebhook
+  } catch (error) {
+    console.error('Error getting GitHub webhook:', error)
+    return null
+  }
+}
+
+/**
+ * Fetch a specific repository's details
+ *
+ * @param accessToken - GitHub OAuth access token
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @returns Repository details or null if not found/no access
+ */
+export async function fetchGitHubRepository(
+  accessToken: string,
+  owner: string,
+  repo: string
+): Promise<GitHubRepo | null> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${accessToken}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      }
+    )
+
+    if (response.status === 404) {
+      return null
+    }
+
+    if (!response.ok) {
+      console.error('Failed to fetch GitHub repository:', response.status, response.statusText)
+      return null
+    }
+
+    return (await response.json()) as GitHubRepo
+  } catch (error) {
+    console.error('Error fetching GitHub repository:', error)
+    return null
+  }
+}
+
+/**
+ * Check if user has push/admin access to a repository
+ * (required for webhook management)
+ *
+ * @param accessToken - GitHub OAuth access token
+ * @param owner - Repository owner
+ * @param repo - Repository name
+ * @returns Object with access level info
+ */
+export async function checkRepositoryAccess(
+  accessToken: string,
+  owner: string,
+  repo: string
+): Promise<{
+  hasAccess: boolean
+  canPush: boolean
+  canAdmin: boolean
+  error?: string
+}> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${accessToken}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      }
+    )
+
+    if (response.status === 404) {
+      return {
+        hasAccess: false,
+        canPush: false,
+        canAdmin: false,
+        error: 'Repository not found',
+      }
+    }
+
+    if (response.status === 403) {
+      return {
+        hasAccess: false,
+        canPush: false,
+        canAdmin: false,
+        error: 'Access forbidden',
+      }
+    }
+
+    if (!response.ok) {
+      return {
+        hasAccess: false,
+        canPush: false,
+        canAdmin: false,
+        error: `Failed to check access: ${response.status}`,
+      }
+    }
+
+    const repoData = (await response.json()) as {
+      permissions?: {
+        admin?: boolean
+        push?: boolean
+        pull?: boolean
+      }
+    }
+
+    const permissions = repoData.permissions || {}
+
+    return {
+      hasAccess: true,
+      canPush: permissions.push || false,
+      canAdmin: permissions.admin || false,
+    }
+  } catch (error) {
+    console.error('Error checking repository access:', error)
+    return {
+      hasAccess: false,
+      canPush: false,
+      canAdmin: false,
+      error: 'Network error',
+    }
+  }
+}
+
+// ============================================
+// GitHub Issues Event Handling (Webhook)
+// ============================================
+
+/**
+ * GitHub Issues Webhook Event payload type
+ */
+export interface GitHubIssuesEvent {
+  action: 'opened' | 'closed' | 'reopened' | 'edited' | 'deleted' | 'assigned' | 'unassigned' | 'labeled' | 'unlabeled' | string
+  issue: {
+    id: number
+    number: number
+    title: string
+    body: string | null
+    state: 'open' | 'closed'
+    html_url: string
+    created_at: string
+    updated_at: string
+    closed_at: string | null
+    user: {
+      login: string
+      avatar_url: string | null
+    }
+    labels: Array<{
+      id: number
+      name: string
+      color: string
+    }>
+    assignees: Array<{
+      login: string
+      avatar_url: string | null
+    }>
+  }
+  repository: {
+    id: number
+    name: string
+    full_name: string
+    owner: {
+      login: string
+    }
+  }
+  sender: {
+    login: string
+    avatar_url: string | null
+  }
+}
+
+/**
+ * GitHub Push Webhook Event payload type
+ */
+export interface GitHubPushEvent {
+  ref: string // e.g., "refs/heads/main"
+  before: string // commit SHA before
+  after: string // commit SHA after
+  repository: {
+    id: number
+    name: string
+    full_name: string
+    default_branch: string
+    owner: {
+      login: string
+    }
+  }
+  pusher: {
+    name: string
+    email: string
+  }
+  sender: {
+    login: string
+    avatar_url: string | null
+  }
+  commits: Array<{
+    id: string // commit SHA
+    message: string
+    timestamp: string
+    url: string
+    author: {
+      name: string
+      email: string
+      username?: string
+    }
+    added: string[]
+    removed: string[]
+    modified: string[]
+  }>
+  head_commit: {
+    id: string
+    message: string
+    timestamp: string
+    url: string
+    author: {
+      name: string
+      email: string
+      username?: string
+    }
+  } | null
 }

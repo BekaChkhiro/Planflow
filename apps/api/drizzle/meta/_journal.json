@@ -64,6 +64,13 @@
       "when": 1772092800000,
       "tag": "0008_project_archiving",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1772179200000,
+      "tag": "0009_project_github_integration",
+      "breakpoints": true
     }
   ]
 }

@@ -27,6 +27,12 @@ import {
   getPrState,
   generateBranchName,
   generateBranchNameAuto,
+  fetchGitHubRepository,
+  checkRepositoryAccess,
+  createGitHubWebhook,
+  deleteGitHubWebhook,
+  getGitHubWebhook,
+  generateWebhookSecret,
   type BranchPrefix,
 } from '../lib/github.js'
 
@@ -1440,7 +1446,14 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
         updatedAt: new Date(),
       })
       .where(eq(schema.tasks.id, task.id))
-      .returning()
+      .returning({
+        id: schema.tasks.id,
+        taskId: schema.tasks.taskId,
+        name: schema.tasks.name,
+        assigneeId: schema.tasks.assigneeId,
+        assignedBy: schema.tasks.assignedBy,
+        assignedAt: schema.tasks.assignedAt,
+      })
 
     // Log activity
     await db.insert(schema.activityLog).values({

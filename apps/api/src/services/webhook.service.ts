@@ -15,6 +15,8 @@ import {
   isGitHubWebhookConfigured,
   verifyGitHubWebhookSignature,
   type GitHubPullRequestEvent,
+  type GitHubIssuesEvent,
+  type GitHubPushEvent,
 } from '../lib/github.js'
 import {
   broadcastTaskUpdated,

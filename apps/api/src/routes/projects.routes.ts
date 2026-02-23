@@ -1379,12 +1379,14 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
 
     // Check if user has access (owner or team member)
     if (project.userId !== user.id) {
-      const membership = await db.query.projectMembers.findFirst({
-        where: and(
+      const [membership] = await db
+        .select({ id: schema.projectMembers.id })
+        .from(schema.projectMembers)
+        .where(and(
           eq(schema.projectMembers.projectId, projectId),
           eq(schema.projectMembers.userId, user.id)
-        ),
-      })
+        ))
+        .limit(1)
       if (!membership) {
         return c.json({ success: false, error: 'Project not found' }, 404)
       }
@@ -1422,12 +1424,14 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
 
       // Verify assignee has access to the project
       if (assignee.id !== project.userId) {
-        const membership = await db.query.projectMembers.findFirst({
-          where: and(
+        const [membership] = await db
+          .select({ id: schema.projectMembers.id })
+          .from(schema.projectMembers)
+          .where(and(
             eq(schema.projectMembers.projectId, projectId),
             eq(schema.projectMembers.userId, assignee.id)
-          ),
-        })
+          ))
+          .limit(1)
         if (!membership) {
           return c.json({ success: false, error: 'Assignee does not have access to this project' }, 400)
         }
@@ -3837,6 +3841,548 @@ projectRoutes.get('/:id/tasks/:taskId/branch-name', jwtAuth, async (c) => {
   } catch (error) {
     console.error('Generate branch name error:', error)
     return c.json({ success: false, error: 'Failed to generate branch name' }, 500)
+  }
+})
+
+// ============================================
+// Project GitHub Repository Integration
+// ============================================
+
+// GET /:id/github - Get project's GitHub integration status
+projectRoutes.get('/:id/github', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const db = getDbClient()
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Get project with GitHub fields
+    const [project] = await db
+      .select({
+        id: schema.projects.id,
+        name: schema.projects.name,
+        githubRepository: schema.projects.githubRepository,
+        githubOwner: schema.projects.githubOwner,
+        githubRepoName: schema.projects.githubRepoName,
+        githubDefaultBranch: schema.projects.githubDefaultBranch,
+        githubRepoUrl: schema.projects.githubRepoUrl,
+        githubRepoPrivate: schema.projects.githubRepoPrivate,
+        githubWebhookId: schema.projects.githubWebhookId,
+        githubLinkedAt: schema.projects.githubLinkedAt,
+        githubLinkedBy: schema.projects.githubLinkedBy,
+        userId: schema.projects.userId,
+      })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // If not linked, return simple response
+    if (!project.githubRepository) {
+      return c.json({
+        success: true,
+        data: {
+          linked: false,
+          repository: null,
+        },
+      })
+    }
+
+    // Get linkedBy user info if available
+    let linkedByUser = null
+    if (project.githubLinkedBy) {
+      const [linkedUser] = await db
+        .select({
+          id: schema.users.id,
+          name: schema.users.name,
+          email: schema.users.email,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, project.githubLinkedBy))
+
+      linkedByUser = linkedUser || null
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        linked: true,
+        repository: project.githubRepository,
+        owner: project.githubOwner,
+        repoName: project.githubRepoName,
+        defaultBranch: project.githubDefaultBranch,
+        repoUrl: project.githubRepoUrl,
+        private: project.githubRepoPrivate,
+        linkedAt: project.githubLinkedAt,
+        linkedBy: linkedByUser,
+        webhook: {
+          configured: !!project.githubWebhookId,
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Get project GitHub status error:', error)
+    return c.json({ success: false, error: 'Failed to get GitHub status' }, 500)
+  }
+})
+
+// POST /:id/github/link - Link repository to project
+projectRoutes.post('/:id/github/link', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const db = getDbClient()
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Parse request body
+    const body = await c.req.json()
+    const { repository } = body as { repository?: string }
+
+    if (!repository) {
+      return c.json({ success: false, error: 'Repository is required (format: owner/repo)' }, 400)
+    }
+
+    // Parse owner/repo format
+    const repoParts = repository.split('/')
+    if (repoParts.length !== 2 || !repoParts[0] || !repoParts[1]) {
+      return c.json({ success: false, error: 'Invalid repository format. Expected: owner/repo' }, 400)
+    }
+    const [owner, repoName] = repoParts
+
+    // Check if project exists and user has access
+    const [project] = await db
+      .select({
+        id: schema.projects.id,
+        name: schema.projects.name,
+        userId: schema.projects.userId,
+        githubRepository: schema.projects.githubRepository,
+        githubWebhookId: schema.projects.githubWebhookId,
+      })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has GitHub connection
+    const [githubIntegration] = await db
+      .select({
+        id: schema.githubIntegrations.id,
+        accessToken: schema.githubIntegrations.accessToken,
+        githubUsername: schema.githubIntegrations.githubUsername,
+        isConnected: schema.githubIntegrations.isConnected,
+        grantedScopes: schema.githubIntegrations.grantedScopes,
+      })
+      .from(schema.githubIntegrations)
+      .where(
+        and(
+          eq(schema.githubIntegrations.userId, user.id),
+          eq(schema.githubIntegrations.isConnected, true)
+        )
+      )
+
+    if (!githubIntegration) {
+      return c.json({
+        success: false,
+        error: 'GitHub account not connected. Please connect your GitHub account first.',
+        code: 'GITHUB_NOT_CONNECTED',
+      }, 400)
+    }
+
+    // Check if user has admin:repo_hook scope
+    const grantedScopes = githubIntegration.grantedScopes || []
+    const hasWebhookScope = grantedScopes.some(
+      (scope) => scope === 'admin:repo_hook' || scope === 'write:repo_hook'
+    )
+
+    if (!hasWebhookScope) {
+      return c.json({
+        success: false,
+        error: 'Missing webhook permissions. Please reconnect GitHub with admin:repo_hook scope.',
+        code: 'MISSING_WEBHOOK_SCOPE',
+      }, 403)
+    }
+
+    // Check user has access to the repository
+    const accessCheck = await checkRepositoryAccess(
+      githubIntegration.accessToken,
+      owner,
+      repoName
+    )
+
+    if (!accessCheck.hasAccess) {
+      return c.json({
+        success: false,
+        error: accessCheck.error || 'Repository not found or no access',
+        code: 'REPO_ACCESS_DENIED',
+      }, 404)
+    }
+
+    if (!accessCheck.canAdmin) {
+      return c.json({
+        success: false,
+        error: 'Admin access required to manage webhooks for this repository',
+        code: 'ADMIN_ACCESS_REQUIRED',
+      }, 403)
+    }
+
+    // Fetch repository details
+    const repoDetails = await fetchGitHubRepository(
+      githubIntegration.accessToken,
+      owner,
+      repoName
+    )
+
+    if (!repoDetails) {
+      return c.json({ success: false, error: 'Failed to fetch repository details' }, 500)
+    }
+
+    // If project already has a different repo linked, cleanup old webhook first
+    if (project.githubRepository && project.githubWebhookId && project.githubRepository !== repository) {
+      const [oldOwner, oldRepo] = project.githubRepository.split('/')
+      if (oldOwner && oldRepo) {
+        await deleteGitHubWebhook(
+          githubIntegration.accessToken,
+          oldOwner,
+          oldRepo,
+          project.githubWebhookId
+        ).catch(() => {
+          // Ignore errors - webhook might already be deleted
+        })
+      }
+    }
+
+    // Generate webhook secret and create webhook
+    const webhookSecret = generateWebhookSecret()
+    const webhookUrl = `${process.env['API_BASE_URL'] || 'http://localhost:3000'}/webhooks/github/project/${projectId}`
+
+    const webhook = await createGitHubWebhook(
+      githubIntegration.accessToken,
+      owner,
+      repoName,
+      webhookUrl,
+      webhookSecret,
+      ['pull_request', 'issues', 'push']
+    )
+
+    if (!webhook) {
+      return c.json({
+        success: false,
+        error: 'Failed to create webhook on GitHub. Please check your permissions.',
+        code: 'WEBHOOK_CREATION_FAILED',
+      }, 500)
+    }
+
+    // Update project with GitHub info
+    const [updatedProject] = await db
+      .update(schema.projects)
+      .set({
+        githubRepository: repository,
+        githubOwner: owner,
+        githubRepoName: repoName,
+        githubDefaultBranch: repoDetails.default_branch,
+        githubRepoUrl: repoDetails.html_url,
+        githubRepoPrivate: repoDetails.private,
+        githubWebhookId: String(webhook.id),
+        githubWebhookSecret: webhookSecret,
+        githubLinkedAt: new Date(),
+        githubLinkedBy: user.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.projects.id, projectId))
+      .returning({
+        id: schema.projects.id,
+        name: schema.projects.name,
+        githubRepository: schema.projects.githubRepository,
+        githubOwner: schema.projects.githubOwner,
+        githubRepoName: schema.projects.githubRepoName,
+        githubDefaultBranch: schema.projects.githubDefaultBranch,
+        githubRepoUrl: schema.projects.githubRepoUrl,
+        githubRepoPrivate: schema.projects.githubRepoPrivate,
+        githubLinkedAt: schema.projects.githubLinkedAt,
+      })
+
+    // Log activity
+    await db.insert(schema.activityLog).values({
+      action: 'github_repo_linked',
+      entityType: 'project',
+      entityId: projectId,
+      actorId: user.id,
+      projectId,
+      description: `Linked GitHub repository ${repository}`,
+      metadata: {
+        repository,
+        owner,
+        repoName,
+        defaultBranch: repoDetails.default_branch,
+        webhookId: webhook.id,
+      },
+    })
+
+    return c.json({
+      success: true,
+      data: {
+        project: {
+          id: updatedProject?.id,
+          name: updatedProject?.name,
+          githubRepository: updatedProject?.githubRepository,
+          githubOwner: updatedProject?.githubOwner,
+          githubRepoName: updatedProject?.githubRepoName,
+          githubDefaultBranch: updatedProject?.githubDefaultBranch,
+          githubRepoUrl: updatedProject?.githubRepoUrl,
+          githubLinkedAt: updatedProject?.githubLinkedAt,
+          webhookConfigured: true,
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Link GitHub repository error:', error)
+    return c.json({ success: false, error: 'Failed to link GitHub repository' }, 500)
+  }
+})
+
+// DELETE /:id/github/link - Unlink repository from project
+projectRoutes.delete('/:id/github/link', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const db = getDbClient()
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Get project
+    const [project] = await db
+      .select({
+        id: schema.projects.id,
+        name: schema.projects.name,
+        userId: schema.projects.userId,
+        githubRepository: schema.projects.githubRepository,
+        githubOwner: schema.projects.githubOwner,
+        githubRepoName: schema.projects.githubRepoName,
+        githubWebhookId: schema.projects.githubWebhookId,
+      })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    if (!project.githubRepository) {
+      return c.json({ success: false, error: 'No GitHub repository linked to this project' }, 400)
+    }
+
+    // Try to delete webhook from GitHub (best effort)
+    if (project.githubWebhookId && project.githubOwner && project.githubRepoName) {
+      // Get user's GitHub integration for access token
+      const [githubIntegration] = await db
+        .select({
+          accessToken: schema.githubIntegrations.accessToken,
+          isConnected: schema.githubIntegrations.isConnected,
+        })
+        .from(schema.githubIntegrations)
+        .where(
+          and(
+            eq(schema.githubIntegrations.userId, user.id),
+            eq(schema.githubIntegrations.isConnected, true)
+          )
+        )
+
+      if (githubIntegration) {
+        await deleteGitHubWebhook(
+          githubIntegration.accessToken,
+          project.githubOwner,
+          project.githubRepoName,
+          project.githubWebhookId
+        ).catch(() => {
+          // Ignore errors - webhook might already be deleted
+        })
+      }
+    }
+
+    const previousRepo = project.githubRepository
+
+    // Clear GitHub fields from project
+    await db
+      .update(schema.projects)
+      .set({
+        githubRepository: null,
+        githubOwner: null,
+        githubRepoName: null,
+        githubDefaultBranch: null,
+        githubRepoUrl: null,
+        githubRepoPrivate: null,
+        githubWebhookId: null,
+        githubWebhookSecret: null,
+        githubLinkedAt: null,
+        githubLinkedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.projects.id, projectId))
+
+    // Log activity
+    await db.insert(schema.activityLog).values({
+      action: 'github_repo_unlinked',
+      entityType: 'project',
+      entityId: projectId,
+      actorId: user.id,
+      projectId,
+      description: `Unlinked GitHub repository ${previousRepo}`,
+      metadata: {
+        previousRepository: previousRepo,
+      },
+    })
+
+    return c.json({
+      success: true,
+      message: `GitHub repository ${previousRepo} has been unlinked from the project`,
+    })
+  } catch (error) {
+    console.error('Unlink GitHub repository error:', error)
+    return c.json({ success: false, error: 'Failed to unlink GitHub repository' }, 500)
+  }
+})
+
+// POST /:id/github/webhook/sync - Re-sync webhook (if deleted on GitHub)
+projectRoutes.post('/:id/github/webhook/sync', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const db = getDbClient()
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Get project
+    const [project] = await db
+      .select({
+        id: schema.projects.id,
+        name: schema.projects.name,
+        userId: schema.projects.userId,
+        githubRepository: schema.projects.githubRepository,
+        githubOwner: schema.projects.githubOwner,
+        githubRepoName: schema.projects.githubRepoName,
+        githubWebhookId: schema.projects.githubWebhookId,
+        githubWebhookSecret: schema.projects.githubWebhookSecret,
+      })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    if (!project.githubRepository || !project.githubOwner || !project.githubRepoName) {
+      return c.json({ success: false, error: 'No GitHub repository linked to this project' }, 400)
+    }
+
+    // Get user's GitHub integration
+    const [githubIntegration] = await db
+      .select({
+        accessToken: schema.githubIntegrations.accessToken,
+        isConnected: schema.githubIntegrations.isConnected,
+      })
+      .from(schema.githubIntegrations)
+      .where(
+        and(
+          eq(schema.githubIntegrations.userId, user.id),
+          eq(schema.githubIntegrations.isConnected, true)
+        )
+      )
+
+    if (!githubIntegration) {
+      return c.json({
+        success: false,
+        error: 'GitHub account not connected',
+        code: 'GITHUB_NOT_CONNECTED',
+      }, 400)
+    }
+
+    // Check if webhook exists on GitHub
+    let webhookExists = false
+    if (project.githubWebhookId) {
+      const existingWebhook = await getGitHubWebhook(
+        githubIntegration.accessToken,
+        project.githubOwner,
+        project.githubRepoName,
+        project.githubWebhookId
+      )
+      webhookExists = !!existingWebhook
+    }
+
+    if (webhookExists) {
+      return c.json({
+        success: true,
+        message: 'Webhook is already configured and active',
+        data: {
+          webhookId: project.githubWebhookId,
+          status: 'active',
+        },
+      })
+    }
+
+    // Re-create webhook
+    const webhookSecret = project.githubWebhookSecret || generateWebhookSecret()
+    const webhookUrl = `${process.env['API_BASE_URL'] || 'http://localhost:3000'}/webhooks/github/project/${projectId}`
+
+    const webhook = await createGitHubWebhook(
+      githubIntegration.accessToken,
+      project.githubOwner,
+      project.githubRepoName,
+      webhookUrl,
+      webhookSecret,
+      ['pull_request', 'issues', 'push']
+    )
+
+    if (!webhook) {
+      return c.json({
+        success: false,
+        error: 'Failed to create webhook on GitHub',
+        code: 'WEBHOOK_CREATION_FAILED',
+      }, 500)
+    }
+
+    // Update project with new webhook ID
+    await db
+      .update(schema.projects)
+      .set({
+        githubWebhookId: String(webhook.id),
+        githubWebhookSecret: webhookSecret,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.projects.id, projectId))
+
+    return c.json({
+      success: true,
+      message: 'Webhook has been re-created',
+      data: {
+        webhookId: webhook.id,
+        status: 'active',
+      },
+    })
+  } catch (error) {
+    console.error('Sync GitHub webhook error:', error)
+    return c.json({ success: false, error: 'Failed to sync webhook' }, 500)
   }
 })
 

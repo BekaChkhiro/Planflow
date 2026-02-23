@@ -1467,7 +1467,7 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
     if (updatedTask.assigneeId) {
       console.log('[Assign] Step 6: Getting assignee info...')
       const [assigneeUser] = await db
-        .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email, avatarUrl: schema.users.avatarUrl })
+        .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email })
         .from(schema.users)
         .where(eq(schema.users.id, updatedTask.assigneeId))
       console.log('[Assign] Step 6 done')
@@ -1476,7 +1476,6 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
           id: assigneeUser.id,
           name: assigneeUser.name,
           email: assigneeUser.email,
-          avatarUrl: assigneeUser.avatarUrl,
         }
       }
     }

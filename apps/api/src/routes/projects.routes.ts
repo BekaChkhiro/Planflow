@@ -1367,11 +1367,13 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
 
     const db = getDbClient()
 
+    console.log('[Assign] Step 1: Getting project...')
     // Verify the project exists and user has access
     const [project] = await db
       .select({ id: schema.projects.id, name: schema.projects.name, userId: schema.projects.userId })
       .from(schema.projects)
       .where(eq(schema.projects.id, projectId))
+    console.log('[Assign] Step 1 done, project:', project?.id)
 
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
@@ -1382,6 +1384,7 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
+    console.log('[Assign] Step 2: Getting task...')
     // Find the task by taskId
     const [task] = await db
       .select({
@@ -1391,6 +1394,7 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
       })
       .from(schema.tasks)
       .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
+    console.log('[Assign] Step 2 done, task:', task?.id)
 
     if (!task) {
       return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
@@ -1403,10 +1407,12 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
         return c.json({ success: false, error: 'Invalid assignee ID format' }, 400)
       }
 
+      console.log('[Assign] Step 3: Getting assignee...')
       const [assignee] = await db
         .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email })
         .from(schema.users)
         .where(eq(schema.users.id, assigneeId))
+      console.log('[Assign] Step 3 done, assignee:', assignee?.id)
 
       if (!assignee) {
         return c.json({ success: false, error: 'Assignee not found' }, 404)
@@ -1418,6 +1424,7 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
       assigneeName = assignee.name || assignee.email
     }
 
+    console.log('[Assign] Step 4: Updating task...')
     // Update the task assignment
     const [updatedTask] = await db
       .update(schema.tasks)
@@ -1436,7 +1443,9 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
         assignedBy: schema.tasks.assignedBy,
         assignedAt: schema.tasks.assignedAt,
       })
+    console.log('[Assign] Step 4 done, updated:', updatedTask?.id)
 
+    console.log('[Assign] Step 5: Logging activity...')
     // Log activity
     await db.insert(schema.activityLog).values({
       projectId,
@@ -1451,14 +1460,17 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
         assigneeName: assigneeName,
       },
     })
+    console.log('[Assign] Step 5 done')
 
     // Get assignee info for response
     let assigneeInfo = null
     if (updatedTask.assigneeId) {
+      console.log('[Assign] Step 6: Getting assignee info...')
       const [assigneeUser] = await db
         .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email, avatarUrl: schema.users.avatarUrl })
         .from(schema.users)
         .where(eq(schema.users.id, updatedTask.assigneeId))
+      console.log('[Assign] Step 6 done')
       if (assigneeUser) {
         assigneeInfo = {
           id: assigneeUser.id,

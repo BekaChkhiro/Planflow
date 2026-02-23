@@ -1253,13 +1253,13 @@ projectRoutes.post('/:id/tasks/:taskId/duplicate', auth, async (c) => {
     // Log activity
     await db.insert(schema.activityLog).values({
       projectId: projectId,
-      userId: user.id,
+      actorId: user.id,
       action: 'task_duplicated',
       entityType: 'task',
       entityId: newTask.id,
+      taskId: newTask.taskId,
       metadata: {
         originalTaskId: originalTask.taskId,
-        newTaskId: newTask.taskId,
         newTaskName: newTask.name,
       },
     })
@@ -1434,12 +1434,12 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
     // Log activity
     await db.insert(schema.activityLog).values({
       projectId,
-      userId: user.id,
+      actorId: user.id,
       action: assigneeId ? 'task_assigned' : 'task_unassigned',
       entityType: 'task',
       entityId: task.id,
+      taskId: task.taskId,
       metadata: {
-        taskId: task.taskId,
         taskName: task.name,
         assigneeId: assigneeId || null,
         assigneeName: assigneeName,
@@ -1994,7 +1994,7 @@ projectRoutes.post('/:id/tasks/bulk-delete', auth, async (c) => {
     // Log activity
     await db.insert(schema.activityLog).values({
       projectId: projectId,
-      userId: user.id,
+      actorId: user.id,
       action: 'tasks_bulk_deleted',
       entityType: 'task',
       metadata: {

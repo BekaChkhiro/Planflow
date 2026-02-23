@@ -1327,6 +1327,163 @@ projectRoutes.post('/:id/tasks/:taskId/duplicate', auth, async (c) => {
 })
 
 // ============================================
+// Task Assignment Route
+// ============================================
+
+// POST /projects/:id/tasks/:taskId/assign - Assign/unassign a task
+projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const taskIdParam = c.req.param('taskId')
+
+    // Validate UUID format for project ID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Validate taskId format (e.g., T1.1, T2.10)
+    const taskIdRegex = /^T\d+\.\d+$/
+    if (!taskIdRegex.test(taskIdParam)) {
+      return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
+    }
+
+    const body = await c.req.json().catch(() => ({}))
+    const { assigneeId } = body as { assigneeId?: string | null }
+
+    const db = getDbClient()
+
+    // Verify the project exists and user has access
+    const [project] = await db
+      .select({ id: schema.projects.id, name: schema.projects.name, userId: schema.projects.userId })
+      .from(schema.projects)
+      .where(eq(schema.projects.id, projectId))
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has access (owner or team member)
+    if (project.userId !== user.id) {
+      const membership = await db.query.projectMembers.findFirst({
+        where: and(
+          eq(schema.projectMembers.projectId, projectId),
+          eq(schema.projectMembers.userId, user.id)
+        ),
+      })
+      if (!membership) {
+        return c.json({ success: false, error: 'Project not found' }, 404)
+      }
+    }
+
+    // Find the task by taskId
+    const [task] = await db
+      .select()
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
+
+    if (!task) {
+      return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
+    }
+
+    // If assigneeId is provided, verify the user exists and has access to the project
+    let assigneeName: string | null = null
+    if (assigneeId) {
+      if (!uuidRegex.test(assigneeId)) {
+        return c.json({ success: false, error: 'Invalid assignee ID format' }, 400)
+      }
+
+      const [assignee] = await db
+        .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email })
+        .from(schema.users)
+        .where(eq(schema.users.id, assigneeId))
+
+      if (!assignee) {
+        return c.json({ success: false, error: 'Assignee not found' }, 404)
+      }
+
+      // Verify assignee has access to the project
+      if (assignee.id !== project.userId) {
+        const membership = await db.query.projectMembers.findFirst({
+          where: and(
+            eq(schema.projectMembers.projectId, projectId),
+            eq(schema.projectMembers.userId, assignee.id)
+          ),
+        })
+        if (!membership) {
+          return c.json({ success: false, error: 'Assignee does not have access to this project' }, 400)
+        }
+      }
+
+      assigneeName = assignee.name || assignee.email
+    }
+
+    // Update the task assignment
+    const [updatedTask] = await db
+      .update(schema.tasks)
+      .set({
+        assigneeId: assigneeId || null,
+        assignedBy: assigneeId ? user.id : null,
+        assignedAt: assigneeId ? new Date() : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.tasks.id, task.id))
+      .returning()
+
+    // Log activity
+    await db.insert(schema.activityLog).values({
+      projectId,
+      userId: user.id,
+      action: assigneeId ? 'task_assigned' : 'task_unassigned',
+      entityType: 'task',
+      entityId: task.id,
+      metadata: {
+        taskId: task.taskId,
+        taskName: task.name,
+        assigneeId: assigneeId || null,
+        assigneeName: assigneeName,
+      },
+    })
+
+    // Get assignee info for response
+    let assigneeInfo = null
+    if (updatedTask.assigneeId) {
+      const [assigneeUser] = await db
+        .select({ id: schema.users.id, name: schema.users.name, email: schema.users.email, avatarUrl: schema.users.avatarUrl })
+        .from(schema.users)
+        .where(eq(schema.users.id, updatedTask.assigneeId))
+      if (assigneeUser) {
+        assigneeInfo = {
+          id: assigneeUser.id,
+          name: assigneeUser.name,
+          email: assigneeUser.email,
+          avatarUrl: assigneeUser.avatarUrl,
+        }
+      }
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        task: {
+          id: updatedTask.id,
+          taskId: updatedTask.taskId,
+          name: updatedTask.name,
+          assigneeId: updatedTask.assigneeId,
+          assignedBy: updatedTask.assignedBy,
+          assignedAt: updatedTask.assignedAt,
+          assignee: assigneeInfo,
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Assign task error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ============================================
 // Task Reorder Route (T14.3 - Drag-and-Drop)
 // ============================================
 

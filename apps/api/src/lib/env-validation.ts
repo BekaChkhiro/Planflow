@@ -86,10 +86,10 @@ export function validateEnvironment(): EnvValidationResult {
     warnings.push('APP_URL contains localhost in production. This may cause issues with email links.')
   }
 
-  // 4. CORS_ORIGINS - Important for security in production
-  const corsOrigins = process.env['CORS_ORIGINS']
-  if (isProduction && !corsOrigins) {
-    warnings.push('CORS_ORIGINS is not set. Using default Railway patterns. Set explicit origins for better security.')
+  // 4. ALLOWED_ORIGINS - Important for security in production
+  const allowedOrigins = process.env['ALLOWED_ORIGINS']
+  if (isProduction && !allowedOrigins) {
+    warnings.push('ALLOWED_ORIGINS is not set. Using default Railway patterns. Set explicit origins for better security.')
   }
 
   // ==========================================================================

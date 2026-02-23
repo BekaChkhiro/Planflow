@@ -113,7 +113,8 @@ app.route('/invitations', invitationsRoutes)
 app.route('/notifications', notificationsRoutes)
 
 // Integration routes (Slack, Discord, GitHub)
-app.route('/integrations', integrationsRoutes)
+// Note: This file also contains /organizations/:id/integrations routes
+app.route('/', integrationsRoutes)
 
 // Note: Some routes are also mounted under /organizations/:id/integrations
 // These are handled within organizationsRoutes for org-scoped integrations

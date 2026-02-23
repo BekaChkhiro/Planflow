@@ -1163,7 +1163,14 @@ projectRoutes.post('/:id/tasks/:taskId/duplicate', auth, async (c) => {
 
     // Find the original task by taskId
     const [originalTask] = await db
-      .select()
+      .select({
+        id: schema.tasks.id,
+        name: schema.tasks.name,
+        description: schema.tasks.description,
+        complexity: schema.tasks.complexity,
+        estimatedHours: schema.tasks.estimatedHours,
+        dependencies: schema.tasks.dependencies,
+      })
       .from(schema.tasks)
       .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
 
@@ -1379,7 +1386,11 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
 
     // Find the task by taskId
     const [task] = await db
-      .select()
+      .select({
+        id: schema.tasks.id,
+        taskId: schema.tasks.taskId,
+        name: schema.tasks.name,
+      })
       .from(schema.tasks)
       .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
 
@@ -3591,7 +3602,10 @@ projectRoutes.patch('/:id/tasks/:taskId/comments/:commentId', auth, async (c) =>
 
     // Get comment and verify ownership
     const [existingComment] = await db
-      .select()
+      .select({
+        id: schema.comments.id,
+        authorId: schema.comments.authorId,
+      })
       .from(schema.comments)
       .where(eq(schema.comments.id, commentId))
 
@@ -3676,7 +3690,10 @@ projectRoutes.delete('/:id/tasks/:taskId/comments/:commentId', auth, async (c) =
 
     // Get comment and verify ownership
     const [existingComment] = await db
-      .select()
+      .select({
+        id: schema.comments.id,
+        authorId: schema.comments.authorId,
+      })
       .from(schema.comments)
       .where(eq(schema.comments.id, commentId))
 

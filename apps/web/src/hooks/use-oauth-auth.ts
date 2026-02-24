@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
@@ -138,16 +139,17 @@ export function useOAuthAuth() {
   /**
    * Start OAuth flow - initiates authorization
    */
-  const startOAuthFlow = async (provider: OAuthProvider, redirectUrl?: string) => {
+  const startOAuthFlow = useCallback(async (provider: OAuthProvider, redirectUrl?: string) => {
     await authorize.mutateAsync({ provider, redirectUrl })
-  }
+  }, [authorize])
 
   /**
    * Complete OAuth flow - handles callback
+   * Memoized to prevent infinite loop in useEffect
    */
-  const completeOAuthFlow = async (provider: OAuthProvider, code: string, state: string) => {
+  const completeOAuthFlow = useCallback(async (provider: OAuthProvider, code: string, state: string) => {
     return await callback.mutateAsync({ provider, code, state })
-  }
+  }, [callback])
 
   return {
     startOAuthFlow,

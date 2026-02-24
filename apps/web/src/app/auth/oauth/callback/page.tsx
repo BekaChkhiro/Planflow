@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, CheckCircle, XCircle, Github } from 'lucide-react'
 import { useOAuthAuth, OAuthCallbackError, OAuthErrorCode } from '@/hooks/use-oauth-auth'
@@ -103,7 +103,15 @@ export default function OAuthCallbackPage() {
 
   const { completeOAuthFlow } = useOAuthAuth()
 
+  // Prevent double execution (React StrictMode, HMR, etc.)
+  const hasProcessedRef = useRef(false)
+
   useEffect(() => {
+    // Skip if already processed
+    if (hasProcessedRef.current) {
+      return
+    }
+
     const code = searchParams.get('code')
     const stateParam = searchParams.get('state')
     const errorParam = searchParams.get('error')
@@ -117,6 +125,7 @@ export default function OAuthCallbackPage() {
 
     // Handle OAuth error response
     if (errorParam) {
+      hasProcessedRef.current = true
       setState('error')
       setErrorInfo({
         title: 'Authorization Denied',
@@ -127,6 +136,7 @@ export default function OAuthCallbackPage() {
 
     // Validate required parameters
     if (!code || !stateParam) {
+      hasProcessedRef.current = true
       setState('error')
       setErrorInfo({
         title: 'Invalid Request',
@@ -134,6 +144,9 @@ export default function OAuthCallbackPage() {
       })
       return
     }
+
+    // Mark as processing to prevent duplicate calls
+    hasProcessedRef.current = true
 
     // Extract provider from state (format: "provider:randomState")
     const stateParts = stateParam.split(':')

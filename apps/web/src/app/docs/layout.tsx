@@ -150,16 +150,16 @@ export default function DocsLayout({
 
                       {/* Table of Contents for active page */}
                       {isActive(item.href!) && isExpanded(item.href!) && toc.length > 0 && (
-                        <div className="ml-3 mt-1 border-l border-border pl-3 space-y-0.5">
+                        <div className="ml-3 mt-1 border-l-2 border-border pl-3 space-y-0.5 relative">
                           {toc.filter(t => t.level === 2).map((section) => (
                             <button
                               key={section.id}
                               onClick={() => scrollToSection(section.id)}
                               className={cn(
-                                'block w-full text-left px-2 py-1 text-xs rounded transition-colors',
+                                'block w-full text-left px-2 py-1 text-xs rounded transition-all relative',
                                 activeSection === section.id
-                                  ? 'text-primary font-medium'
-                                  : 'text-muted-foreground hover:text-foreground'
+                                  ? 'text-primary font-medium bg-primary/10 -ml-[13px] pl-[21px] border-l-2 border-primary'
+                                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                               )}
                             >
                               {section.title}

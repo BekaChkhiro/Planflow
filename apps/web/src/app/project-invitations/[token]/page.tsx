@@ -106,15 +106,16 @@ export default function ProjectInvitationPage() {
       const response = await authApi.post<AcceptResponse>(`/project-invitations/${token}/accept`)
 
       if (response.success && response.data) {
+        const projectId = response.data.project.id
         setAcceptedProject({
-          id: response.data.project.id,
+          id: projectId,
           name: response.data.project.name,
         })
         setState('success')
 
         // Redirect to the project after a short delay
         setTimeout(() => {
-          router.push(`/dashboard/projects/${response.data.project.id}`)
+          router.push(`/dashboard/projects/${projectId}`)
         }, 2000)
       } else {
         setError(response.error || 'Failed to accept invitation')

@@ -24,7 +24,7 @@ function MobileHeader() {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 lg:hidden">
       <SidebarTrigger />
-      <Link href="/dashboard" className="flex items-center gap-2">
+      <Link href="/" className="flex items-center gap-2">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
           <span className="text-xs font-bold text-primary-foreground">P</span>
         </div>

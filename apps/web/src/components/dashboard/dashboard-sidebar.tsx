@@ -786,9 +786,9 @@ function SidebarContent({ quickStats, teamMembers }: SidebarContentProps) {
       {/* Logo */}
       <div className={cn('flex h-16 items-center border-b px-3', isCollapsed ? 'justify-center' : 'px-6')}>
         <Link
-          href="/dashboard"
+          href="/"
           className="flex items-center gap-2"
-          aria-label="PlanFlow - Go to dashboard"
+          aria-label="PlanFlow - Go to home page"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary" aria-hidden="true">
             <span className="text-sm font-bold text-primary-foreground">P</span>

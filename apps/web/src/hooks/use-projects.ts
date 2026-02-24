@@ -14,6 +14,7 @@ export interface Project {
   createdAt: string
   updatedAt: string
   archivedAt: string | null
+  projectRole: 'owner' | 'editor' | 'viewer' | null // null for org admins viewing without project membership
 }
 
 export interface PaginationMeta {

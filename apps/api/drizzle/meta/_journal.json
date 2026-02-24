@@ -78,6 +78,13 @@
       "when": 1772265600000,
       "tag": "0010_add_organization_to_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772352000000,
+      "tag": "0011_project_level_access",
+      "breakpoints": true
     }
   ]
 }

@@ -62,6 +62,16 @@ export interface TeamInvitationEmailOptions {
   expiresAt: Date
 }
 
+export interface ProjectInvitationEmailOptions {
+  to: string
+  inviterName: string
+  projectName: string
+  organizationName: string
+  role: 'editor' | 'viewer'
+  inviteLink: string
+  expiresAt: Date
+}
+
 export interface DigestNotificationItem {
   id: string
   type: string
@@ -282,6 +292,97 @@ function generateInvitationHtml(options: TeamInvitationEmailOptions): string {
             <td style="background-color: #f9fafb; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">
                 If you don't want to join, you can ignore this email.
+              </p>
+              <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+                Button not working? Copy and paste this link:
+                <a href="${inviteLink}" style="color: #6366f1; word-break: break-all;">
+                  ${inviteLink}
+                </a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim()
+}
+
+function generateProjectInvitationHtml(options: ProjectInvitationEmailOptions): string {
+  const { inviterName, projectName, organizationName, role, inviteLink, expiresAt } = options
+
+  const expiresDate = new Date(expiresAt).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+
+  const roleDescription = role === 'editor' ? 'an editor (can edit tasks and content)' : 'a viewer (read-only access)'
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're invited to join ${escapeHtml(projectName)}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td style="padding: 40px 20px;">
+        <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #6366f1; padding: 24px; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
+                PlanFlow
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 32px 24px;">
+              <h2 style="margin: 0 0 16px 0; color: #111827; font-size: 20px; font-weight: 600;">
+                You're invited to join a project
+              </h2>
+
+              <p style="margin: 0 0 24px 0; color: #374151; font-size: 16px; line-height: 1.6;">
+                <strong>${escapeHtml(inviterName)}</strong> has invited you to join the project <strong>${escapeHtml(projectName)}</strong> in ${escapeHtml(organizationName)} as ${roleDescription}.
+              </p>
+
+              <p style="margin: 0 0 24px 0; color: #374151; font-size: 16px; line-height: 1.6;">
+                As ${role === 'editor' ? 'an editor' : 'a viewer'}, you'll be able to ${role === 'editor' ? 'view and edit tasks, add comments, and collaborate with the team' : 'view tasks and project progress'}.
+              </p>
+
+              <table role="presentation" style="width: 100%;">
+                <tr>
+                  <td style="padding: 24px 0; text-align: center;">
+                    <a href="${inviteLink}"
+                       style="display: inline-block; background-color: #6366f1; color: #ffffff;
+                              padding: 14px 32px; text-decoration: none; border-radius: 6px;
+                              font-weight: 600; font-size: 16px;">
+                      Accept Invitation
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 24px 0 0 0; color: #6b7280; font-size: 14px; text-align: center;">
+                This invitation expires on ${expiresDate}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">
+                If you don't want to join this project, you can ignore this email.
               </p>
               <p style="margin: 0; color: #9ca3af; font-size: 12px;">
                 Button not working? Copy and paste this link:
@@ -585,6 +686,45 @@ export async function sendTeamInvitationEmail(options: TeamInvitationEmailOption
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     console.error('Failed to send invitation email:', message)
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Sends a project invitation email.
+ * Non-blocking - logs errors but doesn't throw.
+ *
+ * @param options - Project invitation email options
+ * @returns Result with success status and optional message ID
+ */
+export async function sendProjectInvitationEmail(options: ProjectInvitationEmailOptions): Promise<EmailResult> {
+  const resend = getResendClient()
+
+  if (!resend) {
+    return { success: false, error: 'Email service not configured' }
+  }
+
+  try {
+    const subject = `📋 ${options.inviterName} invited you to join ${options.projectName} on PlanFlow`
+    const html = generateProjectInvitationHtml(options)
+
+    const { data, error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: options.to,
+      subject,
+      html,
+    })
+
+    if (error) {
+      console.error('Failed to send project invitation email:', error)
+      return { success: false, error: error.message }
+    }
+
+    console.log(`Project invitation email sent to ${options.to}: ${data?.id}`)
+    return { success: true, messageId: data?.id }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    console.error('Failed to send project invitation email:', message)
     return { success: false, error: message }
   }
 }

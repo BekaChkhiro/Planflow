@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Archive, ArchiveRestore } from 'lucide-react'
+import { ArrowLeft, Loader2, Archive, ArchiveRestore, Users } from 'lucide-react'
 
 import { useProject, useArchiveProject, useRestoreProject, useUpdateProject } from '@/hooks/use-projects'
 import { Button } from '@/components/ui/button'
@@ -131,6 +131,34 @@ export default function ProjectSettingsPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Members Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Members</CardTitle>
+            <CardDescription>Manage who has access to this project.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium">Project Members</p>
+                  <p className="text-sm text-muted-foreground">
+                    Invite team members and manage their roles
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" asChild>
+                <Link href={`/dashboard/projects/${projectId}/settings/members`}>
+                  Manage Members
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* General Settings */}
         <Card>
           <CardHeader>

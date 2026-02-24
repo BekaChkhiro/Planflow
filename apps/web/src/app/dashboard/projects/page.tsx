@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Calendar, Clock, MoreVertical, Archive, ArchiveRestore, Trash2, Loader2, Search, X } from 'lucide-react'
+import { Plus, Calendar, Clock, MoreVertical, Archive, ArchiveRestore, Trash2, Loader2, Search, X, Shield, Edit3, Eye } from 'lucide-react'
 
 import {
   useProjectsInfinite,
@@ -353,6 +353,35 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
   )
 }
 
+// Helper to get role badge variant
+function getProjectRoleBadgeVariant(role: 'owner' | 'editor' | 'viewer'): 'default' | 'secondary' | 'outline' {
+  switch (role) {
+    case 'owner':
+      return 'default'
+    case 'editor':
+      return 'secondary'
+    default:
+      return 'outline'
+  }
+}
+
+// Helper to get role label
+function getProjectRoleLabel(role: 'owner' | 'editor' | 'viewer'): string {
+  return role.charAt(0).toUpperCase() + role.slice(1)
+}
+
+// Role icon component
+function ProjectRoleIcon({ role, className }: { role: 'owner' | 'editor' | 'viewer'; className?: string }) {
+  switch (role) {
+    case 'owner':
+      return <Shield className={className} />
+    case 'editor':
+      return <Edit3 className={className} />
+    case 'viewer':
+      return <Eye className={className} />
+  }
+}
+
 function ProjectCard({
   project,
   onArchive,
@@ -366,6 +395,8 @@ function ProjectCard({
 }) {
   const [showArchiveDialog, setShowArchiveDialog] = useState(false)
   const isArchived = !!project.archivedAt
+  // Show role badge for editor/viewer (not for owner, which is the default)
+  const showRoleBadge = project.projectRole && project.projectRole !== 'owner'
 
   return (
     <>
@@ -373,8 +404,14 @@ function ProjectCard({
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <Link href={`/dashboard/projects/${project.id}`} className="flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-lg hover:text-primary">{project.name}</CardTitle>
+                {showRoleBadge && project.projectRole && (
+                  <Badge variant={getProjectRoleBadgeVariant(project.projectRole)} className="text-xs">
+                    <ProjectRoleIcon role={project.projectRole} className="mr-1 h-3 w-3" />
+                    {getProjectRoleLabel(project.projectRole)}
+                  </Badge>
+                )}
                 {isArchived && (
                   <Badge variant="secondary" className="text-xs">
                     <Archive className="mr-1 h-3 w-3" />

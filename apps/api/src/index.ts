@@ -47,6 +47,7 @@ import {
   projectRoutes,
   organizationsRoutes,
   invitationsRoutes,
+  projectInvitationsRoutes,
   notificationsRoutes,
   integrationsRoutes,
 } from './routes/index.js'
@@ -108,6 +109,9 @@ app.route('/organizations', organizationsRoutes)
 
 // Invitation routes (top-level, not under /organizations)
 app.route('/invitations', invitationsRoutes)
+
+// Project invitation routes (top-level, for accepting project invitations)
+app.route('/project-invitations', projectInvitationsRoutes)
 
 // Notification routes
 app.route('/notifications', notificationsRoutes)

@@ -476,6 +476,91 @@ export const UpdateMemberRoleRequestSchema = z.object({
 
 export type UpdateMemberRoleRequest = z.infer<typeof UpdateMemberRoleRequestSchema>
 
+// ============================================
+// Project Member Types
+// ============================================
+
+/**
+ * Project member role schema
+ */
+export const ProjectMemberRoleSchema = z.enum(['owner', 'editor', 'viewer'])
+export type ProjectMemberRole = z.infer<typeof ProjectMemberRoleSchema>
+
+/**
+ * Project member schema
+ */
+export const ProjectMemberSchema = z.object({
+  id: z.string().uuid(),
+  projectId: z.string().uuid(),
+  userId: z.string().uuid(),
+  role: ProjectMemberRoleSchema,
+  invitedBy: z.string().uuid().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+})
+
+export type ProjectMember = z.infer<typeof ProjectMemberSchema>
+
+/**
+ * Project member with user info (for API responses)
+ */
+export const ProjectMemberWithUserSchema = ProjectMemberSchema.extend({
+  userName: z.string().nullable(),
+  userEmail: z.string().email(),
+})
+
+export type ProjectMemberWithUser = z.infer<typeof ProjectMemberWithUserSchema>
+
+/**
+ * Create project invitation request schema
+ */
+export const CreateProjectInvitationRequestSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  role: z.enum(['editor', 'viewer']).optional().default('editor'),
+})
+
+export type CreateProjectInvitationRequest = z.infer<typeof CreateProjectInvitationRequestSchema>
+
+/**
+ * Project invitation schema
+ */
+export const ProjectInvitationSchema = z.object({
+  id: z.string().uuid(),
+  projectId: z.string().uuid(),
+  email: z.string().email(),
+  role: ProjectMemberRoleSchema,
+  invitedBy: z.string().uuid(),
+  token: z.string(),
+  expiresAt: z.date(),
+  acceptedAt: z.date().nullable(),
+  createdAt: z.date(),
+})
+
+export type ProjectInvitation = z.infer<typeof ProjectInvitationSchema>
+
+/**
+ * Project invitation with details (for API responses)
+ */
+export const ProjectInvitationWithDetailsSchema = ProjectInvitationSchema.extend({
+  inviterName: z.string().nullable(),
+  projectName: z.string(),
+  organizationName: z.string(),
+})
+
+export type ProjectInvitationWithDetails = z.infer<typeof ProjectInvitationWithDetailsSchema>
+
+/**
+ * Update project member role request schema
+ */
+export const UpdateProjectMemberRoleRequestSchema = z.object({
+  role: z.enum(['editor', 'viewer'], {
+    required_error: 'Role is required',
+    invalid_type_error: 'Role must be editor or viewer',
+  }),
+})
+
+export type UpdateProjectMemberRoleRequest = z.infer<typeof UpdateProjectMemberRoleRequestSchema>
+
 // Task assignment types (T5.4)
 export const AssignTaskRequestSchema = z.object({
   assigneeId: z.string().uuid('Invalid user ID format'),

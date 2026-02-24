@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { and, desc, eq, count, sql, or, ilike, isNull, isNotNull } from 'drizzle-orm'
+import { and, desc, eq, count, sql, or, ilike, isNull, isNotNull, inArray } from 'drizzle-orm'
+import crypto from 'crypto'
 import {
   CreateProjectRequestSchema,
   UpdateProjectRequestSchema,
@@ -7,7 +8,10 @@ import {
   BulkAssignTasksRequestSchema,
   BulkDeleteTasksRequestSchema,
   BulkStatusUpdateRequestSchema,
+  CreateProjectInvitationRequestSchema,
+  UpdateProjectMemberRoleRequestSchema,
 } from '@planflow/shared'
+import { sendProjectInvitationEmail } from '../lib/email.js'
 import { getDbClient, schema, withTransaction } from '../db/index.js'
 import { auth, getAuth, largeBodyLimit, jwtAuth } from '../middleware/index.js'
 import { canCreateProject, getProjectLimits } from '../utils/helpers.js'
@@ -100,8 +104,20 @@ projectRoutes.get('/', auth, async (c) => {
     const limit = Math.min(100, Math.max(1, parseInt(limitParam || '20', 10) || 20))
     const offset = (page - 1) * limit
 
+    // Check if user is org admin (owner/admin) - they see all projects
+    const isOrgAdmin = membership.role === 'owner' || membership.role === 'admin'
+
     // Build where clause with organization, search, and archive filter
     const conditions = [eq(schema.projects.organizationId, organizationId)]
+
+    // For non-admins, filter to only projects they have access to
+    if (!isOrgAdmin) {
+      const accessibleProjectIds = db
+        .select({ projectId: schema.projectMembers.projectId })
+        .from(schema.projectMembers)
+        .where(eq(schema.projectMembers.userId, user.id))
+      conditions.push(inArray(schema.projects.id, accessibleProjectIds))
+    }
 
     // Add archive filter condition
     if (archiveFilter === 'active') {
@@ -130,7 +146,7 @@ projectRoutes.get('/', auth, async (c) => {
       .where(whereCondition)
     const totalCount = countResult[0]?.totalCount ?? 0
 
-    // Get paginated projects
+    // Get paginated projects with project member role
     const projects = await db
       .select({
         id: schema.projects.id,
@@ -140,8 +156,16 @@ projectRoutes.get('/', auth, async (c) => {
         createdAt: schema.projects.createdAt,
         updatedAt: schema.projects.updatedAt,
         archivedAt: schema.projects.archivedAt,
+        projectRole: schema.projectMembers.role,
       })
       .from(schema.projects)
+      .leftJoin(
+        schema.projectMembers,
+        and(
+          eq(schema.projectMembers.projectId, schema.projects.id),
+          eq(schema.projectMembers.userId, user.id)
+        )
+      )
       .where(whereCondition)
       .orderBy(desc(schema.projects.updatedAt))
       .limit(limit)
@@ -150,11 +174,22 @@ projectRoutes.get('/', auth, async (c) => {
     // Get project limits for the user
     const limits = await getProjectLimits(user.id)
 
-    // Also get count of archived projects for UI display (for this organization)
+    // Determine archived count based on access level
+    const archivedConditions = [
+      eq(schema.projects.organizationId, organizationId),
+      isNotNull(schema.projects.archivedAt),
+    ]
+    if (!isOrgAdmin) {
+      const accessibleProjectIds = db
+        .select({ projectId: schema.projectMembers.projectId })
+        .from(schema.projectMembers)
+        .where(eq(schema.projectMembers.userId, user.id))
+      archivedConditions.push(inArray(schema.projects.id, accessibleProjectIds))
+    }
     const archivedCountResult = await db
       .select({ count: count() })
       .from(schema.projects)
-      .where(and(eq(schema.projects.organizationId, organizationId), isNotNull(schema.projects.archivedAt)))
+      .where(and(...archivedConditions))
     const archivedCount = archivedCountResult[0]?.count ?? 0
 
     // Calculate pagination metadata
@@ -236,28 +271,41 @@ projectRoutes.post('/', auth, async (c) => {
       )
     }
 
-    const [newProject] = await db
-      .insert(schema.projects)
-      .values({
-        name,
-        description: description ?? null,
-        plan: plan ?? null,
+    // Use transaction to create project and add creator as owner atomically
+    const result = await withTransaction(async (tx) => {
+      const [newProject] = await tx
+        .insert(schema.projects)
+        .values({
+          name,
+          description: description ?? null,
+          plan: plan ?? null,
+          userId: user.id,
+          organizationId,
+        })
+        .returning({
+          id: schema.projects.id,
+          name: schema.projects.name,
+          description: schema.projects.description,
+          plan: schema.projects.plan,
+          createdAt: schema.projects.createdAt,
+          updatedAt: schema.projects.updatedAt,
+        })
+
+      // Add creator as project owner
+      await tx.insert(schema.projectMembers).values({
+        projectId: newProject.id,
         userId: user.id,
-        organizationId,
+        role: 'owner',
+        invitedBy: user.id,
       })
-      .returning({
-        id: schema.projects.id,
-        name: schema.projects.name,
-        description: schema.projects.description,
-        plan: schema.projects.plan,
-        createdAt: schema.projects.createdAt,
-        updatedAt: schema.projects.updatedAt,
-      })
+
+      return newProject
+    })
 
     // Get updated limits after creation
     const limits = await getProjectLimits(user.id)
 
-    return c.json({ success: true, data: { project: newProject, limits } }, 201)
+    return c.json({ success: true, data: { project: result, limits } }, 201)
   } catch (error) {
     console.error('Create project error:', error)
     return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
@@ -265,12 +313,26 @@ projectRoutes.post('/', auth, async (c) => {
 })
 
 // Helper to get a project with membership verification
+// First checks project-level membership, then falls back to org admin override
 async function getProjectWithAccess(
   db: ReturnType<typeof getDbClient>,
   projectId: string,
   userId: string
-) {
-  const [result] = await db
+): Promise<{
+  id: string
+  name: string
+  description: string | null
+  plan: string | null
+  createdAt: Date
+  updatedAt: Date
+  archivedAt: Date | null
+  organizationId: string
+  memberRole: 'owner' | 'admin' | 'editor' | 'viewer'
+  projectRole: 'owner' | 'editor' | 'viewer' | null
+  accessType: 'project' | 'org_admin'
+} | undefined> {
+  // 1. First check project-level membership
+  const [projectMember] = await db
     .select({
       id: schema.projects.id,
       name: schema.projects.name,
@@ -280,7 +342,41 @@ async function getProjectWithAccess(
       updatedAt: schema.projects.updatedAt,
       archivedAt: schema.projects.archivedAt,
       organizationId: schema.projects.organizationId,
-      memberRole: schema.organizationMembers.role,
+      projectRole: schema.projectMembers.role,
+    })
+    .from(schema.projects)
+    .innerJoin(
+      schema.projectMembers,
+      and(
+        eq(schema.projectMembers.projectId, schema.projects.id),
+        eq(schema.projectMembers.userId, userId)
+      )
+    )
+    .where(eq(schema.projects.id, projectId))
+    .limit(1)
+
+  if (projectMember) {
+    // Map project role to effective member role
+    const effectiveRole = projectMember.projectRole === 'owner' ? 'owner' : projectMember.projectRole
+    return {
+      ...projectMember,
+      memberRole: effectiveRole,
+      accessType: 'project' as const,
+    }
+  }
+
+  // 2. Fall back to org admin override - owner/admin can see all projects in org
+  const [orgAdmin] = await db
+    .select({
+      id: schema.projects.id,
+      name: schema.projects.name,
+      description: schema.projects.description,
+      plan: schema.projects.plan,
+      createdAt: schema.projects.createdAt,
+      updatedAt: schema.projects.updatedAt,
+      archivedAt: schema.projects.archivedAt,
+      organizationId: schema.projects.organizationId,
+      orgRole: schema.organizationMembers.role,
     })
     .from(schema.projects)
     .innerJoin(
@@ -290,9 +386,27 @@ async function getProjectWithAccess(
         eq(schema.organizationMembers.userId, userId)
       )
     )
-    .where(eq(schema.projects.id, projectId))
+    .where(
+      and(
+        eq(schema.projects.id, projectId),
+        or(
+          eq(schema.organizationMembers.role, 'owner'),
+          eq(schema.organizationMembers.role, 'admin')
+        )
+      )
+    )
     .limit(1)
-  return result
+
+  if (orgAdmin) {
+    return {
+      ...orgAdmin,
+      memberRole: orgAdmin.orgRole as 'owner' | 'admin',
+      projectRole: null,
+      accessType: 'org_admin' as const,
+    }
+  }
+
+  return undefined
 }
 
 // GET /projects/:id - Get a single project
@@ -4444,6 +4558,464 @@ projectRoutes.post('/:id/github/webhook/sync', auth, async (c) => {
   } catch (error) {
     console.error('Sync GitHub webhook error:', error)
     return c.json({ success: false, error: 'Failed to sync webhook' }, 500)
+  }
+})
+
+// ============================================
+// Project Members Routes
+// ============================================
+
+// Helper to check if user can manage project members
+async function canManageProjectMembers(
+  db: ReturnType<typeof getDbClient>,
+  projectId: string,
+  userId: string
+): Promise<{ canManage: boolean; project?: Awaited<ReturnType<typeof getProjectWithAccess>> }> {
+  const project = await getProjectWithAccess(db, projectId, userId)
+  if (!project) {
+    return { canManage: false }
+  }
+  // Only project owner or org admin can manage members
+  const canManage = project.projectRole === 'owner' || project.accessType === 'org_admin'
+  return { canManage, project }
+}
+
+// GET /projects/:id/members - List project members
+projectRoutes.get('/:id/members', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const db = getDbClient()
+    const project = await getProjectWithAccess(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    const members = await db
+      .select({
+        id: schema.projectMembers.id,
+        projectId: schema.projectMembers.projectId,
+        userId: schema.projectMembers.userId,
+        role: schema.projectMembers.role,
+        invitedBy: schema.projectMembers.invitedBy,
+        createdAt: schema.projectMembers.createdAt,
+        updatedAt: schema.projectMembers.updatedAt,
+        userName: schema.users.name,
+        userEmail: schema.users.email,
+      })
+      .from(schema.projectMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.projectMembers.userId))
+      .where(eq(schema.projectMembers.projectId, projectId))
+      .orderBy(desc(schema.projectMembers.createdAt))
+
+    return c.json({ success: true, data: { members } })
+  } catch (error) {
+    console.error('List project members error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// POST /projects/:id/members/invitations - Invite a member to the project
+projectRoutes.post('/:id/members/invitations', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const body = await c.req.json()
+    const validation = CreateProjectInvitationRequestSchema.safeParse(body)
+    if (!validation.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.flatten().fieldErrors,
+        },
+        400
+      )
+    }
+
+    const { email, role } = validation.data
+    const db = getDbClient()
+
+    // Check if user can manage members
+    const { canManage, project } = await canManageProjectMembers(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+    if (!canManage) {
+      return c.json({ success: false, error: 'Only project owners can invite members' }, 403)
+    }
+
+    // Check if email is already a member of the organization
+    const [orgMember] = await db
+      .select({ userId: schema.organizationMembers.userId })
+      .from(schema.organizationMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.organizationMembers.userId))
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, project.organizationId),
+          eq(schema.users.email, email.toLowerCase())
+        )
+      )
+      .limit(1)
+
+    if (!orgMember) {
+      return c.json(
+        { success: false, error: 'User must be a member of the organization first' },
+        400
+      )
+    }
+
+    // Check if user is already a project member
+    const [existingMember] = await db
+      .select({ id: schema.projectMembers.id })
+      .from(schema.projectMembers)
+      .where(
+        and(
+          eq(schema.projectMembers.projectId, projectId),
+          eq(schema.projectMembers.userId, orgMember.userId)
+        )
+      )
+      .limit(1)
+
+    if (existingMember) {
+      return c.json({ success: false, error: 'User is already a member of this project' }, 409)
+    }
+
+    // Check for existing pending invitation
+    const [existingInvitation] = await db
+      .select({ id: schema.projectInvitations.id })
+      .from(schema.projectInvitations)
+      .where(
+        and(
+          eq(schema.projectInvitations.projectId, projectId),
+          eq(schema.projectInvitations.email, email.toLowerCase()),
+          isNull(schema.projectInvitations.acceptedAt)
+        )
+      )
+      .limit(1)
+
+    if (existingInvitation) {
+      return c.json({ success: false, error: 'An invitation is already pending for this email' }, 409)
+    }
+
+    // Generate invitation token
+    const token = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+
+    const [invitation] = await db
+      .insert(schema.projectInvitations)
+      .values({
+        projectId,
+        email: email.toLowerCase(),
+        role: role as 'editor' | 'viewer',
+        invitedBy: user.id,
+        token,
+        expiresAt,
+      })
+      .returning()
+
+    // Get project and organization names for email
+    const [projectInfo] = await db
+      .select({
+        projectName: schema.projects.name,
+        organizationName: schema.organizations.name,
+      })
+      .from(schema.projects)
+      .innerJoin(schema.organizations, eq(schema.organizations.id, schema.projects.organizationId))
+      .where(eq(schema.projects.id, projectId))
+      .limit(1)
+
+    // Get inviter name
+    const [inviter] = await db
+      .select({ name: schema.users.name })
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+      .limit(1)
+
+    // Send invitation email
+    const appUrl = process.env['APP_URL'] || 'http://localhost:5173'
+    const inviteLink = `${appUrl}/project-invitations/${token}`
+
+    try {
+      await sendProjectInvitationEmail({
+        to: email,
+        inviterName: inviter?.name || 'A team member',
+        projectName: projectInfo?.projectName || 'Unknown Project',
+        organizationName: projectInfo?.organizationName || 'Unknown Organization',
+        role: role as 'editor' | 'viewer',
+        inviteLink,
+        expiresAt,
+      })
+    } catch (emailError) {
+      console.error('Failed to send project invitation email:', emailError)
+      // Don't fail the request if email fails
+    }
+
+    return c.json(
+      {
+        success: true,
+        data: {
+          invitation: {
+            ...invitation,
+            inviterName: inviter?.name || null,
+          },
+        },
+      },
+      201
+    )
+  } catch (error) {
+    console.error('Create project invitation error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// GET /projects/:id/members/invitations - List pending invitations
+projectRoutes.get('/:id/members/invitations', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const db = getDbClient()
+    const project = await getProjectWithAccess(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    const invitations = await db
+      .select({
+        id: schema.projectInvitations.id,
+        projectId: schema.projectInvitations.projectId,
+        email: schema.projectInvitations.email,
+        role: schema.projectInvitations.role,
+        invitedBy: schema.projectInvitations.invitedBy,
+        expiresAt: schema.projectInvitations.expiresAt,
+        createdAt: schema.projectInvitations.createdAt,
+        inviterName: schema.users.name,
+      })
+      .from(schema.projectInvitations)
+      .innerJoin(schema.users, eq(schema.users.id, schema.projectInvitations.invitedBy))
+      .where(
+        and(
+          eq(schema.projectInvitations.projectId, projectId),
+          isNull(schema.projectInvitations.acceptedAt)
+        )
+      )
+      .orderBy(desc(schema.projectInvitations.createdAt))
+
+    return c.json({ success: true, data: { invitations } })
+  } catch (error) {
+    console.error('List project invitations error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// PATCH /projects/:id/members/:memberId - Update member role
+projectRoutes.patch('/:id/members/:memberId', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const memberId = c.req.param('memberId')
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId) || !uuidRegex.test(memberId)) {
+      return c.json({ success: false, error: 'Invalid ID format' }, 400)
+    }
+
+    const body = await c.req.json()
+    const validation = UpdateProjectMemberRoleRequestSchema.safeParse(body)
+    if (!validation.success) {
+      return c.json(
+        {
+          success: false,
+          error: 'Validation failed',
+          details: validation.error.flatten().fieldErrors,
+        },
+        400
+      )
+    }
+
+    const { role } = validation.data
+    const db = getDbClient()
+
+    // Check if user can manage members
+    const { canManage, project } = await canManageProjectMembers(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+    if (!canManage) {
+      return c.json({ success: false, error: 'Only project owners can change member roles' }, 403)
+    }
+
+    // Get the member to update
+    const [member] = await db
+      .select()
+      .from(schema.projectMembers)
+      .where(
+        and(
+          eq(schema.projectMembers.id, memberId),
+          eq(schema.projectMembers.projectId, projectId)
+        )
+      )
+      .limit(1)
+
+    if (!member) {
+      return c.json({ success: false, error: 'Member not found' }, 404)
+    }
+
+    // Cannot change owner's role
+    if (member.role === 'owner') {
+      return c.json({ success: false, error: 'Cannot change the owner\'s role' }, 400)
+    }
+
+    // Update the role
+    const [updatedMember] = await db
+      .update(schema.projectMembers)
+      .set({ role: role as 'editor' | 'viewer', updatedAt: new Date() })
+      .where(eq(schema.projectMembers.id, memberId))
+      .returning()
+
+    // Get user info
+    const [userInfo] = await db
+      .select({ userName: schema.users.name, userEmail: schema.users.email })
+      .from(schema.users)
+      .where(eq(schema.users.id, updatedMember.userId))
+      .limit(1)
+
+    return c.json({
+      success: true,
+      data: {
+        member: {
+          ...updatedMember,
+          userName: userInfo?.userName || null,
+          userEmail: userInfo?.userEmail || '',
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Update project member role error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// DELETE /projects/:id/members/:memberId - Remove member from project
+projectRoutes.delete('/:id/members/:memberId', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const memberId = c.req.param('memberId')
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId) || !uuidRegex.test(memberId)) {
+      return c.json({ success: false, error: 'Invalid ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check if user can manage members
+    const { canManage, project } = await canManageProjectMembers(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+    if (!canManage) {
+      return c.json({ success: false, error: 'Only project owners can remove members' }, 403)
+    }
+
+    // Get the member to remove
+    const [member] = await db
+      .select()
+      .from(schema.projectMembers)
+      .where(
+        and(
+          eq(schema.projectMembers.id, memberId),
+          eq(schema.projectMembers.projectId, projectId)
+        )
+      )
+      .limit(1)
+
+    if (!member) {
+      return c.json({ success: false, error: 'Member not found' }, 404)
+    }
+
+    // Cannot remove the owner
+    if (member.role === 'owner') {
+      return c.json({ success: false, error: 'Cannot remove the project owner' }, 400)
+    }
+
+    await db
+      .delete(schema.projectMembers)
+      .where(eq(schema.projectMembers.id, memberId))
+
+    return c.json({ success: true, data: { message: 'Member removed successfully' } })
+  } catch (error) {
+    console.error('Remove project member error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// DELETE /projects/:id/members/invitations/:invId - Revoke invitation
+projectRoutes.delete('/:id/members/invitations/:invId', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const invId = c.req.param('invId')
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId) || !uuidRegex.test(invId)) {
+      return c.json({ success: false, error: 'Invalid ID format' }, 400)
+    }
+
+    const db = getDbClient()
+
+    // Check if user can manage members
+    const { canManage, project } = await canManageProjectMembers(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+    if (!canManage) {
+      return c.json({ success: false, error: 'Only project owners can revoke invitations' }, 403)
+    }
+
+    // Get the invitation
+    const [invitation] = await db
+      .select()
+      .from(schema.projectInvitations)
+      .where(
+        and(
+          eq(schema.projectInvitations.id, invId),
+          eq(schema.projectInvitations.projectId, projectId)
+        )
+      )
+      .limit(1)
+
+    if (!invitation) {
+      return c.json({ success: false, error: 'Invitation not found' }, 404)
+    }
+
+    await db
+      .delete(schema.projectInvitations)
+      .where(eq(schema.projectInvitations.id, invId))
+
+    return c.json({ success: true, data: { message: 'Invitation revoked successfully' } })
+  } catch (error) {
+    console.error('Revoke project invitation error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
   }
 })
 

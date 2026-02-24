@@ -41,13 +41,13 @@ export function ProjectDetailSkeleton() {
 
 export function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
   return (
-    <Card className="border-red-200 bg-red-50">
+    <Card className="border-status-error bg-status-error">
       <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="rounded-full bg-red-100 p-4">
-          <AlertCircle className="h-8 w-8 text-red-400" />
+        <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-4">
+          <AlertCircle className="h-8 w-8 text-red-400 dark:text-red-500" />
         </div>
-        <h3 className="mt-4 text-lg font-semibold text-red-900">Failed to load project</h3>
-        <p className="mt-2 max-w-sm text-center text-sm text-red-600">
+        <h3 className="mt-4 text-lg font-semibold text-red-900 dark:text-red-200">Failed to load project</h3>
+        <p className="mt-2 max-w-sm text-center text-sm text-status-error">
           {error.message || 'An unexpected error occurred. Please try again.'}
         </p>
         <div className="mt-6 flex gap-3">

@@ -33,9 +33,9 @@ function StatCard({
 }) {
   const variantStyles = {
     default: 'bg-muted text-muted-foreground',
-    success: 'bg-green-100 text-green-600',
-    warning: 'bg-yellow-100 text-yellow-600',
-    info: 'bg-blue-100 text-blue-600',
+    success: 'bg-status-success text-status-success',
+    warning: 'bg-status-warning text-status-warning',
+    info: 'bg-status-info text-status-info',
   }
 
   return (
@@ -181,8 +181,8 @@ export function OverviewTabSkeleton() {
       <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
         <Card>
           <CardContent className="flex flex-col items-center py-8">
-            <div className="h-[140px] w-[140px] animate-pulse rounded-full bg-gray-200" />
-            <div className="mt-3 h-4 w-32 animate-pulse rounded bg-gray-200" />
+            <div className="h-[140px] w-[140px] animate-pulse rounded-full bg-muted" />
+            <div className="mt-3 h-4 w-32 animate-pulse rounded bg-muted" />
           </CardContent>
         </Card>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -190,10 +190,10 @@ export function OverviewTabSkeleton() {
             <Card key={i}>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 animate-pulse rounded-lg bg-gray-200" />
+                  <div className="h-12 w-12 animate-pulse rounded-lg bg-muted" />
                   <div className="space-y-2">
-                    <div className="h-4 w-20 animate-pulse rounded bg-gray-200" />
-                    <div className="h-6 w-16 animate-pulse rounded bg-gray-200" />
+                    <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+                    <div className="h-6 w-16 animate-pulse rounded bg-muted" />
                   </div>
                 </div>
               </CardContent>

@@ -73,11 +73,11 @@ export default function GitHubCallbackPage() {
   }, [searchParams, githubCallback, router])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 rounded-full bg-gray-100 p-4 w-fit">
-            <Github className="h-8 w-8 text-gray-900" />
+          <div className="mx-auto mb-4 rounded-full bg-muted p-4 w-fit">
+            <Github className="h-8 w-8 text-foreground" />
           </div>
           <CardTitle>GitHub Integration</CardTitle>
           <CardDescription>
@@ -89,8 +89,8 @@ export default function GitHubCallbackPage() {
         <CardContent className="space-y-4">
           {state === 'processing' && (
             <div className="flex flex-col items-center gap-4">
-              <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
-              <p className="text-sm text-gray-500">
+              <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
                 Verifying your GitHub authorization...
               </p>
             </div>
@@ -98,14 +98,14 @@ export default function GitHubCallbackPage() {
 
           {state === 'success' && (
             <div className="flex flex-col items-center gap-4">
-              <div className="rounded-full bg-green-100 p-3">
-                <CheckCircle className="h-8 w-8 text-green-600" />
+              <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-3">
+                <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
               <div className="text-center">
-                <p className="font-medium text-gray-900">
+                <p className="font-medium text-foreground">
                   Connected as @{username}
                 </p>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   Redirecting to settings...
                 </p>
               </div>
@@ -114,11 +114,11 @@ export default function GitHubCallbackPage() {
 
           {state === 'error' && (
             <div className="flex flex-col items-center gap-4">
-              <div className="rounded-full bg-red-100 p-3">
-                <XCircle className="h-8 w-8 text-red-600" />
+              <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-3">
+                <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
               </div>
               <div className="text-center">
-                <p className="text-sm text-red-600">{error}</p>
+                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
               </div>
               <div className="flex gap-2 mt-2">
                 <Button

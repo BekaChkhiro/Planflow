@@ -162,7 +162,7 @@ function CreateTokenDialog() {
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-600" />
+                <Check className="h-5 w-5 text-status-success" />
                 Token Created
               </DialogTitle>
               <DialogDescription>
@@ -170,10 +170,10 @@ function CreateTokenDialog() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+              <div className="rounded-md bg-status-warning border border-status-warning p-3">
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-sm text-amber-800">
+                  <AlertTriangle className="h-5 w-5 text-status-warning shrink-0 mt-0.5" />
+                  <p className="text-sm text-status-warning">
                     Make sure to copy your API token now. For security reasons, it won&apos;t be shown again.
                   </p>
                 </div>
@@ -189,7 +189,7 @@ function CreateTokenDialog() {
                   className="shrink-0"
                 >
                   {copied ? (
-                    <Check className="h-4 w-4 text-green-600" />
+                    <Check className="h-4 w-4 text-status-success" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
@@ -295,7 +295,7 @@ function TokenRow({ token }: { token: ApiToken }) {
         <div className="flex items-center gap-2">
           <span className="font-medium text-foreground">{token.name}</span>
           {expired && (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+            <span className="rounded-full bg-status-error px-2 py-0.5 text-xs font-medium text-status-error">
               Expired
             </span>
           )}
@@ -312,7 +312,7 @@ function TokenRow({ token }: { token: ApiToken }) {
       </div>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-red-600">
+          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-status-error">
             <Trash2 className="h-4 w-4" />
           </Button>
         </AlertDialogTrigger>
@@ -328,7 +328,7 @@ function TokenRow({ token }: { token: ApiToken }) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRevoke}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isRevoking}
             >
               {isRevoking && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -372,7 +372,7 @@ function TokenList() {
   }
 
   return (
-    <div className="divide-y divide-gray-200">
+    <div className="divide-y divide-border">
       {tokens.map((token) => (
         <TokenRow key={token.id} token={token} />
       ))}
@@ -393,12 +393,12 @@ export default function TokensSettingsPage() {
       <Separator />
 
       {/* Info Card */}
-      <div className="rounded-lg border bg-blue-50 border-blue-200 p-4">
+      <div className="rounded-lg border bg-status-info border-status-info p-4">
         <div className="flex gap-3">
-          <Key className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
+          <Key className="h-5 w-5 text-status-info shrink-0 mt-0.5" />
+          <div className="text-sm text-status-info">
             <p className="font-medium">What are API tokens?</p>
-            <p className="mt-1">
+            <p className="mt-1 opacity-90">
               API tokens allow the PlanFlow MCP server to authenticate with your account.
               Use these tokens when configuring Claude Code to sync your projects.
             </p>
@@ -429,19 +429,19 @@ export default function TokensSettingsPage() {
         <CardContent>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
-              <span className="text-green-600">•</span>
+              <span className="text-status-success">•</span>
               Create separate tokens for each device or application
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-green-600">•</span>
+              <span className="text-status-success">•</span>
               Use expiration dates for tokens on shared or temporary devices
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-green-600">•</span>
+              <span className="text-status-success">•</span>
               Revoke tokens immediately if you suspect they&apos;ve been compromised
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-green-600">•</span>
+              <span className="text-status-success">•</span>
               Never share your tokens or commit them to version control
             </li>
           </ul>

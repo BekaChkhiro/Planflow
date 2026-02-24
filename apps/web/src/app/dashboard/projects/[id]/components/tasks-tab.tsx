@@ -146,9 +146,9 @@ function TaskCard({ task, view, teamMembers = [], onAssign, isAssigning, assigni
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted" aria-hidden="true">
           <StatusIcon
             className={`h-4 w-4 ${
-              task.status === 'IN_PROGRESS' ? 'animate-spin text-blue-500' : ''
-            } ${task.status === 'DONE' ? 'text-green-500' : ''} ${
-              task.status === 'BLOCKED' ? 'text-red-500' : ''
+              task.status === 'IN_PROGRESS' ? 'animate-spin text-blue-500 dark:text-blue-400' : ''
+            } ${task.status === 'DONE' ? 'text-green-500 dark:text-green-400' : ''} ${
+              task.status === 'BLOCKED' ? 'text-red-500 dark:text-red-400' : ''
             } ${task.status === 'TODO' ? 'text-muted-foreground' : ''}`}
           />
         </div>
@@ -349,7 +349,7 @@ function KanbanColumn({
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto min-h-[100px]" role="list" aria-label={`${config.label} tasks`}>
           {tasks.length === 0 ? (
-            <div className="rounded-lg border-2 border-dashed border-gray-200 p-4 text-center" role="status">
+            <div className="rounded-lg border-2 border-dashed border-muted p-4 text-center" role="status">
               <p className="text-sm text-muted-foreground">No tasks</p>
             </div>
           ) : (
@@ -1070,20 +1070,20 @@ export function TasksTab({
               </span>
               <div className="hidden sm:flex items-center gap-2">
                 <span className="flex items-center gap-1" title="Done">
-                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                  <span className="h-2 w-2 rounded-full bg-green-500 dark:bg-green-400" />
                   {stats.done}
                 </span>
                 <span className="flex items-center gap-1" title="In Progress">
-                  <span className="h-2 w-2 rounded-full bg-blue-500" />
+                  <span className="h-2 w-2 rounded-full bg-blue-500 dark:bg-blue-400" />
                   {stats.inProgress}
                 </span>
                 <span className="flex items-center gap-1" title="To Do">
-                  <span className="h-2 w-2 rounded-full bg-slate-300" />
+                  <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-500" />
                   {stats.todo}
                 </span>
                 {stats.blocked > 0 && (
                   <span className="flex items-center gap-1" title="Blocked">
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
+                    <span className="h-2 w-2 rounded-full bg-red-500 dark:bg-red-400" />
                     {stats.blocked}
                   </span>
                 )}
@@ -1145,7 +1145,7 @@ export function TasksTab({
                   onCheckedChange={() => toggleComplexityFilter('Low')}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-green-500" />
+                    <span className="h-2 w-2 rounded-full bg-green-500 dark:bg-green-400" />
                     Low
                   </span>
                 </DropdownMenuCheckboxItem>
@@ -1154,7 +1154,7 @@ export function TasksTab({
                   onCheckedChange={() => toggleComplexityFilter('Medium')}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-yellow-500" />
+                    <span className="h-2 w-2 rounded-full bg-yellow-500 dark:bg-yellow-400" />
                     Medium
                   </span>
                 </DropdownMenuCheckboxItem>
@@ -1163,7 +1163,7 @@ export function TasksTab({
                   onCheckedChange={() => toggleComplexityFilter('High')}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-red-500" />
+                    <span className="h-2 w-2 rounded-full bg-red-500 dark:bg-red-400" />
                     High
                   </span>
                 </DropdownMenuCheckboxItem>
@@ -1308,10 +1308,10 @@ export function TasksTabSkeleton() {
       <Card>
         <CardContent className="py-4">
           <div className="flex items-center gap-4">
-            <div className="h-10 w-40 animate-pulse rounded-lg bg-gray-200" />
-            <div className="h-8 w-px bg-gray-200" />
-            <div className="h-8 w-32 animate-pulse rounded bg-gray-200" />
-            <div className="h-8 w-32 animate-pulse rounded bg-gray-200" />
+            <div className="h-10 w-40 animate-pulse rounded-lg bg-muted" />
+            <div className="h-8 w-px bg-muted" />
+            <div className="h-8 w-32 animate-pulse rounded bg-muted" />
+            <div className="h-8 w-32 animate-pulse rounded bg-muted" />
           </div>
         </CardContent>
       </Card>
@@ -1319,8 +1319,8 @@ export function TasksTabSkeleton() {
         {[...Array(4)].map((_, i) => (
           <div key={i} className="min-w-[280px] rounded-lg bg-muted p-3">
             <div className="mb-3 flex items-center gap-2">
-              <div className="h-4 w-4 animate-pulse rounded bg-gray-300" />
-              <div className="h-5 w-24 animate-pulse rounded bg-gray-300" />
+              <div className="h-4 w-4 animate-pulse rounded bg-muted-foreground/20" />
+              <div className="h-5 w-24 animate-pulse rounded bg-muted-foreground/20" />
             </div>
             <div className="space-y-2">
               {[...Array(3)].map((_, j) => (

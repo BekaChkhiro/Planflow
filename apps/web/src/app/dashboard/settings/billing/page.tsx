@@ -47,30 +47,30 @@ function getTierLabel(tier: string): string {
 function getTierBadgeClass(tier: string): string {
   switch (tier) {
     case 'free':
-      return 'bg-muted text-gray-700 border-gray-200'
+      return 'bg-muted text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
     case 'pro':
-      return 'bg-blue-100 text-blue-700 border-blue-200'
+      return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
     case 'team':
-      return 'bg-purple-100 text-purple-700 border-purple-200'
+      return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
     case 'enterprise':
-      return 'bg-amber-100 text-amber-700 border-amber-200'
+      return 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
     default:
-      return 'bg-muted text-gray-700 border-gray-200'
+      return 'bg-muted text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
   }
 }
 
 function getStatusBadgeClass(status: string): string {
   switch (status) {
     case 'active':
-      return 'bg-green-100 text-green-700 border-green-200'
+      return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
     case 'trialing':
-      return 'bg-blue-100 text-blue-700 border-blue-200'
+      return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
     case 'past_due':
-      return 'bg-yellow-100 text-yellow-700 border-yellow-200'
+      return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800'
     case 'canceled':
-      return 'bg-muted text-muted-foreground border-gray-200'
+      return 'bg-muted text-muted-foreground border-gray-200 dark:border-gray-700'
     default:
-      return 'bg-muted text-gray-700 border-gray-200'
+      return 'bg-muted text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
   }
 }
 
@@ -139,10 +139,10 @@ function SubscriptionStatusCard() {
       <CardContent className="space-y-4">
         {/* Past due warning */}
         {subscription.status === 'past_due' && (
-          <div className="rounded-md bg-yellow-50 border border-yellow-200 p-4">
+          <div className="rounded-md bg-[hsl(var(--warning-bg))] border border-[hsl(var(--warning-border))] p-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600 shrink-0 mt-0.5" />
-              <div className="text-sm text-yellow-800">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-800 dark:text-yellow-200">
                 <p className="font-medium">Payment issue detected</p>
                 <p className="mt-1">
                   Please update your payment method to avoid service interruption.
@@ -154,7 +154,7 @@ function SubscriptionStatusCard() {
 
         {/* Canceled notice */}
         {subscription.status === 'canceled' && subscription.currentPeriodEnd && (
-          <div className="rounded-md bg-muted/50 border border-gray-200 p-4">
+          <div className="rounded-md bg-muted/50 border border-gray-200 dark:border-gray-700 p-4">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
               <div className="text-sm text-muted-foreground">
@@ -183,14 +183,14 @@ function SubscriptionStatusCard() {
             <div className="grid gap-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Current period</span>
-                <span className="text-gray-700">
+                <span className="text-foreground">
                   {formatDate(subscription.currentPeriodStart)} - {formatDate(subscription.currentPeriodEnd)}
                 </span>
               </div>
               {subscription.canceledAt && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Canceled on</span>
-                  <span className="text-gray-700">{formatDate(subscription.canceledAt)}</span>
+                  <span className="text-foreground">{formatDate(subscription.canceledAt)}</span>
                 </div>
               )}
             </div>
@@ -228,10 +228,10 @@ function BillingActionsCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         {!hasCustomerId ? (
-          <div className="rounded-md bg-blue-50 border border-blue-200 p-4">
+          <div className="rounded-md bg-[hsl(var(--info-bg))] border border-[hsl(var(--info-border))] p-4">
             <div className="flex items-start gap-3">
-              <Loader2 className="h-5 w-5 text-blue-600 shrink-0 mt-0.5 animate-spin" />
-              <div className="text-sm text-blue-800">
+              <Loader2 className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5 animate-spin" />
+              <div className="text-sm text-blue-800 dark:text-blue-200">
                 <p className="font-medium">Setting up your billing account</p>
                 <p className="mt-1">
                   Your subscription is being processed. Billing management will be available shortly.
@@ -246,15 +246,15 @@ function BillingActionsCard() {
             </p>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                 View and download invoices
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                 Update your payment method
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-green-600" />
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                 Change or cancel your subscription
               </li>
             </ul>
@@ -315,19 +315,19 @@ function UpgradeCard() {
               <h3 className="font-semibold text-foreground">Pro</h3>
               <p className="text-sm text-muted-foreground">For individuals and small teams</p>
             </div>
-            <Badge className="bg-blue-100 text-blue-700 border-blue-200">Popular</Badge>
+            <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">Popular</Badge>
           </div>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               Unlimited projects
             </li>
             <li className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               Advanced task management
             </li>
             <li className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               Priority support
             </li>
           </ul>
@@ -351,15 +351,15 @@ function UpgradeCard() {
           </div>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               Everything in Pro
             </li>
             <li className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               Team collaboration features
             </li>
             <li className="flex items-center gap-2">
-              <Check className="h-4 w-4 text-green-600" />
+              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               Admin controls and analytics
             </li>
           </ul>

@@ -206,9 +206,9 @@ export default function ProjectSettingsPage() {
         <Separator />
 
         {/* Archive/Restore Zone */}
-        <Card className={isArchived ? 'border-amber-200' : 'border-red-200'}>
+        <Card className={isArchived ? 'border-amber-200 dark:border-amber-800' : 'border-red-200 dark:border-red-800'}>
           <CardHeader>
-            <CardTitle className={isArchived ? 'text-amber-600' : 'text-red-600'}>
+            <CardTitle className={isArchived ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}>
               {isArchived ? 'Archived Project' : 'Danger Zone'}
             </CardTitle>
             <CardDescription>

@@ -271,7 +271,7 @@ export default function ProjectDetailPage() {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                  className="text-red-600 dark:text-red-400 focus:bg-status-error focus:text-red-700 dark:focus:text-red-300"
                   onClick={() => setShowDeleteDialog(true)}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />

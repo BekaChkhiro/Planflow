@@ -4,6 +4,7 @@
 
 **Created:** 2026-01-28
 **Last Updated:** 2026-02-24
+**Dark Mode Analysis Date:** 2026-02-24
 **Analysis Date:** 2026-02-21
 **Status:** In Progress
 **Plugin Version:** 1.1.1
@@ -41,7 +42,7 @@
 
 ## Progress
 
-**Overall:** 100% complete (191/191 tasks)
+**Overall:** 97% complete (198/204 tasks)
 
 | Phase                          | Status      | Progress | Tasks |
 | ------------------------------ | ----------- | -------- | ----- |
@@ -61,12 +62,13 @@
 | Phase 14: New Features         | DONE        | 100%     | 7/7   ✅ |
 | Phase 15: Documentation        | DONE        | 100%     | 14/14 ✅ |
 | Phase 16: Dashboard Layout     | DONE        | 100%     | 12/12 ✅ |
+| Phase 17: Dark Mode Optimization | IN_PROGRESS | 62%      | 8/13  🆕 |
 
 ### Current Focus
-🎉 **Status**: PROJECT COMPLETE!
-✅ **Just Completed**: T16.9 - Update all dashboard pages to use new layout
-📊 **Total Tasks**: 191 (191 completed, 0 in progress, 0 remaining)
-🏆 **Achievement**: All 16 phases completed successfully!
+🎯 **Status**: Dark Mode Optimization Phase In Progress
+📋 **Next**: T17.9 - Fix Team/Analytics chart colors for dark mode
+📊 **Total Tasks**: 204 (198 completed, 0 in progress, 6 remaining)
+🌙 **Goal**: Improve dark mode from 6.5/10 to 9/10+ score
 
 ---
 
@@ -1031,13 +1033,212 @@ Mobile (< 768px):
 
 ---
 
+## Phase 17: Dark Mode Optimization (Sprint 17)
+
+**Goal:** დარქ მოუდის სრული ოპტიმიზაცია - ფერების კონსისტენტურობა, კონტრასტის გაუმჯობესება, და თემის CSS ცვლადების დამატება
+
+**Analysis Date:** 2026-02-24
+**Current Dark Mode Score:** 6.5/10
+**Target Score:** 9/10+
+
+### Analysis Summary
+
+კოდბაზის სკანირებამ აჩვენა **102+ ადგილი** სადაც ფერები hardcoded-ია dark mode-ის გარეშე:
+
+| პრობლემის ტიპი | რაოდენობა | პრიორიტეტი |
+| -------------- | --------- | ---------- |
+| Status backgrounds (`bg-green-50`, `bg-blue-50`) | 25+ | Critical |
+| Page backgrounds (`bg-gray-50`) | 15+ | High |
+| Interactive states (`hover:bg-red-50`) | 10+ | High |
+| Text colors without dark variants | 30+ | Medium |
+| Border colors without dark variants | 22+ | Medium |
+
+### Tasks
+
+| ID     | Task                                              | Complexity | Status | Dependencies |
+| ------ | ------------------------------------------------- | ---------- | ------ | ------------ |
+| T17.1  | Add semantic CSS variables for status colors      | High       | DONE ✅ | -            |
+| T17.2  | Fix Settings/Security page dark mode colors       | Medium     | DONE ✅ | T17.1        |
+| T17.3  | Fix Settings/Integrations page dark mode colors   | Medium     | DONE ✅ | T17.1        |
+| T17.4  | Fix Settings/Tokens page dark mode colors         | Medium     | DONE ✅ | T17.1        |
+| T17.5  | Fix Settings/Billing page dark mode colors        | Low        | DONE ✅ | T17.1        |
+| T17.6  | Update Auth pages to respect dark theme           | Medium     | DONE ✅ | T17.1        |
+| T17.7  | Fix Projects page status backgrounds              | Medium     | DONE ✅ | T17.1        |
+| T17.8  | Fix Team/Workload page color scheme               | Medium     | DONE ✅ | T17.1        |
+| T17.9  | Fix Team/Analytics chart colors for dark mode     | High       | TODO   | T17.1        |
+| T17.10 | Update Invitation pages dark mode support         | Low        | TODO   | T17.1        |
+| T17.11 | Create dark mode color consistency lint rule      | Medium     | TODO   | -            |
+| T17.12 | Improve color contrast ratios (WCAG AA)           | High       | TODO   | T17.1-T17.10 |
+| T17.13 | Test and validate all pages in dark mode          | Medium     | TODO   | T17.12       |
+
+### Implementation Details
+
+**T17.1: Semantic CSS Variables**
+
+დავამატოთ globals.css-ში ახალი ცვლადები:
+
+```css
+:root {
+  /* Status Background Colors - Light Mode */
+  --success-bg: 142 76% 94%;        /* soft green */
+  --success-border: 142 76% 85%;
+  --info-bg: 217 91% 95%;           /* soft blue */
+  --info-border: 217 91% 85%;
+  --warning-bg: 45 93% 95%;         /* soft yellow */
+  --warning-border: 45 93% 85%;
+  --error-bg: 0 84% 95%;            /* soft red */
+  --error-border: 0 84% 85%;
+}
+
+.dark {
+  /* Status Background Colors - Dark Mode */
+  --success-bg: 142 40% 18%;        /* dark green */
+  --success-border: 142 40% 28%;
+  --info-bg: 217 50% 20%;           /* dark blue */
+  --info-border: 217 50% 30%;
+  --warning-bg: 45 70% 25%;         /* dark yellow */
+  --warning-border: 45 70% 35%;
+  --error-bg: 0 50% 22%;            /* dark red */
+  --error-border: 0 50% 32%;
+}
+```
+
+**T17.2-T17.5: Settings Pages**
+
+შეცვალეთ hardcoded ფერები:
+
+| Before | After |
+| ------ | ----- |
+| `bg-green-50` | `bg-[hsl(var(--success-bg))]` |
+| `bg-blue-50` | `bg-[hsl(var(--info-bg))]` |
+| `bg-red-50` | `bg-[hsl(var(--error-bg))]` |
+| `bg-yellow-50` | `bg-[hsl(var(--warning-bg))]` |
+| `border-green-200` | `border-[hsl(var(--success-border))]` |
+| `border-blue-200` | `border-[hsl(var(--info-border))]` |
+| `text-green-700` | `text-green-700 dark:text-green-300` |
+| `text-blue-700` | `text-blue-700 dark:text-blue-300` |
+
+**T17.6: Auth Pages**
+
+ფაილები:
+- `apps/web/src/app/auth/login/page.tsx`
+- `apps/web/src/app/auth/register/page.tsx`
+- `apps/web/src/app/auth/forgot-password/page.tsx`
+- `apps/web/src/app/auth/github/callback/page.tsx`
+
+შეცვალეთ:
+- `bg-gray-50` → `bg-background`
+- `bg-gray-100` → `bg-muted`
+
+**T17.7-T17.8: Dashboard Pages**
+
+ფაილები:
+- `apps/web/src/app/dashboard/projects/page.tsx`
+- `apps/web/src/app/dashboard/team/workload/page.tsx`
+
+**T17.9: Chart Colors**
+
+Chart.js და Recharts ფერები უნდა მოერგოს თემას:
+
+```typescript
+const chartColors = {
+  light: {
+    primary: 'hsl(221, 83%, 53%)',
+    success: 'hsl(142, 76%, 36%)',
+    warning: 'hsl(45, 93%, 47%)',
+  },
+  dark: {
+    primary: 'hsl(217, 91%, 60%)',
+    success: 'hsl(142, 70%, 45%)',
+    warning: 'hsl(45, 85%, 55%)',
+  }
+}
+```
+
+**T17.11: Lint Rule**
+
+ESLint custom rule:
+
+```javascript
+// Warn: bg-{color}-50 without dark: variant
+// Pattern: className=".*\s(bg|text|border)-(red|green|blue|yellow|gray)-(\d+)(?!\s.*dark:)"
+```
+
+**T17.12: WCAG AA Contrast Ratios**
+
+მინიმალური კონტრასტი:
+- Normal text: 4.5:1
+- Large text: 3:1
+- UI components: 3:1
+
+### Files Requiring Updates
+
+| File | Issues | Priority |
+| ---- | ------ | -------- |
+| `apps/web/src/app/globals.css` | Add new CSS variables | P0 |
+| `apps/web/src/app/dashboard/settings/security/page.tsx` | 8+ hardcoded colors | P1 |
+| `apps/web/src/app/dashboard/settings/integrations/page.tsx` | 12+ hardcoded colors | P1 |
+| `apps/web/src/app/dashboard/settings/tokens/page.tsx` | 5+ hardcoded colors | P1 |
+| `apps/web/src/app/dashboard/projects/page.tsx` | 6+ hardcoded colors | P1 |
+| `apps/web/src/app/dashboard/projects/[id]/page.tsx` | 10+ hardcoded colors | P1 |
+| `apps/web/src/app/dashboard/team/workload/page.tsx` | 8+ hardcoded colors | P1 |
+| `apps/web/src/app/dashboard/team/analytics/page.tsx` | Chart colors | P2 |
+| `apps/web/src/app/auth/*.tsx` | Background colors | P2 |
+| `apps/web/src/app/invitations/*.tsx` | Background colors | P3 |
+
+### Success Criteria
+
+- [ ] ყველა გვერდი სწორად ჩანს dark mode-ში
+- [ ] 0 hardcoded ფერი dark variant-ის გარეშე
+- [ ] WCAG AA კონტრასტის სტანდარტები დაცული
+- [ ] Lint rule ამოწმებს ახალ კოდს
+- [ ] მომხმარებელს შეუძლია შეუფერხებლად გადართოს თემა
+
+### Dark Mode Before/After
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    BEFORE (Current Issues)                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Dark Background                                                         │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │ ████████████████████████████████████████████████████████████████  │ │
+│  │ █ Info Box (bg-blue-50)                                        █  │ │
+│  │ █ ┌──────────────────────────────────────────────────────────┐ █  │ │
+│  │ █ │  VERY BRIGHT WHITE - Hard to read, breaks visual flow   │ █  │ │
+│  │ █ └──────────────────────────────────────────────────────────┘ █  │ │
+│  │ ████████████████████████████████████████████████████████████████  │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     AFTER (Target State)                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Dark Background                                                         │
+│  ┌────────────────────────────────────────────────────────────────────┐ │
+│  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │
+│  │ ░ Info Box (dark:bg-info-bg)                                   ░  │ │
+│  │ ░ ┌──────────────────────────────────────────────────────────┐ ░  │ │
+│  │ ░ │  Subtle dark blue - Easy to read, maintains hierarchy    │ ░  │ │
+│  │ ░ └──────────────────────────────────────────────────────────┘ ░  │ │
+│  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │ │
+│  └────────────────────────────────────────────────────────────────────┘ │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Notes
 
 - MVP Timeline: 8 weeks (4 sprints of 2 weeks each)
-- Total Tasks: 191 (Original: 120, New Phases 10-14: 45, Phase 15: 14, Phase 16: 12)
+- Total Tasks: 204 (Original: 120, New Phases 10-14: 45, Phase 15: 14, Phase 16: 12, Phase 17: 13)
 - Critical Path: T1.1 → T1.3 → T1.5 → T1.11 → T1.14 → T1.15 → T2.4 → T2.10 → T3.7 → T9.7
 - **Post-Launch Path**: T10.1 → T10.2 → T10.4 → T11.1 → T11.2 → T12.1 → T13.1 → T14.1
-- **Current Path**: T16.1 → T16.7 → T16.8 → T16.9
+- **Current Path**: T17.1 → T17.2-T17.10 → T17.12 → T17.13
 
 ### Task Distribution
 
@@ -1053,7 +1254,8 @@ Mobile (< 768px):
 | Phase 14    | New Features | 7 |
 | Phase 15    | Documentation | 14 |
 | Phase 16    | Dashboard Layout | 12 |
-| **Total**   | | **191** |
+| Phase 17    | Dark Mode Optimization | 13 |
+| **Total**   | | **204** |
 
 ---
 

@@ -174,13 +174,13 @@ export default function SecuritySettingsPage() {
       </div>
 
       {/* Logout from All Devices */}
-      <Card className="border-red-200 bg-red-50/50">
+      <Card className="border-status-error bg-status-error">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-red-700">
+          <CardTitle className="flex items-center gap-2 text-status-error">
             <AlertTriangle className="h-5 w-5" />
             Logout from All Devices
           </CardTitle>
-          <CardDescription className="text-red-600/80">
+          <CardDescription className="text-status-error opacity-80">
             This will terminate all active sessions including the current one.
             You will need to log in again on all devices.
           </CardDescription>
@@ -205,7 +205,7 @@ export default function SecuritySettingsPage() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={handleLogoutAll}
-                  className="bg-red-600 hover:bg-red-700"
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
                   Yes, logout everywhere
                 </AlertDialogAction>
@@ -241,19 +241,19 @@ export default function SecuritySettingsPage() {
                   key={session.id}
                   className={`flex items-center justify-between rounded-lg border p-4 ${
                     session.isCurrent
-                      ? 'border-blue-200 bg-blue-50/50'
-                      : 'border-gray-200'
+                      ? 'border-status-info bg-status-info'
+                      : 'border-border'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     <div
                       className={`rounded-full p-2 ${
-                        session.isCurrent ? 'bg-blue-100' : 'bg-muted'
+                        session.isCurrent ? 'bg-status-info' : 'bg-muted'
                       }`}
                     >
                       <Monitor
                         className={`h-5 w-5 ${
-                          session.isCurrent ? 'text-blue-600' : 'text-muted-foreground'
+                          session.isCurrent ? 'text-status-info' : 'text-muted-foreground'
                         }`}
                       />
                     </div>
@@ -263,7 +263,7 @@ export default function SecuritySettingsPage() {
                           {session.isCurrent ? 'Current Session' : 'Session'}
                         </span>
                         {session.isCurrent && (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                          <span className="rounded-full bg-status-info px-2 py-0.5 text-xs font-medium text-status-info">
                             Active
                           </span>
                         )}
@@ -290,11 +290,11 @@ export default function SecuritySettingsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                        className="text-status-error hover:bg-status-error"
                         disabled={revokingSessionId === session.id}
                       >
                         {revokingSessionId === session.id ? (
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-red-600" />
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-destructive" />
                         ) : (
                           <Trash2 className="h-4 w-4" />
                         )}
@@ -315,7 +315,7 @@ export default function SecuritySettingsPage() {
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => handleRevokeSession(session.id)}
-                          className="bg-red-600 hover:bg-red-700"
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                           {session.isCurrent ? 'Yes, log me out' : 'Revoke session'}
                         </AlertDialogAction>

@@ -91,7 +91,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="h-12 w-12">
-              <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-medium">
+              <AvatarFallback className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-sm font-medium">
                 {getInitials(member.name, member.email)}
               </AvatarFallback>
             </Avatar>
@@ -111,7 +111,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         {/* Workload bar */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Active Tasks</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Active Tasks</span>
             <span className="text-sm font-bold text-foreground">{member.taskCount}</span>
           </div>
           <WorkloadBar
@@ -126,7 +126,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         {totalTasks > 0 && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">All Tasks</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">All Tasks</span>
               <span className="text-sm text-muted-foreground">{totalTasks} total</span>
             </div>
             <TaskDistributionBar
@@ -144,9 +144,9 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="rounded-lg bg-green-50 p-2">
-                  <div className="text-lg font-bold text-green-600">{member.completedCount}</div>
-                  <div className="text-xs text-green-600">Done</div>
+                <div className="rounded-lg bg-[hsl(var(--success-bg))] p-2">
+                  <div className="text-lg font-bold text-green-600 dark:text-green-400">{member.completedCount}</div>
+                  <div className="text-xs text-green-600 dark:text-green-400">Done</div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
@@ -158,9 +158,9 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="rounded-lg bg-blue-50 p-2">
-                  <div className="text-lg font-bold text-blue-600">{member.inProgressCount}</div>
-                  <div className="text-xs text-blue-600">Active</div>
+                <div className="rounded-lg bg-[hsl(var(--info-bg))] p-2">
+                  <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{member.inProgressCount}</div>
+                  <div className="text-xs text-blue-600 dark:text-blue-400">Active</div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
@@ -172,9 +172,9 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="rounded-lg bg-red-50 p-2">
-                  <div className="text-lg font-bold text-red-600">{member.blockedCount}</div>
-                  <div className="text-xs text-red-600">Blocked</div>
+                <div className="rounded-lg bg-[hsl(var(--error-bg))] p-2">
+                  <div className="text-lg font-bold text-red-600 dark:text-red-400">{member.blockedCount}</div>
+                  <div className="text-xs text-red-600 dark:text-red-400">Blocked</div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
@@ -259,16 +259,16 @@ function StatCard({
             <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
             {description && <p className="mt-1 text-xs text-muted-foreground">{description}</p>}
           </div>
-          <div className="rounded-full bg-blue-100 p-3">
-            <Icon className="h-5 w-5 text-blue-600" />
+          <div className="rounded-full bg-blue-100 dark:bg-blue-900/50 p-3">
+            <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
         </div>
         {trend && (
           <div className="mt-3 flex items-center text-sm">
             <TrendingUp
-              className={`mr-1 h-4 w-4 ${trendUp ? 'text-green-500' : 'text-red-500'}`}
+              className={`mr-1 h-4 w-4 ${trendUp ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
             />
-            <span className={trendUp ? 'text-green-600' : 'text-red-600'}>{trend}</span>
+            <span className={trendUp ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>{trend}</span>
           </div>
         )}
       </CardContent>
@@ -358,8 +358,8 @@ export default function WorkloadPage() {
   if (orgsError) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="rounded-full bg-red-100 p-4">
-          <AlertTriangle className="h-8 w-8 text-red-600" />
+        <div className="rounded-full bg-red-100 dark:bg-red-900/50 p-4">
+          <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
         </div>
         <h3 className="mt-4 text-lg font-medium text-foreground">Failed to load workload</h3>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -422,7 +422,7 @@ export default function WorkloadPage() {
       {/* Loading workload data */}
       {workloadLoading && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
           <span className="ml-3 text-muted-foreground">Loading workload data...</span>
         </div>
       )}
@@ -460,15 +460,15 @@ export default function WorkloadPage() {
 
           {/* Alerts */}
           {summary.membersOverloaded > 0 && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <div className="rounded-lg border border-[hsl(var(--error-border))] bg-[hsl(var(--error-bg))] p-4">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
                 <div>
-                  <p className="font-medium text-red-800">
+                  <p className="font-medium text-red-800 dark:text-red-300">
                     {summary.membersOverloaded} team member
                     {summary.membersOverloaded > 1 ? 's are' : ' is'} overloaded
                   </p>
-                  <p className="text-sm text-red-600">
+                  <p className="text-sm text-red-600 dark:text-red-400">
                     Consider redistributing tasks or adjusting deadlines
                   </p>
                 </div>
@@ -477,15 +477,15 @@ export default function WorkloadPage() {
           )}
 
           {summary.unassignedTasks > 0 && (
-            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+            <div className="rounded-lg border border-[hsl(var(--warning-border))] bg-[hsl(var(--warning-bg))] p-4">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 <div>
-                  <p className="font-medium text-yellow-800">
+                  <p className="font-medium text-yellow-800 dark:text-yellow-300">
                     {summary.unassignedTasks} task{summary.unassignedTasks > 1 ? 's are' : ' is'}{' '}
                     unassigned
                   </p>
-                  <p className="text-sm text-yellow-600">
+                  <p className="text-sm text-yellow-600 dark:text-yellow-400">
                     Assign these tasks to team members to track progress
                   </p>
                 </div>
@@ -532,7 +532,7 @@ export default function WorkloadPage() {
                       <div className="flex items-center gap-3">
                         <StatusIcon status={task.status} />
                         <span className="font-mono text-xs text-muted-foreground">{task.taskId}</span>
-                        <span className="text-sm text-gray-700">{task.name}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{task.name}</span>
                       </div>
                       <Badge variant="outline" className="text-xs">
                         {task.complexity}

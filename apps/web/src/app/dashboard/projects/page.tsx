@@ -259,7 +259,7 @@ function CreateProjectDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {apiError && (
-              <div className={`rounded-md p-3 text-sm ${isLimitError ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-600'}`}>
+              <div className={`rounded-md p-3 text-sm ${isLimitError ? 'bg-status-info text-status-info' : 'bg-status-error text-status-error'}`}>
                 <p>{apiError}</p>
                 {isLimitError && (
                   <Link
@@ -338,11 +338,11 @@ function CreateProjectDialog({
 
 function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
   return (
-    <Card className="border-red-200 bg-red-50">
+    <Card className="border-status-error bg-status-error">
       <CardContent className="flex flex-col items-center justify-center py-16">
         <ErrorIllustration className="h-32 w-32" />
-        <h3 className="mt-4 text-lg font-semibold text-red-900">Failed to load projects</h3>
-        <p className="mt-2 max-w-sm text-center text-sm text-red-600">
+        <h3 className="mt-4 text-lg font-semibold text-red-900 dark:text-red-200">Failed to load projects</h3>
+        <p className="mt-2 max-w-sm text-center text-sm text-status-error">
           {error.message || 'An unexpected error occurred. Please try again.'}
         </p>
         <Button variant="outline" className="mt-6" onClick={onRetry}>
@@ -438,7 +438,7 @@ function ProjectCard({
                 )}
                 {canManage && (isArchived ? (
                   <DropdownMenuItem
-                    className="text-green-600 focus:bg-green-50 focus:text-green-600"
+                    className="text-green-600 dark:text-green-400 focus:bg-status-success focus:text-green-700 dark:focus:text-green-300"
                     onClick={() => onRestore(project.id, project.name)}
                   >
                     <ArchiveRestore className="mr-2 h-4 w-4" />
@@ -446,7 +446,7 @@ function ProjectCard({
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem
-                    className="text-orange-600 focus:bg-orange-50 focus:text-orange-600"
+                    className="text-orange-600 dark:text-orange-400 focus:bg-status-warning focus:text-orange-700 dark:focus:text-orange-300"
                     onClick={() => setShowArchiveDialog(true)}
                   >
                     <Archive className="mr-2 h-4 w-4" />
@@ -471,7 +471,7 @@ function ProjectCard({
               <span>Updated {formatRelativeTime(project.updatedAt)}</span>
             </div>
             {isArchived && project.archivedAt && (
-              <div className="flex items-center gap-1 text-orange-600">
+              <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
                 <Archive className="h-4 w-4" />
                 <span>Archived {formatRelativeTime(project.archivedAt)}</span>
               </div>

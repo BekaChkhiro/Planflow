@@ -123,22 +123,22 @@ function getIntegrationColor(type: IntegrationType) {
       return {
         bg: 'bg-muted',
         text: 'text-foreground',
-        border: 'border-gray-200',
+        border: 'border-border',
         icon: 'text-foreground',
       }
     case 'slack':
       return {
-        bg: 'bg-purple-50',
-        text: 'text-purple-900',
-        border: 'border-purple-200',
-        icon: 'text-purple-600',
+        bg: 'bg-purple-50 dark:bg-purple-950/50',
+        text: 'text-purple-900 dark:text-purple-100',
+        border: 'border-purple-200 dark:border-purple-800',
+        icon: 'text-purple-600 dark:text-purple-400',
       }
     case 'discord':
       return {
-        bg: 'bg-indigo-50',
-        text: 'text-indigo-900',
-        border: 'border-indigo-200',
-        icon: 'text-indigo-600',
+        bg: 'bg-indigo-50 dark:bg-indigo-950/50',
+        text: 'text-indigo-900 dark:text-indigo-100',
+        border: 'border-indigo-200 dark:border-indigo-800',
+        icon: 'text-indigo-600 dark:text-indigo-400',
       }
   }
 }
@@ -255,7 +255,7 @@ function WebhookDialog({ type, open, onOpenChange, onSuccess }: WebhookDialogPro
                           href="https://api.slack.com/messaging/webhooks"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                          className="text-primary hover:underline inline-flex items-center gap-1"
                         >
                           Slack App Settings
                           <ExternalLink className="h-3 w-3" />
@@ -268,7 +268,7 @@ function WebhookDialog({ type, open, onOpenChange, onSuccess }: WebhookDialogPro
                           href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                          className="text-primary hover:underline inline-flex items-center gap-1"
                         >
                           Discord Server Settings
                           <ExternalLink className="h-3 w-3" />
@@ -607,7 +607,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
 
   return (
     <>
-      <Card className={isConnected ? 'border-green-200 bg-green-50/30' : ''}>
+      <Card className={isConnected ? 'border-status-success bg-status-success' : ''}>
         <CardHeader className="flex flex-row items-start gap-4 space-y-0">
           <div className={`rounded-lg p-3 ${colors.bg} ${colors.border} border`}>
             {getIntegrationIcon(config.type, `h-6 w-6 ${colors.icon}`)}
@@ -616,7 +616,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
             <div className="flex items-center gap-2">
               <CardTitle className="text-base">{config.name}</CardTitle>
               {isConnected && (
-                <Badge variant="outline" className="border-green-300 bg-green-100 text-green-700">
+                <Badge variant="outline" className="border-status-success bg-status-success text-status-success">
                   <Check className="mr-1 h-3 w-3" />
                   Connected
                 </Badge>
@@ -639,7 +639,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
           {/* Connection details if connected */}
           {isConnected && integration?.metadata && (
             <div className="rounded-md bg-muted/50 p-3 text-sm">
-              <div className="font-medium text-gray-700 mb-1">Connection Details</div>
+              <div className="font-medium text-foreground mb-1">Connection Details</div>
               {config.type === 'github' && integration.metadata.username && (
                 <div className="text-muted-foreground">
                   Connected as: <span className="font-medium">@{integration.metadata.username}</span>
@@ -666,7 +666,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
 
           {/* Success message */}
           {successMessage && (
-            <div className="flex items-center gap-2 rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div className="flex items-center gap-2 rounded-md bg-status-success p-3 text-sm text-status-success">
               <Check className="h-4 w-4" />
               {successMessage}
             </div>
@@ -674,7 +674,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
 
           {/* Error message */}
           {errorMessage && (
-            <div className="flex items-center gap-2 rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="flex items-center gap-2 rounded-md bg-status-error p-3 text-sm text-status-error">
               <AlertCircle className="h-4 w-4" />
               {errorMessage}
             </div>
@@ -706,7 +706,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
                 )}
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+                    <Button variant="outline" size="sm" className="text-status-error hover:bg-status-error">
                       <Unplug className="mr-2 h-4 w-4" />
                       Disconnect
                     </Button>
@@ -724,7 +724,7 @@ function IntegrationCard({ config, integration }: IntegrationCardProps) {
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={handleDisconnect}
-                        className="bg-red-600 hover:bg-red-700"
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         disabled={isDisconnecting}
                       >
                         {isDisconnecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -819,12 +819,12 @@ export default function IntegrationsSettingsPage() {
       <Separator />
 
       {/* Info Card */}
-      <div className="rounded-lg border bg-blue-50 border-blue-200 p-4">
+      <div className="rounded-lg border bg-status-info border-status-info p-4">
         <div className="flex gap-3">
-          <Plug className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
+          <Plug className="h-5 w-5 text-status-info shrink-0 mt-0.5" />
+          <div className="text-sm text-status-info">
             <p className="font-medium">What are integrations?</p>
-            <p className="mt-1">
+            <p className="mt-1 opacity-90">
               Integrations connect PlanFlow with your favorite tools. Link GitHub to
               automatically track issues and PRs, or set up Slack/Discord webhooks to
               receive real-time notifications about task updates.
@@ -847,28 +847,28 @@ export default function IntegrationsSettingsPage() {
         <CardContent>
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2">
-              <span className="text-blue-600">•</span>
+              <span className="text-primary">•</span>
               <span>
                 <strong>GitHub:</strong> Requires admin access to install the PlanFlow GitHub App
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600">•</span>
+              <span className="text-primary">•</span>
               <span>
                 <strong>Slack:</strong> Create an Incoming Webhook in your Slack workspace settings
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600">•</span>
+              <span className="text-primary">•</span>
               <span>
                 <strong>Discord:</strong> Create a Webhook in your Discord server&apos;s Integrations settings
               </span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-blue-600">•</span>
+              <span className="text-primary">•</span>
               <span>
                 Check our{' '}
-                <a href="/docs/integrations" className="text-blue-600 hover:underline">
+                <a href="/docs/integrations" className="text-primary hover:underline">
                   integration guides
                 </a>{' '}
                 for step-by-step instructions

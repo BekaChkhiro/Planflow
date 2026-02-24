@@ -176,7 +176,7 @@ function MemberCard({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => onRemove(member.id)}
-                className="text-red-600"
+                className="text-red-600 dark:text-red-400"
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Remove
@@ -232,7 +232,7 @@ function InvitationCard({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-red-600"
+          className="h-8 w-8 text-muted-foreground hover:text-red-600 dark:hover:text-red-400"
           onClick={() => onRevoke(invitation.id)}
           disabled={isRevoking}
         >

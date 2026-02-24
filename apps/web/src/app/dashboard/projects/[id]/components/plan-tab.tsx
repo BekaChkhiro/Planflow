@@ -173,7 +173,7 @@ function SyncStatusBadge({ status }: { status: ReturnType<typeof getSyncStatus> 
   }
 
   return (
-    <Badge variant="outline" className="gap-1 text-xs text-green-600 border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
+    <Badge variant="outline" className="gap-1 text-xs text-green-600 dark:text-green-400 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950">
       <CheckCircle2 className="h-3 w-3" />
       {status.syncAge}
     </Badge>
@@ -185,15 +185,15 @@ export function PlanTabSkeleton() {
   return (
     <Card>
       <CardHeader>
-        <div className="h-6 w-32 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-        <div className="mt-2 h-4 w-48 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
+        <div className="h-6 w-32 animate-pulse rounded bg-muted" />
+        <div className="mt-2 h-4 w-48 animate-pulse rounded bg-muted" />
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
           {[...Array(10)].map((_, i) => (
             <div
               key={i}
-              className="h-4 animate-pulse rounded bg-gray-200 dark:bg-gray-700"
+              className="h-4 animate-pulse rounded bg-muted"
               style={{ width: `${Math.random() * 40 + 60}%` }}
             />
           ))}

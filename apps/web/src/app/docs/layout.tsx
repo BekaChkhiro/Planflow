@@ -20,15 +20,6 @@ const navigation = [
   { title: 'Plugin Commands', href: '/docs/plugin-commands', slug: 'plugin-commands' },
   { title: 'MCP Tools', href: '/docs/mcp-tools', slug: 'mcp-tools' },
   { title: 'Examples', href: '/docs/examples', slug: 'examples' },
-  { divider: true },
-  { title: 'API Reference', href: '/docs/api-reference', slug: 'api-reference' },
-  { title: 'Integrations API', href: '/docs/api-integrations', slug: 'api-integrations' },
-  { title: 'Real-time API', href: '/docs/api-realtime', slug: 'api-realtime' },
-  { title: 'Notifications API', href: '/docs/api-notifications', slug: 'api-notifications' },
-  { divider: true },
-  { title: 'Architecture', href: '/docs/architecture', slug: 'architecture' },
-  { title: 'Development', href: '/docs/development', slug: 'development' },
-  { title: 'Contributing', href: '/docs/contributing', slug: 'contributing' },
 ]
 
 export default function DocsLayout({
@@ -126,59 +117,55 @@ export default function DocsLayout({
         <div className="p-4">
           <h2 className="font-semibold mb-4">Documentation</h2>
           <nav className="space-y-0.5">
-            {navigation.map((item, i) =>
-              'divider' in item ? (
-                <hr key={i} className="my-3 border-border" />
-              ) : (
-                <div key={item.href}>
-                  <div className="flex items-center">
-                    <Link
-                      href={item.href!}
-                      className={cn(
-                        'flex-1 block rounded-md px-3 py-1.5 text-sm transition-colors',
-                        isActive(item.href!)
-                          ? 'bg-primary/10 text-primary font-medium'
-                          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      )}
-                    >
-                      {item.title}
-                    </Link>
-                    {isActive(item.href!) && toc.length > 0 && (
-                      <button
-                        onClick={() => toggleExpand(item.href!)}
-                        className="p-1 hover:bg-muted rounded"
-                      >
-                        {isExpanded(item.href!) ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </button>
+            {navigation.map((item) => (
+              <div key={item.href}>
+                <div className="flex items-center">
+                  <Link
+                    href={item.href!}
+                    className={cn(
+                      'flex-1 block rounded-md px-3 py-1.5 text-sm transition-colors',
+                      isActive(item.href!)
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                     )}
-                  </div>
-
-                  {/* Table of Contents for active page */}
-                  {isActive(item.href!) && isExpanded(item.href!) && toc.length > 0 && (
-                    <div className="ml-3 mt-1 border-l border-border pl-3 space-y-0.5">
-                      {toc.filter(t => t.level === 2).map((section) => (
-                        <button
-                          key={section.id}
-                          onClick={() => scrollToSection(section.id)}
-                          className={cn(
-                            'block w-full text-left px-2 py-1 text-xs rounded transition-colors',
-                            activeSection === section.id
-                              ? 'text-primary font-medium'
-                              : 'text-muted-foreground hover:text-foreground'
-                          )}
-                        >
-                          {section.title}
-                        </button>
-                      ))}
-                    </div>
+                  >
+                    {item.title}
+                  </Link>
+                  {isActive(item.href!) && toc.length > 0 && (
+                    <button
+                      onClick={() => toggleExpand(item.href!)}
+                      className="p-1 hover:bg-muted rounded"
+                    >
+                      {isExpanded(item.href!) ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </button>
                   )}
                 </div>
-              )
-            )}
+
+                {/* Table of Contents for active page */}
+                {isActive(item.href!) && isExpanded(item.href!) && toc.length > 0 && (
+                  <div className="ml-3 mt-1 border-l border-border pl-3 space-y-0.5">
+                    {toc.filter(t => t.level === 2).map((section) => (
+                      <button
+                        key={section.id}
+                        onClick={() => scrollToSection(section.id)}
+                        className={cn(
+                          'block w-full text-left px-2 py-1 text-xs rounded transition-colors',
+                          activeSection === section.id
+                            ? 'text-primary font-medium'
+                            : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        {section.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </nav>
         </div>
       </aside>

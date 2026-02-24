@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
-// Map URL slugs to file names
+// Map URL slugs to file names (user-facing docs only)
 const slugToFile: Record<string, string> = {
   'getting-started': 'GETTING_STARTED.md',
   'mcp-installation': 'MCP_INSTALLATION.md',
@@ -14,13 +14,6 @@ const slugToFile: Record<string, string> = {
   'plugin-commands': 'PLUGIN_COMMANDS.md',
   'mcp-tools': 'MCP_TOOLS.md',
   'examples': 'EXAMPLES.md',
-  'api-reference': 'API_REFERENCE.md',
-  'api-integrations': 'API_INTEGRATIONS.md',
-  'api-realtime': 'API_REALTIME.md',
-  'api-notifications': 'API_NOTIFICATIONS.md',
-  'architecture': 'ARCHITECTURE.md',
-  'development': 'DEVELOPMENT.md',
-  'contributing': 'CONTRIBUTING.md',
 }
 
 const slugToTitle: Record<string, string> = {
@@ -30,13 +23,6 @@ const slugToTitle: Record<string, string> = {
   'plugin-commands': 'Plugin Commands',
   'mcp-tools': 'MCP Tools Reference',
   'examples': 'Examples',
-  'api-reference': 'API Reference',
-  'api-integrations': 'Integrations API',
-  'api-realtime': 'Real-time API',
-  'api-notifications': 'Notifications API',
-  'architecture': 'Architecture',
-  'development': 'Development Setup',
-  'contributing': 'Contributing',
 }
 
 interface PageProps {

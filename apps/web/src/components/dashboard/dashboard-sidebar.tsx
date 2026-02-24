@@ -412,10 +412,16 @@ function SidebarNav() {
   const { count: unreadNotifications } = useUnreadNotificationCount()
 
   const isActive = (href: string) => {
+    // Exact match for dashboard home
     if (href === '/dashboard') {
       return pathname === '/dashboard'
     }
-    return pathname.startsWith(href)
+    // For team page, don't match if on analytics subpage
+    if (href === '/dashboard/team') {
+      return pathname === '/dashboard/team' || pathname === '/dashboard/team/workload'
+    }
+    // Exact match or starts with href followed by /
+    return pathname === href || pathname.startsWith(href + '/')
   }
 
   // Create navigation items with dynamic badge for notifications

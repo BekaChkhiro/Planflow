@@ -16,6 +16,7 @@ export interface EnvValidationResult {
   info: {
     isProduction: boolean
     githubConfigured: boolean
+    googleConfigured: boolean
     redisConfigured: boolean
     emailConfigured: boolean
     paymentsConfigured: boolean
@@ -126,8 +127,11 @@ export function validateEnvironment(): EnvValidationResult {
   // OPTIONAL INTEGRATION VARIABLES (Info only)
   // ==========================================================================
 
-  // GitHub integration status (optional)
+  // GitHub integration status (optional - for OAuth login)
   const githubConfigured = !!(process.env['GITHUB_CLIENT_ID'] && process.env['GITHUB_CLIENT_SECRET'])
+
+  // Google integration status (optional - for OAuth login)
+  const googleConfigured = !!(process.env['GOOGLE_CLIENT_ID'] && process.env['GOOGLE_CLIENT_SECRET'])
 
   // Redis status (optional - falls back to in-memory)
   const redisConfigured = !!(process.env['REDIS_URL'] || process.env['UPSTASH_REDIS_REST_URL'])
@@ -139,6 +143,7 @@ export function validateEnvironment(): EnvValidationResult {
     info: {
       isProduction,
       githubConfigured,
+      googleConfigured,
       redisConfigured,
       emailConfigured: !!resendApiKey,
       paymentsConfigured: !!(lsApiKey && lsStoreId),
@@ -179,6 +184,7 @@ export function validateAndExit(): EnvValidationResult {
     email: result.info.emailConfigured,
     payments: result.info.paymentsConfigured,
     github: result.info.githubConfigured,
+    google: result.info.googleConfigured,
     redis: result.info.redisConfigured,
     push: result.info.pushConfigured,
     sentry: result.info.sentryConfigured,

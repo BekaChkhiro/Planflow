@@ -42,7 +42,7 @@
 
 ## Progress
 
-**Overall:** 100% complete (204/204 tasks) 🎉
+**Overall:** 100% complete (216/216 tasks) ✅
 
 | Phase                          | Status      | Progress | Tasks |
 | ------------------------------ | ----------- | -------- | ----- |
@@ -62,13 +62,14 @@
 | Phase 14: New Features         | DONE        | 100%     | 7/7   ✅ |
 | Phase 15: Documentation        | DONE        | 100%     | 14/14 ✅ |
 | Phase 16: Dashboard Layout     | DONE        | 100%     | 12/12 ✅ |
-| Phase 17: Dark Mode Optimization | DONE       | 100%     | 13/13 ✅ |
+| Phase 17: Dark Mode Optimization | DONE      | 100%     | 13/13 ✅ |
+| Phase 18: OAuth Authentication | DONE        | 100%     | 12/12 ✅ |
 
 ### Current Focus
-🎯 **Status**: PROJECT COMPLETE 🎉
-📋 **All Phases**: Completed
-📊 **Total Tasks**: 204/204 (100%)
-🌙 **Dark Mode**: Fully optimized with WCAG AA compliance
+🎯 **Status**: Project Complete
+📋 **Current Task**: All tasks completed
+📊 **Total Tasks**: 216/216 (100%)
+🎉 **Goal**: GitHub & Google Login/Register - DONE
 
 ---
 
@@ -1232,13 +1233,275 @@ ESLint custom rule:
 
 ---
 
+## Phase 18: OAuth Authentication (Sprint 18)
+
+**Goal:** GitHub და Google OAuth-ით ავტორიზაცია/რეგისტრაცია - მომხმარებლებს შეეძლებათ პირდაპირ შევიდნენ/დარეგისტრირდნენ სოციალური ანგარიშებით
+
+**Analysis Date:** 2026-02-24
+**Status:** TODO
+
+### Background
+
+მიმდინარე GitHub OAuth (Phase 8) არის **ინტეგრაციისთვის** - დაკავშირებულ მომხმარებელს აძლევს GitHub Issues/PRs ფუნქციებს. ახალი ფუნქციონალი უზრუნველყოფს **ავტორიზაციას** - OAuth-ით პირდაპირ Login/Register.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      OAuth Authentication Flow                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+   Login Page                    API Server                    OAuth Provider
+       │                             │                              │
+       │  Click "Continue with       │                              │
+       │  GitHub/Google"             │                              │
+       │────────────────────────────>│                              │
+       │                             │                              │
+       │  Return Authorization URL   │                              │
+       │<────────────────────────────│                              │
+       │                             │                              │
+       │  Redirect to Provider ──────────────────────────────────────>
+       │                             │                              │
+       │                             │      User Authorizes         │
+       │                             │                              │
+       │  Callback with Code <────────────────────────────────────────
+       │                             │                              │
+       │  POST /auth/oauth/callback  │                              │
+       │  {provider, code, state}    │                              │
+       │────────────────────────────>│                              │
+       │                             │  Exchange code for token     │
+       │                             │─────────────────────────────>│
+       │                             │                              │
+       │                             │  Get user profile            │
+       │                             │─────────────────────────────>│
+       │                             │                              │
+       │                             │  Create/Find user +          │
+       │                             │  Generate JWT                │
+       │                             │                              │
+       │  Return JWT + User          │                              │
+       │<────────────────────────────│                              │
+       │                             │                              │
+       │  Redirect to Dashboard      │                              │
+       └─────────────────────────────┴──────────────────────────────┘
+```
+
+### Tasks
+
+| ID     | Task                                                    | Complexity | Status | Dependencies |
+| ------ | ------------------------------------------------------- | ---------- | ------ | ------------ |
+| T18.1  | Create `oauth_accounts` database schema                 | Medium     | DONE ✅ | -            |
+| T18.2  | Implement OAuth auth endpoints for GitHub               | High       | DONE ✅ | T18.1        |
+| T18.3  | Implement OAuth auth endpoints for Google               | High       | DONE ✅ | T18.1        |
+| T18.4  | Add "Continue with GitHub" button to login/register     | Medium     | DONE ✅ | T18.2        |
+| T18.5  | Add "Continue with Google" button to login/register     | Medium     | DONE ✅ | T18.3        |
+| T18.6  | Handle OAuth callback - auto-register new users         | High       | DONE ✅ | T18.2, T18.3 |
+| T18.7  | Link OAuth provider to existing account (settings)      | Medium     | DONE ✅ | T18.6        |
+| T18.8  | Update profile settings to show linked OAuth accounts   | Low        | DONE ✅ | T18.7        |
+| T18.9  | Add ability to unlink OAuth provider from account       | Low        | DONE ✅ | T18.8        |
+| T18.10 | Handle edge cases (same email from different providers) | Medium     | DONE ✅ | T18.6        |
+| T18.11 | Add environment variables documentation for OAuth       | Low        | DONE ✅ | T18.2, T18.3 |
+| T18.12 | Test complete OAuth authentication flow (E2E)           | Medium     | DONE ✅ | T18.1-T18.11 |
+
+### Implementation Details
+
+**T18.1: Database Schema**
+
+```sql
+-- OAuth Accounts (linked to users)
+CREATE TABLE oauth_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(50) NOT NULL,  -- 'github' | 'google'
+  provider_account_id TEXT NOT NULL,  -- GitHub user ID or Google sub
+  provider_email TEXT,
+  provider_username TEXT,  -- GitHub username
+  provider_name TEXT,      -- Display name
+  provider_avatar_url TEXT,
+  access_token TEXT,       -- For API calls (encrypted in production)
+  refresh_token TEXT,      -- Google refresh token
+  token_expires_at TIMESTAMP,
+  scopes TEXT[],
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+
+  UNIQUE(provider, provider_account_id)  -- One account per provider user
+);
+
+-- OAuth States for CSRF protection (auth flow)
+CREATE TABLE oauth_auth_states (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  state TEXT UNIQUE NOT NULL,
+  provider VARCHAR(50) NOT NULL,
+  redirect_url TEXT,          -- Where to redirect after auth
+  link_to_user_id UUID,       -- If linking to existing account
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Index for fast lookups
+CREATE INDEX idx_oauth_accounts_user_id ON oauth_accounts(user_id);
+CREATE INDEX idx_oauth_accounts_provider ON oauth_accounts(provider, provider_account_id);
+```
+
+**T18.2-T18.3: API Endpoints**
+
+```
+POST /auth/oauth/authorize
+  Body: { provider: 'github' | 'google', redirectUrl?: string }
+  Response: { url: string, state: string, expiresIn: number }
+
+POST /auth/oauth/callback
+  Body: { provider: 'github' | 'google', code: string, state: string }
+  Response: { user: User, token: string, refreshToken: string, isNewUser: boolean }
+
+GET /auth/oauth/accounts (Protected)
+  Response: { accounts: OAuthAccount[] }
+
+POST /auth/oauth/link (Protected)
+  Body: { provider: 'github' | 'google' }
+  Response: { url: string, state: string }
+
+DELETE /auth/oauth/accounts/:provider (Protected)
+  Response: { success: boolean }
+```
+
+**T18.4-T18.5: Login/Register UI**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Login to PlanFlow                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  🐙  Continue with GitHub                                                ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │  🔵  Continue with Google                                                ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  ─────────────────────────── OR ───────────────────────────────────────────  │
+│                                                                              │
+│  Email                                                                       │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │ your@email.com                                                           ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  Password                                                                    │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │ ••••••••                                                                 ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │                              Login                                        ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  Don't have an account? Sign up                                              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**T18.6: Auto-Register Flow**
+
+```
+OAuth Callback Logic:
+
+1. Exchange code for access token
+2. Fetch user profile from provider
+3. Check if oauth_account exists:
+   a. YES → Find linked user → Login (return JWT)
+   b. NO → Check if user with same email exists:
+      i.  YES → Ask to link or deny (security)
+      ii. NO → Create new user + oauth_account → Login (return JWT)
+```
+
+**T18.7-T18.9: Settings UI**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Settings > Security                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Connected Accounts                                                          │
+│  ─────────────────────────────────────────────────────────────────────────   │
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │ 🐙 GitHub          @username         Connected ✓      [Disconnect]      ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  ┌─────────────────────────────────────────────────────────────────────────┐│
+│  │ 🔵 Google          user@gmail.com    Not connected    [Connect]         ││
+│  └─────────────────────────────────────────────────────────────────────────┘│
+│                                                                              │
+│  ⚠️ You must have at least one login method (password or OAuth account)     │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**T18.10: Edge Cases**
+
+1. **Same email, different providers**: თუ მომხმარებელი შევიდა Google-ით და მერე ცდილობს GitHub-ით (იგივე email), უნდა მოვთხოვოთ:
+   - პაროლით შესვლა და ანგარიშის დაკავშირება
+   - ან ახალი email-ით რეგისტრაცია
+
+2. **No password set**: თუ მომხმარებელი მხოლოდ OAuth-ით დარეგისტრირდა, უნდა შეეძლოს:
+   - პაროლის დაყენება settings-ში
+   - OAuth-ის disconnect-ს მხოლოდ თუ პაროლი აქვს ან სხვა OAuth აქვს
+
+3. **Email mismatch**: თუ OAuth provider-ის email განსხვავდება არსებული ანგარიშის email-ისგან, უნდა შევინარჩუნოთ ორიგინალი.
+
+**T18.11: Environment Variables**
+
+```bash
+# GitHub OAuth (Authentication)
+GITHUB_OAUTH_CLIENT_ID=xxx
+GITHUB_OAUTH_CLIENT_SECRET=xxx
+GITHUB_OAUTH_REDIRECT_URI=http://localhost:3000/auth/callback/github
+
+# Google OAuth
+GOOGLE_OAUTH_CLIENT_ID=xxx.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=xxx
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/auth/callback/google
+```
+
+### Files to Create/Modify
+
+| File | Action | Description |
+| ---- | ------ | ----------- |
+| `apps/api/src/db/schema/oauth.ts` | Create | OAuth tables schema |
+| `apps/api/src/lib/oauth/github.ts` | Create | GitHub OAuth utilities |
+| `apps/api/src/lib/oauth/google.ts` | Create | Google OAuth utilities |
+| `apps/api/src/routes/oauth.routes.ts` | Create | OAuth auth endpoints |
+| `apps/web/src/hooks/use-oauth.ts` | Create | OAuth frontend hooks |
+| `apps/web/src/components/auth/oauth-buttons.tsx` | Create | OAuth login buttons |
+| `apps/web/src/app/(auth)/login/page.tsx` | Modify | Add OAuth buttons |
+| `apps/web/src/app/(auth)/register/page.tsx` | Modify | Add OAuth buttons |
+| `apps/web/src/app/auth/callback/[provider]/page.tsx` | Create | OAuth callback handler |
+| `apps/web/src/app/dashboard/settings/security/page.tsx` | Modify | Add linked accounts |
+| `packages/shared/src/types.ts` | Modify | Add OAuth types |
+| `.env.example` (both apps) | Modify | Add OAuth env vars |
+
+### Success Criteria
+
+- [ ] მომხმარებელს შეუძლია "Continue with GitHub"-ით Login/Register
+- [ ] მომხმარებელს შეუძლია "Continue with Google"-ით Login/Register
+- [ ] ახალი OAuth მომხმარებლებს ავტომატურად ეკითვათ ანგარიში
+- [ ] არსებულ მომხმარებლებს შეუძლიათ OAuth ანგარიშის დაკავშირება
+- [ ] Settings გვერდზე ჩანს დაკავშირებული OAuth ანგარიშები
+- [ ] შესაძლებელია OAuth ანგარიშის გათიშვა (თუ სხვა login მეთოდი არსებობს)
+- [ ] CSRF protection სწორად მუშაობს (state tokens)
+- [ ] იგივე email-ის შემთხვევა სწორად მუშავდება
+
+---
+
 ## Notes
 
 - MVP Timeline: 8 weeks (4 sprints of 2 weeks each)
-- Total Tasks: 204 (Original: 120, New Phases 10-14: 45, Phase 15: 14, Phase 16: 12, Phase 17: 13)
+- Total Tasks: 216 (Original: 120, New Phases 10-14: 45, Phase 15: 14, Phase 16: 12, Phase 17: 13, Phase 18: 12)
 - Critical Path: T1.1 → T1.3 → T1.5 → T1.11 → T1.14 → T1.15 → T2.4 → T2.10 → T3.7 → T9.7
 - **Post-Launch Path**: T10.1 → T10.2 → T10.4 → T11.1 → T11.2 → T12.1 → T13.1 → T14.1
-- **Current Path**: T17.1 → T17.2-T17.10 → T17.12 → T17.13
+- **Current Path**: T18.1 → T18.2 → T18.3 → T18.4 → T18.5 → T18.6 → T18.12
 
 ### Task Distribution
 
@@ -1255,7 +1518,8 @@ ESLint custom rule:
 | Phase 15    | Documentation | 14 |
 | Phase 16    | Dashboard Layout | 12 |
 | Phase 17    | Dark Mode Optimization | 13 |
-| **Total**   | | **204** |
+| Phase 18    | OAuth Authentication | 12 |
+| **Total**   | | **216** |
 
 ---
 

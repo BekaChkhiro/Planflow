@@ -31,6 +31,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { OAuthButtons, OAuthDivider } from '@/components/auth/oauth-buttons'
 
 // Extend the schema with confirm password validation
 const RegisterFormSchema = RegisterRequestSchema.extend({
@@ -89,10 +90,14 @@ export default function RegisterPage() {
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
         <CardDescription>
-          Enter your details below to create your account
+          Get started with PlanFlow today
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <OAuthButtons mode="register" disabled={isLoading} />
+
+        <OAuthDivider />
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {error && (

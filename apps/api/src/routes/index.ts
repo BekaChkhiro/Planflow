@@ -13,3 +13,4 @@ export { organizationsRoutes, invitationsRoutes } from './organizations.routes.j
 export { projectInvitationsRoutes } from './project-invitations.routes.js'
 export { default as notificationsRoutes } from './notifications.routes.js'
 export { integrationsRoutes } from './integrations.routes.js'
+export { oauthRoutes } from './oauth.routes.js'

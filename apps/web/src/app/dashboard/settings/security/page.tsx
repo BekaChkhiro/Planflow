@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Shield, LogOut, Monitor, Smartphone as _Smartphone, Clock, Trash2, AlertTriangle } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -28,12 +28,37 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth-store'
 import { env } from '@/env'
+import { LinkedAccounts } from '@/components/settings/linked-accounts'
 
 interface Session {
   id: string
   createdAt: string
   expiresAt: string
   isCurrent: boolean
+}
+
+/**
+ * Component to handle OAuth linking success notification
+ * Separated to properly use useSearchParams with Suspense
+ */
+function OAuthLinkingNotification() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { toast } = useToast()
+
+  useEffect(() => {
+    const linkedProvider = searchParams.get('linked')
+    if (linkedProvider) {
+      toast({
+        title: 'Account connected',
+        description: `Your ${linkedProvider === 'github' ? 'GitHub' : 'Google'} account has been connected successfully.`,
+      })
+      // Remove the query param from URL
+      router.replace('/dashboard/settings/security', { scroll: false })
+    }
+  }, [searchParams, toast, router])
+
+  return null
 }
 
 export default function SecuritySettingsPage() {
@@ -166,12 +191,20 @@ export default function SecuritySettingsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Handle OAuth linking success notification */}
+      <Suspense fallback={null}>
+        <OAuthLinkingNotification />
+      </Suspense>
+
       <div>
         <h2 className="text-xl font-semibold text-foreground">Security</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage your active sessions and security settings
+          Manage your connected accounts, active sessions, and security settings
         </p>
       </div>
+
+      {/* Connected OAuth Accounts */}
+      <LinkedAccounts />
 
       {/* Logout from All Devices */}
       <Card className="border-status-error bg-status-error">
@@ -337,10 +370,10 @@ export default function SecuritySettingsPage() {
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
             <strong>Review your sessions regularly</strong> - If you see any
-            sessions you don't recognize, revoke them immediately.
+            sessions you don&apos;t recognize, revoke them immediately.
           </p>
           <p>
-            <strong>Use unique passwords</strong> - Don't reuse passwords across
+            <strong>Use unique passwords</strong> - Don&apos;t reuse passwords across
             different services.
           </p>
           <p>

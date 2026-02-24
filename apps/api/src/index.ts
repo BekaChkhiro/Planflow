@@ -50,6 +50,7 @@ import {
   projectInvitationsRoutes,
   notificationsRoutes,
   integrationsRoutes,
+  oauthRoutes,
 } from './routes/index.js'
 
 // Initialize push notifications
@@ -85,6 +86,9 @@ app.route('/', healthRoutes)
 
 // Authentication routes
 app.route('/auth', authRoutes)
+
+// OAuth authentication routes
+app.route('/auth/oauth', oauthRoutes)
 
 // User profile routes
 app.route('/users', usersRoutes)

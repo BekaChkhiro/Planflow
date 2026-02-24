@@ -4,18 +4,39 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2, CheckCircle, XCircle, Github } from 'lucide-react'
 import { useGitHubCallback } from '@/hooks/use-github'
+import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 type CallbackState = 'processing' | 'success' | 'error'
+type FlowType = 'detecting' | 'auth' | 'integration'
 
+/**
+ * GitHub Callback Page
+ *
+ * This page handles two distinct GitHub OAuth flows:
+ *
+ * 1. OAuth Authentication (login/register):
+ *    - User is NOT logged in
+ *    - Redirects to /auth/oauth/callback?provider=github
+ *    - Handles user authentication via GitHub
+ *
+ * 2. GitHub Integration (repo linking):
+ *    - User IS logged in
+ *    - Calls /integrations/github/callback API
+ *    - Links GitHub repos to existing account
+ *
+ * The flow is automatically detected based on authentication state.
+ */
 export default function GitHubCallbackPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [flowType, setFlowType] = useState<FlowType>('detecting')
   const [state, setState] = useState<CallbackState>('processing')
   const [error, setError] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
 
+  const { isAuthenticated } = useAuthStore()
   const githubCallback = useGitHubCallback()
 
   useEffect(() => {
@@ -38,8 +59,26 @@ export default function GitHubCallbackPage() {
       return
     }
 
-    // Exchange code for token
-    async function completeAuthorization() {
+    // Detect flow type based on authentication state
+    if (!isAuthenticated) {
+      // User is NOT logged in - this is OAuth authentication flow (login/register)
+      setFlowType('auth')
+
+      // Redirect to unified OAuth callback with provider parameter
+      const params = new URLSearchParams()
+      params.set('provider', 'github')
+      params.set('code', code)
+      params.set('state', stateParam)
+
+      router.replace(`/auth/oauth/callback?${params.toString()}`)
+      return
+    }
+
+    // User IS logged in - this is integration flow (repo linking)
+    setFlowType('integration')
+
+    // Exchange code for token (integration flow)
+    async function completeIntegration() {
       try {
         const result = await githubCallback.mutateAsync({
           code: code!,
@@ -69,9 +108,35 @@ export default function GitHubCallbackPage() {
       }
     }
 
-    completeAuthorization()
-  }, [searchParams, githubCallback, router])
+    completeIntegration()
+  }, [searchParams, githubCallback, router, isAuthenticated])
 
+  // Show loading state while detecting flow type
+  if (flowType === 'detecting' || flowType === 'auth') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 rounded-full bg-muted p-4 w-fit">
+              <Github className="h-8 w-8 text-foreground" />
+            </div>
+            <CardTitle>GitHub Authentication</CardTitle>
+            <CardDescription>Redirecting...</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Processing your GitHub authorization...
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Integration flow UI
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">

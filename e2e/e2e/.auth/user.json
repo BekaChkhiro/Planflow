@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "planflow-auth",
+          "value": "{\"state\":{\"user\":{\"id\":\"b0f4f837-5f58-4f8b-b0c4-9d39c80a14ab\",\"email\":\"test@planflow.tools\",\"name\":\"Test User\",\"createdAt\":\"2026-02-24T19:23:34.361Z\",\"updatedAt\":\"2026-02-24T19:23:34.361Z\"},\"token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJiMGY0ZjgzNy01ZjU4LTRmOGItYjBjNC05ZDM5YzgwYTE0YWIiLCJlbWFpbCI6InRlc3RAcGxhbmZsb3cudG9vbHMiLCJpYXQiOjE3NzE5NjE2NTgsImV4cCI6MTc3MTk2MjU1OH0.w518KM87iMtnMKm3ti3FXnkWvHmYsZBEbVWFhAfyvYs\",\"refreshToken\":\"92cb8f71860c129da956168d492ab383b9346837ff64f8bae428edefb0941d71a0a04e07f003cd189830cea6e83b935278cffe44fde9521e0e532f89be29e835\",\"expiresAt\":1771962558626,\"isAuthenticated\":true},\"version\":0}"
+        }
+      ]
+    }
+  ]
+}

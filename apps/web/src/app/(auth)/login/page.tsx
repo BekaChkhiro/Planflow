@@ -29,6 +29,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { OAuthButtons, OAuthDivider } from '@/components/auth/oauth-buttons'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -74,10 +75,14 @@ export default function LoginPage() {
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
         <CardDescription>
-          Enter your email and password to sign in to your account
+          Sign in to your account to continue
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <OAuthButtons mode="login" redirectUrl={returnUrl || undefined} disabled={isLoading} />
+
+        <OAuthDivider />
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {justRegistered && (

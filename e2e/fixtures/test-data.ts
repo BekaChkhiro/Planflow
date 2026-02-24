@@ -112,3 +112,86 @@ export interface ApiTokensListResponse {
   data?: Array<Omit<ApiTokenResponse['data'], 'token'>>;
   error?: string;
 }
+
+// =============================================================================
+// OAuth Types
+// =============================================================================
+
+export interface OAuthAuthorizeResponse {
+  success: boolean;
+  data?: {
+    url: string;
+    state: string;
+    expiresIn: number;
+  };
+  error?: string;
+}
+
+export interface OAuthCallbackResponse {
+  success: boolean;
+  data?: {
+    user: {
+      id: string;
+      email: string;
+      name: string;
+    };
+    token: string;
+    refreshToken: string;
+    expiresIn: number;
+    refreshExpiresIn: number;
+    isNewUser: boolean;
+    isLinkedAccount: boolean;
+    redirectUrl?: string;
+  };
+  error?: string;
+  errorCode?: string;
+  details?: {
+    existingProvider?: string;
+    email?: string;
+  };
+}
+
+export interface OAuthAccount {
+  id: string;
+  provider: 'github' | 'google';
+  providerEmail: string | null;
+  providerUsername: string | null;
+  providerName: string | null;
+  providerAvatarUrl: string | null;
+  createdAt: string;
+}
+
+export interface OAuthAccountsResponse {
+  success: boolean;
+  data?: {
+    accounts: OAuthAccount[];
+    hasPassword: boolean;
+  };
+  error?: string;
+}
+
+export interface OAuthProvidersResponse {
+  success: boolean;
+  data?: {
+    providers: Array<{
+      id: string;
+      name: string;
+      configured: boolean;
+      scopes: string[];
+    }>;
+  };
+  error?: string;
+}
+
+// OAuth Error Codes (T18.10)
+export const OAuthErrorCodes = {
+  EMAIL_EXISTS_UNVERIFIED: 'EMAIL_EXISTS_UNVERIFIED',
+  EMAIL_EXISTS_DIFFERENT_PROVIDER: 'EMAIL_EXISTS_DIFFERENT_PROVIDER',
+  EMAIL_REQUIRED: 'EMAIL_REQUIRED',
+  PROVIDER_NOT_CONFIGURED: 'PROVIDER_NOT_CONFIGURED',
+  INVALID_STATE: 'INVALID_STATE',
+  STATE_EXPIRED: 'STATE_EXPIRED',
+  STATE_USED: 'STATE_USED',
+} as const;
+
+export type OAuthErrorCode = typeof OAuthErrorCodes[keyof typeof OAuthErrorCodes];

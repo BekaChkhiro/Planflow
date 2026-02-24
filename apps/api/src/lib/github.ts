@@ -244,9 +244,28 @@ export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser |
 }
 
 /**
+ * GitHub email with verification status
+ */
+export interface GitHubEmailResult {
+  email: string
+  verified: boolean
+}
+
+/**
  * Fetch GitHub user's primary email (if user profile doesn't expose it)
+ * Returns both the email and its verification status
  */
 export async function fetchGitHubEmail(accessToken: string): Promise<string | null> {
+  const result = await fetchGitHubEmailWithVerification(accessToken)
+  return result?.email || null
+}
+
+/**
+ * Fetch GitHub user's primary email with verification status
+ * This is the preferred function for OAuth flows where we need to know
+ * if the email has been verified by GitHub.
+ */
+export async function fetchGitHubEmailWithVerification(accessToken: string): Promise<GitHubEmailResult | null> {
   try {
     const response = await fetch('https://api.github.com/user/emails', {
       headers: {
@@ -267,22 +286,28 @@ export async function fetchGitHubEmail(accessToken: string): Promise<string | nu
       verified: boolean
     }>
 
-    // Find primary verified email
+    // Find primary verified email (best case)
     const primary = emails.find((e) => e.primary && e.verified)
     if (primary) {
-      return primary.email
+      return { email: primary.email, verified: true }
     }
 
     // Fall back to any verified email
     const verified = emails.find((e) => e.verified)
     if (verified) {
-      return verified.email
+      return { email: verified.email, verified: true }
     }
 
-    // Fall back to first email
+    // Fall back to primary email even if unverified
+    const primaryUnverified = emails.find((e) => e.primary)
+    if (primaryUnverified) {
+      return { email: primaryUnverified.email, verified: false }
+    }
+
+    // Fall back to first email (unverified)
     const firstEmail = emails[0]
     if (firstEmail) {
-      return firstEmail.email
+      return { email: firstEmail.email, verified: firstEmail.verified }
     }
 
     return null

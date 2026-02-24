@@ -1073,6 +1073,64 @@ export { organizationsRoutes }
 // Invitation routes (top-level, not under /organizations)
 const invitationsRoutes = new Hono()
 
+// GET /invitations/:token - Get invitation details (no auth required, so user can see before logging in)
+invitationsRoutes.get('/:token', async (c) => {
+  try {
+    const token = c.req.param('token')
+    const db = getDbClient()
+
+    // Find invitation by token with organization and inviter details
+    const [invitation] = await db
+      .select({
+        id: schema.teamInvitations.id,
+        organizationId: schema.teamInvitations.organizationId,
+        email: schema.teamInvitations.email,
+        role: schema.teamInvitations.role,
+        expiresAt: schema.teamInvitations.expiresAt,
+        acceptedAt: schema.teamInvitations.acceptedAt,
+        createdAt: schema.teamInvitations.createdAt,
+        organizationName: schema.organizations.name,
+        inviterName: schema.users.name,
+        inviterEmail: schema.users.email,
+      })
+      .from(schema.teamInvitations)
+      .innerJoin(schema.organizations, eq(schema.teamInvitations.organizationId, schema.organizations.id))
+      .innerJoin(schema.users, eq(schema.teamInvitations.invitedBy, schema.users.id))
+      .where(eq(schema.teamInvitations.token, token))
+      .limit(1)
+
+    if (!invitation) {
+      return c.json({ success: false, error: 'Invitation not found' }, 404)
+    }
+
+    if (invitation.acceptedAt) {
+      return c.json({ success: false, error: 'Invitation has already been accepted' }, 410)
+    }
+
+    if (new Date() > invitation.expiresAt) {
+      return c.json({ success: false, error: 'Invitation has expired' }, 410)
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        invitation: {
+          id: invitation.id,
+          email: invitation.email,
+          role: invitation.role,
+          expiresAt: invitation.expiresAt,
+          createdAt: invitation.createdAt,
+          organizationName: invitation.organizationName,
+          inviterName: invitation.inviterName,
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Get invitation error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
 // POST /invitations/:token/accept - Accept invitation
 invitationsRoutes.post('/:token/accept', auth, async (c) => {
   try {

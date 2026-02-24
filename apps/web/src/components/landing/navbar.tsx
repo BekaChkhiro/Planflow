@@ -30,7 +30,6 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { SkipLink } from "@/components/ui/skip-link"
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog"
 import { useKeyboardShortcut } from "@/lib/accessibility"
-import { OrganizationSelector } from "@/components/organization-selector"
 
 function getInitials(name: string | undefined): string {
   if (!name) return 'U'
@@ -157,7 +156,6 @@ export function Navbar() {
         <div className="hidden md:flex md:items-center md:space-x-4">
           {isInitialized && isAuthenticated ? (
             <>
-            <OrganizationSelector />
             <Button
               variant="ghost"
               size="sm"

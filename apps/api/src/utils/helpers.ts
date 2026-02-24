@@ -246,7 +246,7 @@ export async function canCreateProject(userId: string): Promise<{
   const currentCount = result ? Number(result.count) : 0
 
   // Determine effective tier based on subscription status
-  const effectiveTier = subscription.tier
+  let effectiveTier = subscription.tier
   const effectiveStatus = subscription.status
 
   // Handle past_due status - block new project creation

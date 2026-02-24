@@ -47,27 +47,22 @@ function generateSlug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
-// Map markdown file links to Next.js routes
+// Map markdown file links to Next.js routes (user-facing docs only)
 function transformLinks(content: string): string {
   return content
+    // User-facing docs
     .replace(/\(\.\/GETTING_STARTED\.md\)/g, '(/docs/getting-started)')
     .replace(/\(\.\/MCP_INSTALLATION\.md\)/g, '(/docs/mcp-installation)')
     .replace(/\(\.\/USER_GUIDE\.md\)/g, '(/docs/user-guide)')
     .replace(/\(\.\/PLUGIN_COMMANDS\.md\)/g, '(/docs/plugin-commands)')
     .replace(/\(\.\/MCP_TOOLS\.md\)/g, '(/docs/mcp-tools)')
     .replace(/\(\.\/EXAMPLES\.md\)/g, '(/docs/examples)')
-    .replace(/\(\.\/API_REFERENCE\.md\)/g, '(/docs/api-reference)')
-    .replace(/\(\.\/API_INTEGRATIONS\.md\)/g, '(/docs/api-integrations)')
-    .replace(/\(\.\/API_REALTIME\.md\)/g, '(/docs/api-realtime)')
-    .replace(/\(\.\/API_NOTIFICATIONS\.md\)/g, '(/docs/api-notifications)')
-    .replace(/\(\.\/ARCHITECTURE\.md\)/g, '(/docs/architecture)')
-    .replace(/\(\.\/DEVELOPMENT\.md\)/g, '(/docs/development)')
-    .replace(/\(\.\/CONTRIBUTING\.md\)/g, '(/docs/contributing)')
     .replace(/\(\.\/index\.md\)/g, '(/docs)')
-    // Handle anchor links within same doc
-    .replace(/\(#([^)]+)\)/g, '(#$1)')
-    // Handle anchor links to other docs
-    .replace(/\(\.\/([A-Z_]+)\.md#([^)]+)\)/g, (_, file, anchor) => {
+    // Remove links to developer docs (not available in user docs)
+    .replace(/\[([^\]]+)\]\(\.\/API_REFERENCE\.md\)/g, '$1')
+    .replace(/\[([^\]]+)\]\(\.\.\/packages\/[^)]+\)/g, '$1')
+    // Handle anchor links to other user docs
+    .replace(/\(\.\/([A-Z_]+)\.md#([^)]+)\)/g, (match, file, anchor) => {
       const fileToSlug: Record<string, string> = {
         'GETTING_STARTED': 'getting-started',
         'MCP_INSTALLATION': 'mcp-installation',
@@ -75,15 +70,11 @@ function transformLinks(content: string): string {
         'PLUGIN_COMMANDS': 'plugin-commands',
         'MCP_TOOLS': 'mcp-tools',
         'EXAMPLES': 'examples',
-        'API_REFERENCE': 'api-reference',
-        'API_INTEGRATIONS': 'api-integrations',
-        'API_REALTIME': 'api-realtime',
-        'API_NOTIFICATIONS': 'api-notifications',
-        'ARCHITECTURE': 'architecture',
-        'DEVELOPMENT': 'development',
-        'CONTRIBUTING': 'contributing',
       }
-      return `(/docs/${fileToSlug[file] || file.toLowerCase()}#${anchor})`
+      if (fileToSlug[file]) {
+        return `(/docs/${fileToSlug[file]}#${anchor})`
+      }
+      return match // Keep as-is if not found
     })
 }
 
@@ -95,7 +86,7 @@ export default async function DocPage({ params }: PageProps) {
     notFound()
   }
 
-  const filePath = path.join(process.cwd(), '..', '..', 'docs', fileName)
+  const filePath = path.join(process.cwd(), 'src', 'content', 'docs', fileName)
   let content = ''
 
   try {

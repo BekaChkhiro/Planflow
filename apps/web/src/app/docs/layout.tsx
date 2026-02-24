@@ -100,6 +100,8 @@ export default function DocsLayout({
     const element = document.getElementById(id)
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      // Update URL with hash
+      window.history.pushState(null, '', `${pathname}#${id}`)
     }
   }
 

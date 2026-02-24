@@ -15,8 +15,8 @@ import { sendWelcomeEmail, isEmailServiceConfigured } from '../lib/email.js'
 import {
   isGitHubConfigured,
   generateOAuthState,
-  buildAuthorizationUrl,
-  exchangeCodeForToken,
+  buildAuthAuthorizationUrl,
+  exchangeCodeForTokenAuth,
   fetchGitHubUser,
   fetchGitHubEmailWithVerification,
   GITHUB_SCOPES,
@@ -407,7 +407,7 @@ oauthRoutes.post('/authorize', authRateLimit, smallBodyLimit, async (c) => {
     // Build authorization URL
     let authUrl: string
     if (provider === 'github') {
-      authUrl = buildAuthorizationUrl(state)
+      authUrl = buildAuthAuthorizationUrl(state)
     } else {
       // Google OAuth
       authUrl = buildGoogleAuthorizationUrl(state)
@@ -514,7 +514,7 @@ oauthRoutes.post('/callback', authRateLimit, smallBodyLimit, async (c) => {
     let userInfo: OAuthUserInfo
 
     if (provider === 'github') {
-      const tokenResult = await exchangeCodeForToken(code)
+      const tokenResult = await exchangeCodeForTokenAuth(code)
       if (!tokenResult) {
         return c.json(
           {
@@ -803,7 +803,7 @@ oauthRoutes.post('/link', jwtAuth, authRateLimit, smallBodyLimit, async (c) => {
     // Build authorization URL
     let authUrl: string
     if (provider === 'github') {
-      authUrl = buildAuthorizationUrl(state)
+      authUrl = buildAuthAuthorizationUrl(state)
     } else {
       // Google OAuth - hint user's email for easier linking
       authUrl = buildGoogleAuthorizationUrl(state, {

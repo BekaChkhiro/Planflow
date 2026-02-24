@@ -11,6 +11,10 @@ const GITHUB_CLIENT_SECRET = process.env['GITHUB_CLIENT_SECRET'] || ''
 const GITHUB_REDIRECT_URI = process.env['GITHUB_REDIRECT_URI'] || ''
 const GITHUB_WEBHOOK_SECRET = process.env['GITHUB_WEBHOOK_SECRET'] || ''
 
+// Separate redirect URI for authentication (Login/Register with GitHub)
+// Falls back to GITHUB_REDIRECT_URI if not set
+const GITHUB_AUTH_REDIRECT_URI = process.env['GITHUB_AUTH_REDIRECT_URI'] || GITHUB_REDIRECT_URI
+
 // ============================================
 // GitHub Webhook Signature Verification (T8.5)
 // ============================================
@@ -133,7 +137,7 @@ export function generateOAuthState(): string {
 }
 
 /**
- * Build the GitHub OAuth authorization URL
+ * Build the GitHub OAuth authorization URL (for integration - repo linking)
  */
 export function buildAuthorizationUrl(state: string): string {
   const params = new URLSearchParams({
@@ -148,10 +152,45 @@ export function buildAuthorizationUrl(state: string): string {
 }
 
 /**
- * Exchange authorization code for access token
+ * Build the GitHub OAuth authorization URL for authentication (Login/Register)
+ * Uses GITHUB_AUTH_REDIRECT_URI which points to the frontend callback
+ */
+export function buildAuthAuthorizationUrl(state: string): string {
+  const params = new URLSearchParams({
+    client_id: GITHUB_CLIENT_ID,
+    redirect_uri: GITHUB_AUTH_REDIRECT_URI,
+    scope: GITHUB_SCOPES.join(' '),
+    state,
+    allow_signup: 'true',
+  })
+
+  return `https://github.com/login/oauth/authorize?${params.toString()}`
+}
+
+/**
+ * Exchange authorization code for access token (for integration)
  */
 export async function exchangeCodeForToken(
   code: string
+): Promise<{ accessToken: string; scope: string; tokenType: string } | null> {
+  return exchangeCodeForTokenWithUri(code, GITHUB_REDIRECT_URI)
+}
+
+/**
+ * Exchange authorization code for access token (for authentication - Login/Register)
+ */
+export async function exchangeCodeForTokenAuth(
+  code: string
+): Promise<{ accessToken: string; scope: string; tokenType: string } | null> {
+  return exchangeCodeForTokenWithUri(code, GITHUB_AUTH_REDIRECT_URI)
+}
+
+/**
+ * Internal: Exchange authorization code for access token with specific redirect URI
+ */
+async function exchangeCodeForTokenWithUri(
+  code: string,
+  redirectUri: string
 ): Promise<{ accessToken: string; scope: string; tokenType: string } | null> {
   try {
     const response = await fetch('https://github.com/login/oauth/access_token', {
@@ -164,7 +203,7 @@ export async function exchangeCodeForToken(
         client_id: GITHUB_CLIENT_ID,
         client_secret: GITHUB_CLIENT_SECRET,
         code,
-        redirect_uri: GITHUB_REDIRECT_URI,
+        redirect_uri: redirectUri,
       }),
     })
 

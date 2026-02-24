@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Moon,
   Sun,
+  Monitor,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
@@ -735,19 +736,14 @@ function SidebarThemeToggle() {
   }, [])
 
   if (!mounted) {
-    return null
-  }
-
-  const cycleTheme = () => {
-    if (theme === 'light') setTheme('dark')
-    else if (theme === 'dark') setTheme('system')
-    else setTheme('light')
-  }
-
-  const getThemeLabel = () => {
-    if (theme === 'light') return 'Light'
-    if (theme === 'dark') return 'Dark'
-    return 'System'
+    return (
+      <div className="px-3 py-2">
+        <Button variant="ghost" size={isCollapsed ? 'icon' : 'sm'} className={isCollapsed ? 'h-10 w-10' : 'w-full justify-start'}>
+          <Sun className="h-4 w-4" />
+          {!isCollapsed && <span className="ml-2">Theme</span>}
+        </Button>
+      </div>
+    )
   }
 
   if (isCollapsed) {
@@ -756,19 +752,35 @@ function SidebarThemeToggle() {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10"
-                onClick={cycleTheme}
-                aria-label="Toggle theme"
-              >
-                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-10 w-10">
+                    <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    <span className="sr-only">Toggle theme</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start">
+                  <DropdownMenuItem onClick={() => setTheme('light')}>
+                    <Sun className="mr-2 h-4 w-4" />
+                    <span>Light</span>
+                    {theme === 'light' && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme('dark')}>
+                    <Moon className="mr-2 h-4 w-4" />
+                    <span>Dark</span>
+                    {theme === 'dark' && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTheme('system')}>
+                    <Monitor className="mr-2 h-4 w-4" />
+                    <span>System</span>
+                    {theme === 'system' && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </TooltipTrigger>
             <TooltipContent side="right">
-              Theme: {getThemeLabel()}
+              Toggle theme
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -778,17 +790,32 @@ function SidebarThemeToggle() {
 
   return (
     <div className="px-3 py-2">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start"
-        onClick={cycleTheme}
-        aria-label="Toggle theme"
-      >
-        <Sun className="h-4 w-4 mr-2 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-        <Moon className="absolute ml-0 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-        <span className="ml-6">{getThemeLabel()} Mode</span>
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="w-full justify-start">
+            <Sun className="h-4 w-4 mr-2 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute ml-0 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <span className="ml-6">Theme</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="start" className="w-[150px]">
+          <DropdownMenuItem onClick={() => setTheme('light')}>
+            <Sun className="mr-2 h-4 w-4" />
+            <span>Light</span>
+            {theme === 'light' && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('dark')}>
+            <Moon className="mr-2 h-4 w-4" />
+            <span>Dark</span>
+            {theme === 'dark' && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('system')}>
+            <Monitor className="mr-2 h-4 w-4" />
+            <span>System</span>
+            {theme === 'system' && <span className="ml-auto text-xs text-muted-foreground">Active</span>}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

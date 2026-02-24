@@ -92,7 +92,7 @@ export default async function DocPage({ params }: PageProps) {
   try {
     content = await fs.readFile(filePath, 'utf-8')
     content = transformLinks(content)
-  } catch (error) {
+  } catch {
     notFound()
   }
 

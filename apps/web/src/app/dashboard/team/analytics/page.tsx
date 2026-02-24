@@ -11,7 +11,7 @@ import {
   UserCheck,
   BarChart3,
   Building2,
-  ChevronDown,
+  ChevronDown as _ChevronDown,
   RefreshCw,
   Crown,
   Shield,
@@ -26,7 +26,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Progress } from '@/components/ui/progress'
+import { Progress as _Progress } from '@/components/ui/progress'
 import {
   Select,
   SelectContent,
@@ -82,11 +82,11 @@ function StatsCard({
         )}
         {trendLabel && (
           <div className="mt-1 flex items-center text-xs">
-            {trend === 'up' && <TrendingUp className="mr-1 h-3 w-3 text-green-500" />}
-            {trend === 'down' && <TrendingUp className="mr-1 h-3 w-3 rotate-180 text-red-500" />}
+            {trend === 'up' && <TrendingUp className="mr-1 h-3 w-3 text-green-500 dark:text-green-400" />}
+            {trend === 'down' && <TrendingUp className="mr-1 h-3 w-3 rotate-180 text-red-500 dark:text-red-400" />}
             <span className={
-              trend === 'up' ? 'text-green-500' :
-              trend === 'down' ? 'text-red-500' :
+              trend === 'up' ? 'text-green-500 dark:text-green-400' :
+              trend === 'down' ? 'text-red-500 dark:text-red-400' :
               'text-muted-foreground'
             }>
               {trendLabel}
@@ -116,13 +116,13 @@ function RoleIcon({ role, className }: { role: MemberRole; className?: string })
 function getRoleColor(role: MemberRole): string {
   switch (role) {
     case 'owner':
-      return 'bg-yellow-500'
+      return 'bg-yellow-500 dark:bg-yellow-400'
     case 'admin':
-      return 'bg-blue-500'
+      return 'bg-blue-500 dark:bg-blue-400'
     case 'editor':
-      return 'bg-green-500'
+      return 'bg-green-500 dark:bg-green-400'
     case 'viewer':
-      return 'bg-gray-400'
+      return 'bg-gray-400 dark:bg-gray-500'
   }
 }
 
@@ -143,7 +143,7 @@ function ActivityTrendChart({ data }: { data: ActivityTrend[] }) {
             className="group relative flex flex-1 flex-col items-center"
           >
             {/* Tooltip */}
-            <div className="absolute -top-8 hidden rounded bg-gray-900 px-2 py-1 text-xs text-white group-hover:block">
+            <div className="absolute -top-8 z-10 hidden rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md border border-border group-hover:block">
               <div className="font-medium">{item.count} activities</div>
               <div className="text-muted-foreground">{format(date, 'MMM d')}</div>
             </div>
@@ -151,7 +151,7 @@ function ActivityTrendChart({ data }: { data: ActivityTrend[] }) {
             {/* Bar */}
             <div
               className={`w-full rounded-t transition-all group-hover:opacity-80 ${
-                isToday ? 'bg-blue-500' : 'bg-blue-400'
+                isToday ? 'bg-primary' : 'bg-primary/70'
               }`}
               style={{ height: `${Math.max(height, 2)}%` }}
             />
@@ -254,9 +254,9 @@ function MemberLeaderboard({ members }: { members: MemberActivityStats[] }) {
           <div key={member.memberId} className="flex items-center gap-3">
             {/* Rank */}
             <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-              index === 0 ? 'bg-yellow-100 text-yellow-700' :
-              index === 1 ? 'bg-muted text-gray-700' :
-              index === 2 ? 'bg-orange-100 text-orange-700' :
+              index === 0 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' :
+              index === 1 ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' :
+              index === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300' :
               'bg-muted/50 text-muted-foreground'
             }`}>
               {index + 1}
@@ -264,7 +264,7 @@ function MemberLeaderboard({ members }: { members: MemberActivityStats[] }) {
 
             {/* Avatar */}
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-blue-100 text-xs text-blue-700">
+              <AvatarFallback className="bg-blue-100 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
                 {getInitials(member.memberName, member.memberEmail)}
               </AvatarFallback>
             </Avatar>
@@ -279,7 +279,7 @@ function MemberLeaderboard({ members }: { members: MemberActivityStats[] }) {
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-secondary">
                 <div
-                  className="h-full bg-blue-500 transition-all"
+                  className="h-full bg-primary transition-all"
                   style={{ width: `${barWidth}%` }}
                 />
               </div>
@@ -309,7 +309,7 @@ function MemberDetailsTable({ members }: { members: MemberActivityStats[] }) {
             <div className="border-b p-4 last:border-0 hover:bg-muted/50 sm:hidden">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-blue-100 text-sm text-blue-700">
+                  <AvatarFallback className="bg-blue-100 text-sm text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
                     {getInitials(member.memberName, member.memberEmail)}
                   </AvatarFallback>
                 </Avatar>
@@ -326,11 +326,11 @@ function MemberDetailsTable({ members }: { members: MemberActivityStats[] }) {
                   <div className="text-xs text-muted-foreground">Actions</div>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-2">
-                  <div className="text-lg font-semibold text-green-600">{member.tasksCompleted}</div>
+                  <div className="text-lg font-semibold text-green-600 dark:text-green-400">{member.tasksCompleted}</div>
                   <div className="text-xs text-muted-foreground">Tasks</div>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-2">
-                  <div className="text-lg font-semibold text-blue-600">{member.commentsCreated}</div>
+                  <div className="text-lg font-semibold text-blue-600 dark:text-blue-400">{member.commentsCreated}</div>
                   <div className="text-xs text-muted-foreground">Comments</div>
                 </div>
               </div>
@@ -339,7 +339,7 @@ function MemberDetailsTable({ members }: { members: MemberActivityStats[] }) {
             <div className="hidden grid-cols-5 gap-4 border-b px-4 py-3 text-sm last:border-0 hover:bg-muted/50 sm:grid">
               <div className="col-span-2 flex items-center gap-3">
                 <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-blue-100 text-xs text-blue-700">
+                  <AvatarFallback className="bg-blue-100 text-xs text-blue-700 dark:bg-blue-900/40 dark:text-blue-400">
                     {getInitials(member.memberName, member.memberEmail)}
                   </AvatarFallback>
                 </Avatar>
@@ -354,12 +354,12 @@ function MemberDetailsTable({ members }: { members: MemberActivityStats[] }) {
                 <Badge variant="secondary">{member.actionsCount}</Badge>
               </div>
               <div className="flex items-center justify-center">
-                <Badge variant="outline" className="text-green-600">
+                <Badge variant="outline" className="text-green-600 dark:text-green-400">
                   {member.tasksCompleted}
                 </Badge>
               </div>
               <div className="flex items-center justify-center">
-                <Badge variant="outline" className="text-blue-600">
+                <Badge variant="outline" className="text-blue-600 dark:text-blue-400">
                   {member.commentsCreated}
                 </Badge>
               </div>
@@ -461,8 +461,8 @@ export default function TeamAnalyticsPage() {
   if (orgsError) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="rounded-full bg-red-100 p-4">
-          <BarChart3 className="h-8 w-8 text-red-600" />
+        <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-4">
+          <BarChart3 className="h-8 w-8 text-red-600 dark:text-red-400" />
         </div>
         <h3 className="mt-4 text-lg font-medium text-foreground">Failed to load analytics</h3>
         <p className="mt-2 text-sm text-muted-foreground">

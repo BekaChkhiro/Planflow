@@ -11,7 +11,7 @@ import {
   useSensors,
   type DragStartEvent,
   type DragEndEvent,
-  type DragOverEvent,
+  type DragOverEvent as _DragOverEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-import type { Task, TaskAssignee } from '@/hooks/use-projects'
+import type { Task, TaskAssignee as _TaskAssignee } from '@/hooks/use-projects'
 import { useAssignTask, useDuplicateTask, useReorderTasks, type TaskReorderItem } from '@/hooks/use-projects'
 import { useOrganizations, useTeamMembers, type TeamMember } from '@/hooks/use-team'
 import { useUpdateTask, useUndoKeyboardShortcut } from '@/hooks/use-task-undo'
@@ -48,7 +48,7 @@ import type { PresenceStatus } from '@/hooks/use-presence'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { Separator as _Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
@@ -703,7 +703,7 @@ export function TasksTab({
   const [filterAssignee, setFilterAssignee] = useState<string | 'ALL' | 'unassigned'>('ALL')
   const [sortBy, setSortBy] = useState<SortOption>('taskId')
   const [sortDir, setSortDir] = useState<SortDirection>('asc')
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [_showAdvancedFilters, _setShowAdvancedFilters] = useState(false)
 
   // Fetch organizations to get team members
   const { data: organizations = [] } = useOrganizations()
@@ -931,15 +931,17 @@ export function TasksTab({
         case 'name':
           comparison = a.name.localeCompare(b.name)
           break
-        case 'status':
+        case 'status': {
           const statusOrder = { TODO: 0, IN_PROGRESS: 1, BLOCKED: 2, DONE: 3 }
           comparison = statusOrder[a.status] - statusOrder[b.status]
           break
-        case 'complexity':
+        }
+        case 'complexity': {
           const complexityOrder = { Low: 0, Medium: 1, High: 2 }
           comparison = (complexityOrder[a.complexity as keyof typeof complexityOrder] || 0) -
                        (complexityOrder[b.complexity as keyof typeof complexityOrder] || 0)
           break
+        }
         case 'updatedAt':
           comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
           break

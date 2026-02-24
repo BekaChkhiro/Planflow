@@ -147,7 +147,7 @@ export function formatSlackMessage(
   config: SlackConfig = {}
 ): SlackMessage {
   const emoji = EVENT_EMOJIS[event.type] || '📌'
-  const color = EVENT_COLORS[event.type] || '#6366f1'
+  const _color = EVENT_COLORS[event.type] || '#6366f1'
 
   // Build the main text (fallback for notifications)
   let text = `${emoji} ${event.title}`

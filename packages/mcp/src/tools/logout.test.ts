@@ -101,8 +101,8 @@ describe('planflow_logout', () => {
     })
 
     it('should include login instructions after logout', async () => {
-      const { isAuthenticated, loadConfig, clearCredentials } = await import('../config.js')
-      const { resetApiClient } = await import('../api-client.js')
+      const { isAuthenticated, loadConfig, clearCredentials: _clearCredentials } = await import('../config.js')
+      const { resetApiClient: _resetApiClient } = await import('../api-client.js')
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
       vi.mocked(loadConfig).mockReturnValue({

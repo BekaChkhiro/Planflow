@@ -293,7 +293,7 @@ export function NotificationCenter() {
                 role="feed"
                 aria-label={`${notifications.length} notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
               >
-                {notifications.map((notification, index) => (
+                {notifications.map((notification, _index) => (
                   <NotificationItem
                     key={notification.id}
                     notification={notification}

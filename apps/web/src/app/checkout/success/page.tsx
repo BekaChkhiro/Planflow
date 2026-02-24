@@ -31,8 +31,8 @@ export default function CheckoutSuccessPage() {
       <main className="flex-1 flex items-center justify-center p-4">
       <Card className="w-full max-w-md text-center">
         <CardHeader className="pb-4">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-            <CheckCircle className="h-10 w-10 text-green-600" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-950">
+            <CheckCircle className="h-10 w-10 text-green-600 dark:text-green-400" />
           </div>
           <CardTitle className="text-2xl">Payment Successful!</CardTitle>
           <CardDescription>

@@ -5,7 +5,7 @@ import {
   useFormContext,
   type FieldPath,
   type FieldValues,
-  type ControllerRenderProps,
+  type ControllerRenderProps as _ControllerRenderProps,
 } from "react-hook-form"
 import { ValidatedInput, type ValidatedInputProps } from "./validated-input"
 import {
@@ -63,7 +63,7 @@ function FormFieldInput<
   labelRight,
   ...inputProps
 }: FormFieldInputProps<TFieldValues, TName>) {
-  const { control, formState } = useFormContext<TFieldValues>()
+  const { control, formState: _formState } = useFormContext<TFieldValues>()
 
   return (
     <FormField

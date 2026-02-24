@@ -450,7 +450,7 @@ export class OrganizationService {
     }
 
     // Get requester's member record
-    const [requesterMemberRecord] = await this.db
+    const [_requesterMemberRecord] = await this.db
       .select({ id: schema.organizationMembers.id })
       .from(schema.organizationMembers)
       .where(

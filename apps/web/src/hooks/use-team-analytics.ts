@@ -91,7 +91,7 @@ async function fetchAllOrgActivities(orgId: string): Promise<Activity[]> {
 }
 
 // Get activities from the last N days
-function getActivitiesInRange(activities: Activity[], days: number): Activity[] {
+function _getActivitiesInRange(activities: Activity[], days: number): Activity[] {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - days)
   return activities.filter(a => new Date(a.createdAt) >= cutoff)

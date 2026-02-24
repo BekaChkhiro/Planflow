@@ -54,7 +54,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAuthStore } from '@/stores/auth-store'
 import { useOrganizationContext } from '@/hooks/use-organization-context'
-import { useProjects, type Project } from '@/hooks/use-projects'
+import { useProjects, type Project as _Project } from '@/hooks/use-projects'
 import { getRoleBadgeVariant, getRoleLabel } from '@/hooks/use-team'
 import { useUnreadNotificationCount } from '@/hooks/use-notifications'
 

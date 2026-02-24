@@ -3,7 +3,7 @@
  * Handles notification CRUD operations, push notifications, and digest management
  */
 
-import { and, count, desc, eq, gt, isNotNull, isNull, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, gt, isNotNull, isNull, inArray as _inArray } from 'drizzle-orm'
 import { getDbClient, schema } from '../db/index.js'
 import {
   isPushConfigured,

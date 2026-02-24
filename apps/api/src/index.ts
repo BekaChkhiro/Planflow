@@ -11,7 +11,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import {
-  auth,
+  auth as _auth,
   secureCors,
   securityHeaders,
   defaultBodyLimit,

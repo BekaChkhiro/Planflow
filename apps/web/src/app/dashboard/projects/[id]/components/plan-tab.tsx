@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, RefreshCw, Cloud, CloudOff, CheckCircle2, Clock, Terminal, Copy, Check } from 'lucide-react'
+import { FileText, RefreshCw, Cloud as _Cloud, CloudOff, CheckCircle2, Clock, Terminal, Copy as _Copy, Check } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

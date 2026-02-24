@@ -43,7 +43,7 @@ export async function createCheckoutUrl(options: CreateCheckoutOptions): Promise
     throw new Error('LEMON_SQUEEZY_STORE_ID is not configured')
   }
 
-  const { variantId, userId, userEmail, successUrl, cancelUrl } = options
+  const { variantId, userId, userEmail, successUrl, cancelUrl: _cancelUrl } = options
 
   const response = await fetch(`${LEMON_SQUEEZY_API_URL}/checkouts`, {
     method: 'POST',
@@ -220,6 +220,7 @@ export function verifyWebhookSignature(
   }
 
   // LemonSqueezy uses HMAC SHA256 for webhook signatures
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const crypto = require('crypto')
   const expectedSignature = crypto
     .createHmac('sha256', secret)

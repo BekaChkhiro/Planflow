@@ -25,7 +25,7 @@ interface TaskLockState {
  * Hook to manage task locks in the UI
  */
 export function useTaskLocks({
-  projectId,
+  projectId: _projectId,
   sendTaskLock,
   sendTaskUnlock,
   sendTaskLockExtend,

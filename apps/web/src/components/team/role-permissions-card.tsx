@@ -218,15 +218,15 @@ export function RolePermissionsCard({ currentUserRole, compact = false }: RolePe
             <tbody>
               {(ROLE_DEFINITIONS[0]?.permissions ?? []).map((perm, permIndex) => (
                 <tr key={perm.label} className="border-b last:border-0">
-                  <td className="py-3 text-sm text-gray-700">{perm.label}</td>
+                  <td className="py-3 text-sm text-foreground">{perm.label}</td>
                   {ROLE_DEFINITIONS.map((roleDef) => {
                     const permission = roleDef.permissions[permIndex]
                     return (
                       <td key={roleDef.role} className="py-3 text-center">
                         {permission?.allowed ? (
-                          <Check className="mx-auto h-4 w-4 text-green-500" />
+                          <Check className="mx-auto h-4 w-4 text-green-500 dark:text-green-400" />
                         ) : (
-                          <X className="mx-auto h-4 w-4 text-gray-300" />
+                          <X className="mx-auto h-4 w-4 text-muted-foreground/50" />
                         )}
                       </td>
                     )

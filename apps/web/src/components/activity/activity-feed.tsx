@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect as _useEffect, useRef, useState } from 'react'
 import { Activity as ActivityIcon, Loader2, RefreshCw, Filter } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ActivityFeedSkeleton } from '@/components/ui/loading-skeletons'
-import { EmptyState, ActivityIllustration } from '@/components/ui/empty-state'
+import { EmptyState as _EmptyState, ActivityIllustration } from '@/components/ui/empty-state'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +20,7 @@ import {
   useProjectActivityInfinite,
   useActivitySubscription,
   type Activity,
-  type ActivityAction,
+  type ActivityAction as _ActivityAction,
   type ActivityEntity,
 } from '@/hooks/use-activity'
 import { useProjectWebSocket } from '@/hooks/use-websocket'

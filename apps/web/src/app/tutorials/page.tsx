@@ -151,7 +151,7 @@ const tutorials = [
 
 export default function TutorialsPage() {
   const totalDuration = "20-25 min"
-  const completedCount = 0 // This would come from user state
+  const _completedCount = 0 // This would come from user state
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

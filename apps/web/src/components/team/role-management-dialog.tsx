@@ -102,7 +102,7 @@ export function RoleManagementDialog({
     return levels[role]
   }
 
-  const isPromotion =
+  const _isPromotion =
     member && selectedRole ? getRoleLevel(selectedRole) > getRoleLevel(member.role) : false
   const isDemotion =
     member && selectedRole ? getRoleLevel(selectedRole) < getRoleLevel(member.role) : false

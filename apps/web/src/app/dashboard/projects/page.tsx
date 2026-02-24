@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Calendar, Clock, MoreVertical, Archive, ArchiveRestore, Trash2, Loader2, Search, X, Shield, Edit3, Eye } from 'lucide-react'
+import { Plus, Calendar, Clock, MoreVertical, Archive, ArchiveRestore, Trash2 as _Trash2, Loader2, Search, X, Shield, Edit3, Eye } from 'lucide-react'
 
 import {
   useProjectsInfinite,
@@ -16,7 +16,7 @@ import {
   isAtProjectLimit,
   PROJECTS_PAGE_SIZE,
   type Project,
-  type PaginationMeta,
+  type PaginationMeta as _PaginationMeta,
   type ArchiveFilter,
 } from '@/hooks/use-projects'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
@@ -24,7 +24,7 @@ import { useOrganizationContext } from '@/hooks/use-organization-context'
 import { Input } from '@/components/ui/input'
 import { useProjectAnalytics } from '@/hooks/use-analytics'
 import { OrganizationSelector } from '@/components/organization-selector'
-import { CreateProjectRequestSchema, type CreateProjectRequest, type ProjectLimits } from '@planflow/shared'
+import { CreateProjectRequestSchema, type CreateProjectRequest, type ProjectLimits as _ProjectLimits } from '@planflow/shared'
 import { UpgradePrompt, ProjectLimitBadge } from '@/components/upgrade-prompt'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

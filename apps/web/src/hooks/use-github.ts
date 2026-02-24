@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/lib/auth-api'
 import { toast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/error-utils'
-import type { GitHubIntegrationStatus, GitHubRepository } from '@planflow/shared'
+import type { GitHubIntegrationStatus, GitHubRepository as _GitHubRepository } from '@planflow/shared'
 
 // Query key for GitHub integration
 export const githubQueryKey = ['github', 'integration']
@@ -85,7 +85,7 @@ export function useGitHubIntegration() {
  * Hook to start GitHub OAuth authorization flow
  */
 export function useGitHubAuthorize() {
-  const queryClient = useQueryClient()
+  const _queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async () => {
@@ -534,7 +534,7 @@ export function generateBranchNameClient(
   const sanitizedName = taskName
     .toLowerCase()
     .replace(/[\s_]+/g, '-')
-    .replace(/[^a-z0-9\-\.]/g, '')
+    .replace(/[^a-z0-9\-.]/g, '')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
 

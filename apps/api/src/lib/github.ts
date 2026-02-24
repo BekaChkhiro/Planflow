@@ -361,7 +361,7 @@ export async function validateAccessToken(accessToken: string): Promise<boolean>
  * Revoke an access token (delete the OAuth authorization)
  * Note: This requires the token to still be valid
  */
-export async function revokeAccessToken(accessToken: string): Promise<boolean> {
+export async function revokeAccessToken(_accessToken: string): Promise<boolean> {
   try {
     // GitHub doesn't have a standard revocation endpoint for OAuth tokens
     // The user needs to revoke access from their GitHub settings
@@ -643,7 +643,7 @@ export function generateBranchName(
   let sanitizedName = taskName
     .toLowerCase()
     .replace(/[\s_]+/g, '-') // Replace spaces and underscores with dashes
-    .replace(/[^a-z0-9\-\.]/g, '') // Remove invalid characters
+    .replace(/[^a-z0-9\-.]/g, '') // Remove invalid characters
     .replace(/-+/g, '-') // Replace multiple dashes with single dash
     .replace(/^-|-$/g, '') // Remove leading/trailing dashes
 

@@ -74,7 +74,7 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
     server: server as HttpServer,
     path: '/ws',
     // Handle subprotocol selection for token auth (T10.1)
-    handleProtocols: (protocols, request) => {
+    handleProtocols: (protocols, _request) => {
       // Accept the access_token protocol if present
       for (const protocol of protocols) {
         if (protocol.startsWith('access_token.')) {

@@ -137,10 +137,10 @@ export function createMockDbClient() {
   const mockDelete = vi.fn()
 
   // Chain configuration helpers
-  let mockReturnData: unknown[] = []
+  let _mockReturnData: unknown[] = []
 
   const configureReturn = (data: unknown[]) => {
-    mockReturnData = data
+    _mockReturnData = data
     mockLimit.mockResolvedValue(data)
     mockReturning.mockResolvedValue(data)
     mockOrderBy.mockResolvedValue(data)

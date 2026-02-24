@@ -86,7 +86,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
         setSubmitted(false)
         onOpenChange(false)
       }, 2000)
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to submit feedback. Please try again.',

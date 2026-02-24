@@ -111,7 +111,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         {/* Workload bar */}
         <div className="mt-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Active Tasks</span>
+            <span className="text-sm font-medium text-foreground">Active Tasks</span>
             <span className="text-sm font-bold text-foreground">{member.taskCount}</span>
           </div>
           <WorkloadBar
@@ -126,7 +126,7 @@ function MemberWorkloadCard({ member }: { member: MemberWorkload }) {
         {totalTasks > 0 && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">All Tasks</span>
+              <span className="text-sm font-medium text-foreground">All Tasks</span>
               <span className="text-sm text-muted-foreground">{totalTasks} total</span>
             </div>
             <TaskDistributionBar
@@ -532,7 +532,7 @@ export default function WorkloadPage() {
                       <div className="flex items-center gap-3">
                         <StatusIcon status={task.status} />
                         <span className="font-mono text-xs text-muted-foreground">{task.taskId}</span>
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{task.name}</span>
+                        <span className="text-sm text-foreground">{task.name}</span>
                       </div>
                       <Badge variant="outline" className="text-xs">
                         {task.complexity}

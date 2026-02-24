@@ -119,7 +119,7 @@ export default function NotificationsSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             {isSubscribed ? (
-              <Bell className="h-5 w-5 text-green-600" />
+              <Bell className="h-5 w-5 text-green-600 dark:text-green-400" />
             ) : (
               <BellOff className="h-5 w-5 text-muted-foreground" />
             )}
@@ -131,7 +131,7 @@ export default function NotificationsSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {!isSupported ? (
-            <div className="flex items-center gap-2 rounded-lg bg-yellow-50 p-4 text-sm text-yellow-800">
+            <div className="flex items-center gap-2 rounded-lg bg-yellow-50 dark:bg-yellow-950/50 p-4 text-sm text-yellow-800 dark:text-yellow-200">
               <AlertCircle className="h-5 w-5" />
               <span>
                 Push notifications are not supported in your browser. Try using
@@ -139,7 +139,7 @@ export default function NotificationsSettingsPage() {
               </span>
             </div>
           ) : permission === 'denied' ? (
-            <div className="flex items-center gap-2 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+            <div className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-950/50 p-4 text-sm text-red-800 dark:text-red-200">
               <AlertCircle className="h-5 w-5" />
               <span>
                 Notification permission was denied. Please enable it in your
@@ -175,7 +175,7 @@ export default function NotificationsSettingsPage() {
                   disabled={testingSent}
                 >
                   {testingSent ? (
-                    <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+                    <CheckCircle className="mr-2 h-4 w-4 text-green-600 dark:text-green-400" />
                   ) : (
                     <TestTube className="mr-2 h-4 w-4" />
                   )}
@@ -198,8 +198,8 @@ export default function NotificationsSettingsPage() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-100 p-2">
-                <MessageSquare className="h-4 w-4 text-blue-600" />
+              <div className="rounded-lg bg-blue-100 dark:bg-blue-900/50 p-2">
+                <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
                 <Label>Mentions</Label>
@@ -217,8 +217,8 @@ export default function NotificationsSettingsPage() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-green-100 p-2">
-                <UserPlus className="h-4 w-4 text-green-600" />
+              <div className="rounded-lg bg-green-100 dark:bg-green-900/50 p-2">
+                <UserPlus className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
               <div>
                 <Label>Task Assignments</Label>
@@ -236,8 +236,8 @@ export default function NotificationsSettingsPage() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-purple-100 p-2">
-                <MessageSquare className="h-4 w-4 text-purple-600" />
+              <div className="rounded-lg bg-purple-100 dark:bg-purple-900/50 p-2">
+                <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
                 <Label>Comments</Label>
@@ -255,8 +255,8 @@ export default function NotificationsSettingsPage() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-orange-100 p-2">
-                <GitPullRequest className="h-4 w-4 text-orange-600" />
+              <div className="rounded-lg bg-orange-100 dark:bg-orange-900/50 p-2">
+                <GitPullRequest className="h-4 w-4 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
                 <Label>Status Changes</Label>
@@ -274,8 +274,8 @@ export default function NotificationsSettingsPage() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-indigo-100 p-2">
-                <Mail className="h-4 w-4 text-indigo-600" />
+              <div className="rounded-lg bg-indigo-100 dark:bg-indigo-900/50 p-2">
+                <Mail className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
                 <Label>Team Invitations</Label>
@@ -365,7 +365,7 @@ export default function NotificationsSettingsPage() {
 
               {preferences.emailDigest && (
                 <>
-                  <div className="ml-4 space-y-4 rounded-lg border border-gray-100 bg-muted/50 p-4">
+                  <div className="ml-4 space-y-4 rounded-lg border border-border bg-muted/50 p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Shield, LogOut, Monitor, Smartphone, Clock, Trash2, AlertTriangle } from 'lucide-react'
+import { Shield, LogOut, Monitor, Smartphone as _Smartphone, Clock, Trash2, AlertTriangle } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
@@ -106,7 +106,7 @@ export default function SecuritySettingsPage() {
       } else {
         throw new Error('Failed to logout from all devices')
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to logout from all devices. Please try again.',
@@ -153,7 +153,7 @@ export default function SecuritySettingsPage() {
       } else {
         throw new Error('Failed to revoke session')
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to revoke session. Please try again.',

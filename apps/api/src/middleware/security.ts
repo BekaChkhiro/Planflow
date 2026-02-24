@@ -341,6 +341,7 @@ export const smallBodyLimit = bodyLimit({
  */
 export function sanitizeString(input: string): string {
   return input
+    // eslint-disable-next-line no-control-regex
     .replace(/\x00/g, '') // Remove null bytes
     .trim()
 }

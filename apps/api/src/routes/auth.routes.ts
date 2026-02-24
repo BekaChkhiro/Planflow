@@ -438,11 +438,11 @@ authRoutes.post('/logout-all', jwtAuth, async (c) => {
     const db = getDbClient()
 
     // Get the current refresh token hash from request (to identify current session)
-    let currentTokenHash: string | null = null
+    let _currentTokenHash: string | null = null
     try {
       const body = await c.req.json()
       if (body.refreshToken) {
-        currentTokenHash = hashToken(body.refreshToken)
+        _currentTokenHash = hashToken(body.refreshToken)
       }
     } catch {
       // No body or invalid JSON - that's fine, we'll revoke all tokens

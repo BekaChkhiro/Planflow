@@ -29,7 +29,7 @@ import { NotificationCenter } from "@/components/notifications"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { SkipLink } from "@/components/ui/skip-link"
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog"
-import { useKeyboardShortcut } from "@/lib/accessibility"
+import { useKeyboardShortcut as _useKeyboardShortcut } from "@/lib/accessibility"
 
 function getInitials(name: string | undefined): string {
   if (!name) return 'U'

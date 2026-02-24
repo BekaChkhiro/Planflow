@@ -164,17 +164,17 @@ export default function InvitationPage() {
   // Show loading while checking auth state
   if (!isInitialized || state === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-gray-100 p-4 w-fit">
-              <Users className="h-8 w-8 text-gray-900" />
+            <div className="mx-auto mb-4 rounded-full bg-muted p-4 w-fit">
+              <Users className="h-8 w-8 text-foreground" />
             </div>
             <CardTitle>Team Invitation</CardTitle>
             <CardDescription>Loading invitation details...</CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
-            <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
+            <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
       </div>
@@ -184,14 +184,14 @@ export default function InvitationPage() {
   // Error state
   if (state === 'error') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-red-100 p-4 w-fit">
-              <XCircle className="h-8 w-8 text-red-600" />
+            <div className="mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-950 p-4 w-fit">
+              <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
             </div>
             <CardTitle>Invitation Error</CardTitle>
-            <CardDescription className="text-red-600">{error}</CardDescription>
+            <CardDescription className="text-red-600 dark:text-red-400">{error}</CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
             <Button variant="outline" onClick={() => router.push('/dashboard')}>
@@ -206,11 +206,11 @@ export default function InvitationPage() {
   // Success state
   if (state === 'success') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-green-100 p-4 w-fit">
-              <CheckCircle className="h-8 w-8 text-green-600" />
+            <div className="mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-950 p-4 w-fit">
+              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
             <CardTitle>Welcome to the team!</CardTitle>
             <CardDescription>
@@ -218,8 +218,8 @@ export default function InvitationPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-4">
-            <p className="text-sm text-gray-500">Redirecting to your team...</p>
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            <p className="text-sm text-muted-foreground">Redirecting to your team...</p>
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
       </div>
@@ -229,18 +229,18 @@ export default function InvitationPage() {
   // Declined state
   if (state === 'declined') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-gray-100 p-4 w-fit">
-              <XCircle className="h-8 w-8 text-gray-600" />
+            <div className="mx-auto mb-4 rounded-full bg-muted p-4 w-fit">
+              <XCircle className="h-8 w-8 text-muted-foreground" />
             </div>
             <CardTitle>Invitation Declined</CardTitle>
             <CardDescription>You have declined this invitation.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-4">
-            <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            <p className="text-sm text-muted-foreground">Redirecting to dashboard...</p>
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
       </div>
@@ -256,11 +256,11 @@ export default function InvitationPage() {
     const emailMismatch = user?.email && invitation.email !== user.email
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-blue-100 p-4 w-fit">
-              <UserPlus className="h-8 w-8 text-blue-600" />
+            <div className="mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-950 p-4 w-fit">
+              <UserPlus className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             </div>
             <CardTitle>You&apos;re Invited!</CardTitle>
             <CardDescription>
@@ -269,39 +269,39 @@ export default function InvitationPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-4">
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
-                <Building2 className="h-5 w-5 text-gray-500" />
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="text-sm text-gray-500">Organization</p>
+                  <p className="text-sm text-muted-foreground">Organization</p>
                   <p className="font-medium">{invitation.organizationName}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
-                <Users className="h-5 w-5 text-gray-500" />
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
+                <Users className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="text-sm text-gray-500">Invited by</p>
+                  <p className="text-sm text-muted-foreground">Invited by</p>
                   <p className="font-medium">{invitation.inviterName}</p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted">
                 <div className="flex items-center gap-3">
-                  <Clock className="h-5 w-5 text-gray-500" />
+                  <Clock className="h-5 w-5 text-muted-foreground" />
                   <div>
-                    <p className="text-sm text-gray-500">Your role</p>
+                    <p className="text-sm text-muted-foreground">Your role</p>
                     <Badge variant="secondary">{getRoleLabel(invitation.role)}</Badge>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-500">Expires in</p>
+                  <p className="text-sm text-muted-foreground">Expires in</p>
                   <p className="text-sm font-medium">{daysLeft} day{daysLeft !== 1 ? 's' : ''}</p>
                 </div>
               </div>
             </div>
 
             {emailMismatch && (
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+              <div className="rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
                 <p className="font-medium">Email mismatch</p>
                 <p>This invitation was sent to <strong>{invitation.email}</strong>, but you are logged in as <strong>{user?.email}</strong>.</p>
               </div>
@@ -334,17 +334,17 @@ export default function InvitationPage() {
 
   // Fallback loading (waiting for auth redirect)
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 rounded-full bg-gray-100 p-4 w-fit">
-            <Users className="h-8 w-8 text-gray-900" />
+          <div className="mx-auto mb-4 rounded-full bg-muted p-4 w-fit">
+            <Users className="h-8 w-8 text-foreground" />
           </div>
           <CardTitle>Team Invitation</CardTitle>
           <CardDescription>Redirecting to login...</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-gray-400" />
+          <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
     </div>

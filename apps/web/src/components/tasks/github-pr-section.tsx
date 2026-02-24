@@ -68,7 +68,7 @@ interface GitHubPrSectionProps {
 
 export function GitHubPrSection({
   projectId,
-  taskId,
+  taskId: _taskId,
   taskDisplayId,
   taskName,
   taskDescription,
@@ -182,7 +182,7 @@ export function GitHubPrSection({
       setIsDialogOpen(false)
       setSelectedRepo('')
       setSearchQuery('')
-    } catch (error) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to link task to GitHub PR', variant: 'destructive' })
     }
   }
@@ -219,7 +219,7 @@ export function GitHubPrSection({
         taskId: taskDisplayId,
       })
       toast({ title: 'Success', description: 'Task unlinked from GitHub PR' })
-    } catch (error) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to unlink task', variant: 'destructive' })
     }
   }
@@ -231,7 +231,7 @@ export function GitHubPrSection({
         taskId: taskDisplayId,
       })
       toast({ title: 'Success', description: 'GitHub PR synced' })
-    } catch (error) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to sync GitHub PR', variant: 'destructive' })
     }
   }

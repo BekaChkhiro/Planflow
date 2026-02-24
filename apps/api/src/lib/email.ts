@@ -128,7 +128,7 @@ function getNotificationSubject(type: NotificationType, title: string): string {
 }
 
 function generateNotificationHtml(options: EmailNotificationOptions): string {
-  const { type, title, body, link, projectName, actorName, taskId } = options
+  const { type: _type, title, body, link, projectName, actorName, taskId } = options
 
   const actionButton = link
     ? `

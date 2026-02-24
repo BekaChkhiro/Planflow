@@ -407,7 +407,7 @@ describe('planflow_notifications', () => {
       const text = getResultText(result)
 
       // Check for type-specific emojis
-      expect(text).toMatch(/[💬🔄👤]/)
+      expect(text).toMatch(/[💬🔄👤]/u)
     })
 
     it('should include helpful commands', async () => {

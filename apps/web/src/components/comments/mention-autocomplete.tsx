@@ -141,7 +141,7 @@ export function MentionAutocomplete({
           setSelectedIndex((prev) => (prev - 1 + users.length) % users.length)
           break
         case 'Enter':
-        case 'Tab':
+        case 'Tab': {
           e.preventDefault()
           e.stopPropagation()
           const selectedUser = users[selectedIndex]
@@ -149,6 +149,7 @@ export function MentionAutocomplete({
             handleSelectUser(selectedUser)
           }
           break
+        }
         case 'Escape':
           e.preventDefault()
           e.stopPropagation()

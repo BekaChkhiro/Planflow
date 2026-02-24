@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { syncTool } from './sync.js'
-import { fixtures, getResultText, isErrorResult } from '../__tests__/test-utils.js'
+import { fixtures as _fixtures, getResultText, isErrorResult } from '../__tests__/test-utils.js'
 
 // Mock dependencies
 vi.mock('../config.js', () => ({

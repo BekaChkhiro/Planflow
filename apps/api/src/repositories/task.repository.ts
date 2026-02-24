@@ -374,7 +374,7 @@ export class TaskRepository extends BaseRepository {
       dependencies: t.dependencies ?? null,
     }))
 
-    const result = await this.db.insert(schema.tasks).values(values)
+    await this.db.insert(schema.tasks).values(values)
 
     return tasks.length
   }

@@ -161,8 +161,8 @@ describe('planflow_login', () => {
 
   describe('output format', () => {
     it('should include helpful next steps on success', async () => {
-      const { isAuthenticated, saveConfig } = await import('../config.js')
-      const { createApiClient, resetApiClient } = await import('../api-client.js')
+      const { isAuthenticated, saveConfig: _saveConfig } = await import('../config.js')
+      const { createApiClient, resetApiClient: _resetApiClient } = await import('../api-client.js')
 
       vi.mocked(isAuthenticated).mockReturnValue(false)
 

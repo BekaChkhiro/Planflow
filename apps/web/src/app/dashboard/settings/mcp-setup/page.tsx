@@ -32,7 +32,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
       className={className}
     >
       {copied ? (
-        <Check className="h-4 w-4 text-green-600" />
+        <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
       ) : (
         <Copy className="h-4 w-4" />
       )}
@@ -40,7 +40,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
   )
 }
 
-function CodeBlock({ code, language = 'bash' }: { code: string; language?: string }) {
+function CodeBlock({ code, language: _language = 'bash' }: { code: string; language?: string }) {
   return (
     <div className="relative rounded-lg bg-gray-900 p-4">
       <CopyButton
@@ -99,10 +99,10 @@ export default function MCPSetupPage() {
       <Separator />
 
       {/* What is MCP */}
-      <div className="rounded-lg border bg-blue-50 border-blue-200 p-4">
+      <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800 p-4">
         <div className="flex gap-3">
-          <Zap className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
+          <Zap className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800 dark:text-blue-200">
             <p className="font-medium">What is MCP?</p>
             <p className="mt-1">
               The Model Context Protocol (MCP) allows Claude Code to interact with external tools
@@ -177,8 +177,8 @@ export default function MCPSetupPage() {
               </Link>
             </Button>
           </div>
-          <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
-            <p className="text-sm text-amber-800">
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 p-3">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
               <strong>Important:</strong> Copy your token immediately after creation.
               For security reasons, it won&apos;t be shown again.
             </p>
@@ -213,13 +213,13 @@ export default function MCPSetupPage() {
             </TabsList>
             <TabsContent value="mac" className="space-y-4">
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">
+                <p className="text-sm font-medium text-foreground">
                   Config file location:
                 </p>
                 <CodeBlock code="~/.config/claude/claude_desktop_config.json" />
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">
+                <p className="text-sm font-medium text-foreground">
                   Add this configuration:
                 </p>
                 <CodeBlock code={mcpConfigMac} language="json" />
@@ -227,13 +227,13 @@ export default function MCPSetupPage() {
             </TabsContent>
             <TabsContent value="windows" className="space-y-4">
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">
+                <p className="text-sm font-medium text-foreground">
                   Config file location:
                 </p>
                 <CodeBlock code="%APPDATA%\\Claude\\claude_desktop_config.json" />
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">
+                <p className="text-sm font-medium text-foreground">
                   Add this configuration:
                 </p>
                 <CodeBlock code={mcpConfigWindows} language="json" />
@@ -244,8 +244,8 @@ export default function MCPSetupPage() {
           <div className="rounded-md bg-muted/50 border p-3">
             <p className="text-sm text-muted-foreground">
               <strong>Tip:</strong> If you already have other MCP servers configured,
-              add the <code className="rounded bg-gray-200 px-1 py-0.5">&quot;planflow&quot;</code> entry
-              inside your existing <code className="rounded bg-gray-200 px-1 py-0.5">&quot;mcpServers&quot;</code> object.
+              add the <code className="rounded bg-muted px-1 py-0.5">&quot;planflow&quot;</code> entry
+              inside your existing <code className="rounded bg-muted px-1 py-0.5">&quot;mcpServers&quot;</code> object.
             </p>
           </div>
         </CardContent>
@@ -274,7 +274,7 @@ export default function MCPSetupPage() {
             <div className="rounded-lg border p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Terminal className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-medium text-gray-700">Check your account</p>
+                <p className="text-sm font-medium text-foreground">Check your account</p>
               </div>
               <CodeBlock code="Ask Claude: &quot;Use planflow_whoami to check my account&quot;" />
             </div>
@@ -282,15 +282,15 @@ export default function MCPSetupPage() {
             <div className="rounded-lg border p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Terminal className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-medium text-gray-700">List your projects</p>
+                <p className="text-sm font-medium text-foreground">List your projects</p>
               </div>
               <CodeBlock code="Ask Claude: &quot;Use planflow_projects to list my projects&quot;" />
             </div>
           </div>
 
-          <div className="flex items-start gap-3 rounded-lg bg-green-50 border border-green-200 p-4">
-            <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-            <div className="text-sm text-green-800">
+          <div className="flex items-start gap-3 rounded-lg bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 p-4">
+            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+            <div className="text-sm text-green-800 dark:text-green-200">
               <p className="font-medium">Success!</p>
               <p className="mt-1">
                 If you see your account information or project list, the MCP server is configured correctly.
@@ -321,7 +321,7 @@ export default function MCPSetupPage() {
               { name: 'planflow_notifications', desc: 'Check notifications' },
             ].map((tool) => (
               <div key={tool.name} className="flex items-center gap-3 rounded-lg border p-3">
-                <code className="rounded bg-muted px-2 py-1 text-xs font-mono text-gray-800">
+                <code className="rounded bg-muted px-2 py-1 text-xs font-mono text-foreground">
                   {tool.name}
                 </code>
                 <span className="text-sm text-muted-foreground">{tool.desc}</span>
@@ -364,7 +364,7 @@ export default function MCPSetupPage() {
                   href="https://docs.planflow.tools/mcp"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   documentation
                 </a>
@@ -373,7 +373,7 @@ export default function MCPSetupPage() {
                   href="https://github.com/planflow/mcp-server/issues"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   open an issue
                 </a>

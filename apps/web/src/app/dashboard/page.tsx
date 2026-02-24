@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
+import { Badge as _Badge } from '@/components/ui/badge'
 import { useProjects } from '@/hooks/use-projects'
 import { useTeamMembers } from '@/hooks/use-team'
 import { useOrganizationContext } from '@/hooks/use-organization-context'

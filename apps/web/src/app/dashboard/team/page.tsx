@@ -154,7 +154,7 @@ function MemberCard({
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3 sm:gap-4">
         <Avatar className="h-10 w-10 shrink-0">
-          <AvatarFallback className="bg-blue-100 text-blue-700">
+          <AvatarFallback className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
             {getInitials(member.userName, member.userEmail)}
           </AvatarFallback>
         </Avatar>
@@ -205,7 +205,7 @@ function MemberCard({
                   <DropdownMenuItem
                     onClick={() => onRemove(member.id)}
                     disabled={isRemoving}
-                    className="text-red-600 focus:text-red-600"
+                    className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Remove from team
@@ -237,16 +237,16 @@ function InvitationCard({
   const daysUntilExpiry = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-dashed border-gray-300 bg-muted/50 p-4">
+    <div className="flex items-center justify-between rounded-lg border border-dashed border-border bg-muted/50 p-4">
       <div className="flex items-center gap-4">
         <Avatar className="h-10 w-10">
-          <AvatarFallback className="bg-gray-200 text-muted-foreground">
+          <AvatarFallback className="bg-muted text-muted-foreground">
             <Mail className="h-4 w-4" />
           </AvatarFallback>
         </Avatar>
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-medium text-gray-700">{invitation.email}</span>
+            <span className="font-medium text-foreground">{invitation.email}</span>
             <Badge variant="outline" className="text-xs">
               <Clock className="mr-1 h-3 w-3" />
               Pending
@@ -259,7 +259,7 @@ function InvitationCard({
                 · Expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}
               </span>
             )}
-            {isExpired && <span className="ml-2 text-red-500">· Expired</span>}
+            {isExpired && <span className="ml-2 text-red-500 dark:text-red-400">· Expired</span>}
           </span>
         </div>
       </div>
@@ -761,8 +761,8 @@ export default function TeamPage() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-blue-100 p-2">
-                <Building2 className="h-5 w-5 text-blue-600" />
+              <div className="rounded-lg bg-blue-100 dark:bg-blue-900/50 p-2">
+                <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
                 <CardTitle className="text-lg">{currentOrg.name}</CardTitle>

@@ -47,30 +47,30 @@ function getTierLabel(tier: string): string {
 function getTierBadgeClass(tier: string): string {
   switch (tier) {
     case 'free':
-      return 'bg-muted text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+      return 'bg-muted text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600'
     case 'pro':
-      return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+      return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700'
     case 'team':
-      return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+      return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-200 border-purple-200 dark:border-purple-700'
     case 'enterprise':
-      return 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+      return 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-200 border-amber-200 dark:border-amber-700'
     default:
-      return 'bg-muted text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+      return 'bg-muted text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600'
   }
 }
 
 function getStatusBadgeClass(status: string): string {
   switch (status) {
     case 'active':
-      return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
+      return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-200 border-green-200 dark:border-green-700'
     case 'trialing':
-      return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+      return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700'
     case 'past_due':
-      return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800'
+      return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700'
     case 'canceled':
-      return 'bg-muted text-muted-foreground border-gray-200 dark:border-gray-700'
+      return 'bg-muted text-muted-foreground border-gray-200 dark:border-gray-600'
     default:
-      return 'bg-muted text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+      return 'bg-muted text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600'
   }
 }
 
@@ -154,7 +154,7 @@ function SubscriptionStatusCard() {
 
         {/* Canceled notice */}
         {subscription.status === 'canceled' && subscription.currentPeriodEnd && (
-          <div className="rounded-md bg-muted/50 border border-gray-200 dark:border-gray-700 p-4">
+          <div className="rounded-md bg-muted/50 border border-gray-200 dark:border-gray-600 p-4">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
               <div className="text-sm text-muted-foreground">

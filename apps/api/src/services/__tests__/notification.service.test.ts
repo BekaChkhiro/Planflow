@@ -693,7 +693,7 @@ describe('NotificationService', () => {
     })
 
     it('should accept valid digestTime format', async () => {
-      const result = await notificationService.updatePreferences('user-123', {
+      await notificationService.updatePreferences('user-123', {
         emailDigestTime: '14:30',
       })
 

@@ -30,7 +30,7 @@ export interface UndoableTaskOperation {
 
 // In-memory undo stack (per session)
 let undoStack: UndoableTaskOperation[] = []
-let undoListeners: Array<() => void> = []
+const undoListeners: Array<() => void> = []
 
 function notifyListeners() {
   undoListeners.forEach(listener => listener())
@@ -131,7 +131,7 @@ interface UseTaskUndoOptions {
 /**
  * Hook to manage task undo operations
  */
-export function useTaskUndo({ projectId, onUndoSuccess, onUndoError }: UseTaskUndoOptions) {
+export function useTaskUndo({ projectId: _projectId, onUndoSuccess, onUndoError }: UseTaskUndoOptions) {
   const queryClient = useQueryClient()
   const [, forceUpdate] = useReducer((x: number) => x + 1, 0)
 

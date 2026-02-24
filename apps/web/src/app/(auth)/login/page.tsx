@@ -81,7 +81,7 @@ export default function LoginPage() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {justRegistered && (
-              <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600">
+              <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
                 Account created successfully! Please sign in.
               </div>
             )}

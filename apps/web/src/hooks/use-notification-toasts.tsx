@@ -28,7 +28,7 @@ function getNotificationConfig(type: NotificationData['type']) {
       return {
         variant: 'default' as const,
         icon: MessageSquare,
-        iconColor: 'text-gray-500',
+        iconColor: 'text-muted-foreground',
         duration: 5000,
       }
     case 'status_change':
@@ -56,7 +56,7 @@ function getNotificationConfig(type: NotificationData['type']) {
       return {
         variant: 'default' as const,
         icon: Bell,
-        iconColor: 'text-gray-500',
+        iconColor: 'text-muted-foreground',
         duration: 5000,
       }
   }

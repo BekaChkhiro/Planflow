@@ -5,7 +5,7 @@
 
 import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { schema } from '../db/index.js'
-import { BaseRepository, type FindAllOptions, type PaginatedResult } from './base.repository.js'
+import { BaseRepository, type FindAllOptions, type PaginatedResult as _PaginatedResult } from './base.repository.js'
 
 // Notification type enum values
 export const NotificationTypes = [

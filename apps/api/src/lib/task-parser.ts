@@ -166,13 +166,14 @@ function parseTasksFromTables(planContent: string): ParsedTask[] {
           const value = cell.trim()
 
           switch (columnType) {
-            case 'id':
+            case 'id': {
               // Extract task ID
               const idMatch = value.match(/T\d+[A-Za-z]?\.\d+/)
               if (idMatch) {
                 task.taskId = idMatch[0]
               }
               break
+            }
             case 'name':
               task.name = value
               break
@@ -188,12 +189,13 @@ function parseTasksFromTables(planContent: string): ParsedTask[] {
             case 'description':
               task.description = value || null
               break
-            case 'hours':
+            case 'hours': {
               const hours = parseInt(value, 10)
               if (!isNaN(hours)) {
                 task.estimatedHours = hours
               }
               break
+            }
           }
         })
 
@@ -264,7 +266,7 @@ function parseTasksFromHeaders(planContent: string): ParsedTask[] {
     if (inTaskBlock && currentTask) {
       // Status line: - [ ] **სტატუსი**: TODO or - [x] **Status**: DONE
       const statusMatch = line.match(
-        /^-\s*\[([ xX])\]\s*\*{0,2}(?:სტატუსი|Status|სტატუსი)\*{0,2}[:\s]+(.+?)(?:\s*[✅🔄🚫].*)?$/i
+        /^-\s*\[([ xX])\]\s*\*{0,2}(?:სტატუსი|Status|სტატუსი)\*{0,2}[:\s]+(.+?)(?:\s*[✅🔄🚫].*)?$/iu
       )
       if (statusMatch) {
         const checkbox = statusMatch[1].toLowerCase()

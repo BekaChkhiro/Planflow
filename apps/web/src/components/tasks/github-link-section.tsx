@@ -113,7 +113,7 @@ export function GitHubLinkSection({
       setIsLinkDialogOpen(false)
       setSelectedRepo('')
       setSearchQuery('')
-    } catch (error) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to link task to GitHub issue', variant: 'destructive' })
     }
   }
@@ -131,7 +131,7 @@ export function GitHubLinkSection({
       setIsLinkDialogOpen(false)
       setSelectedRepo('')
       setMode('link')
-    } catch (error) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to create GitHub issue', variant: 'destructive' })
     }
   }
@@ -143,7 +143,7 @@ export function GitHubLinkSection({
         taskId: taskDisplayId,
       })
       toast({ title: 'Success', description: 'Task unlinked from GitHub issue' })
-    } catch (error) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to unlink task', variant: 'destructive' })
     }
   }
@@ -155,7 +155,7 @@ export function GitHubLinkSection({
         taskId: taskDisplayId,
       })
       toast({ title: 'Success', description: 'GitHub issue synced' })
-    } catch (error) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to sync GitHub issue', variant: 'destructive' })
     }
   }

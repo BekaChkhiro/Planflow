@@ -942,7 +942,7 @@ projectRoutes.get('/:id/tasks', auth, async (c) => {
 
     // Get assignee info for tasks that have assignees
     const assigneeIds = [...new Set(tasks.filter((t) => t.assigneeId).map((t) => t.assigneeId!))]
-    let userMap: Record<string, { id: string; email: string; name: string | null }> = {}
+    const userMap: Record<string, { id: string; email: string; name: string | null }> = {}
 
     if (assigneeIds.length > 0) {
       for (const userId of assigneeIds) {

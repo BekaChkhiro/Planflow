@@ -3,14 +3,14 @@
 import { useEffect, useRef } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { PostHogProvider as PHProvider } from 'posthog-js/react'
-import posthog from 'posthog-js'
+import posthog from 'posthog-js' // eslint-disable-line @typescript-eslint/no-unused-vars
 import {
   initPostHog,
   isPostHogEnabled,
   trackPageView,
   identifyUser,
   resetUser,
-  setGroup,
+  setGroup as _setGroup,
   POSTHOG_KEY,
   POSTHOG_HOST,
 } from '@/lib/posthog'

@@ -275,7 +275,7 @@ export function TeamTab({ projectId }: { projectId: string }) {
       await inviteMember.mutateAsync(data)
       setShowInviteDialog(false)
       inviteForm.reset()
-    } catch (err) {
+    } catch {
       // Error is handled by the hook
     }
   }

@@ -151,7 +151,7 @@ export function CommentInput({
   }, [])
 
   // Track mentioned users when they're selected
-  const handleMentionSelectWithUser = useCallback(
+  const _handleMentionSelectWithUser = useCallback(
     (result: { newText: string; newCursorPosition: number; mentionId: string }, user?: MentionableUser) => {
       handleMentionSelect(result)
       if (user) {

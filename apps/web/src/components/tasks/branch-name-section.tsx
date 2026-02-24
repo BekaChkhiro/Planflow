@@ -16,7 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Skeleton as _Skeleton } from '@/components/ui/skeleton'
 import {
   GitBranch,
   Copy,
@@ -55,7 +55,7 @@ const BRANCH_PREFIXES: { value: BranchPrefix; label: string; description: string
 
 export function BranchNameSection({
   projectId,
-  taskId,
+  taskId: _taskId,
   taskDisplayId,
   taskName,
   className,
@@ -73,7 +73,7 @@ export function BranchNameSection({
   const gitCommand = `git checkout -b ${branchName}`
 
   // Optionally fetch from API for variants (not strictly necessary for basic use)
-  const { data: apiData, isLoading } = useTaskBranchName(projectId, taskDisplayId, {
+  const { data: _apiData, isLoading: _isLoading } = useTaskBranchName(projectId, taskDisplayId, {
     enabled: isExpanded && !compact, // Only fetch when expanded
   })
 
@@ -91,7 +91,7 @@ export function BranchNameSection({
         title: 'Copied!',
         description: type === 'branch' ? 'Branch name copied to clipboard' : 'Git command copied to clipboard',
       })
-    } catch (error) {
+    } catch {
       toast({
         title: 'Failed to copy',
         description: 'Could not copy to clipboard',

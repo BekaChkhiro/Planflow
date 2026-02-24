@@ -10,14 +10,14 @@ import {
   UserPlus,
   RefreshCw,
   AtSign,
-  AlertCircle,
+  AlertCircle as _AlertCircle,
   Loader2,
   ArrowLeft,
   Check,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription as _CardDescription, CardHeader as _CardHeader, CardTitle as _CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState, ErrorIllustration } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
@@ -27,13 +27,13 @@ import { useNotificationsInfinite, NOTIFICATIONS_PAGE_SIZE, type Notification } 
 function getNotificationIcon(type: string) {
   switch (type) {
     case 'mention':
-      return <AtSign className="h-5 w-5 text-blue-500" />
+      return <AtSign className="h-5 w-5 text-blue-500 dark:text-blue-400" />
     case 'assignment':
-      return <UserPlus className="h-5 w-5 text-green-500" />
+      return <UserPlus className="h-5 w-5 text-green-500 dark:text-green-400" />
     case 'comment':
       return <MessageSquare className="h-5 w-5 text-muted-foreground" />
     case 'status_change':
-      return <RefreshCw className="h-5 w-5 text-blue-500" />
+      return <RefreshCw className="h-5 w-5 text-blue-500 dark:text-blue-400" />
     default:
       return <Bell className="h-5 w-5 text-muted-foreground" />
   }
@@ -78,7 +78,7 @@ function NotificationCard({
     <Card
       className={cn(
         'transition-colors',
-        isUnread ? 'bg-blue-50/30 border-blue-100' : 'hover:bg-muted/30'
+        isUnread ? 'bg-blue-50/30 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900' : 'hover:bg-muted/30'
       )}
     >
       <CardContent className="p-4">
@@ -87,7 +87,7 @@ function NotificationCard({
             <div
               className={cn(
                 'h-10 w-10 rounded-full flex items-center justify-center',
-                isUnread ? 'bg-blue-100' : 'bg-muted'
+                isUnread ? 'bg-blue-100 dark:bg-blue-900' : 'bg-muted'
               )}
             >
               {getNotificationIcon(notification.type)}
@@ -101,14 +101,14 @@ function NotificationCard({
                     className={cn(
                       'text-xs px-2 py-0.5 rounded-full',
                       isUnread
-                        ? 'bg-blue-100 text-blue-700'
+                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
                         : 'bg-muted text-muted-foreground'
                     )}
                   >
                     {getTypeLabel(notification.type)}
                   </span>
                   {isUnread && (
-                    <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
+                    <span className="h-2 w-2 rounded-full bg-blue-500 dark:bg-blue-400 shrink-0" />
                   )}
                 </div>
                 <h3

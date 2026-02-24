@@ -12,10 +12,13 @@
 - [Overview](#overview)
 - [Authentication](#authentication)
 - [GitHub Integration](#github-integration)
+  - [Check GitHub Configuration](#check-github-configuration)
   - [OAuth Flow](#github-oauth-flow)
   - [Repositories](#github-repositories)
   - [Issues](#github-issues)
   - [Pull Requests](#github-pull-requests)
+- [User Integrations](#user-integrations)
+  - [List User Integrations](#list-user-integrations)
 - [Slack Integration](#slack-integration)
   - [Configure Webhook](#configure-slack-webhook)
   - [Update Settings](#update-slack-settings)
@@ -35,6 +38,8 @@
   - [Test Integration](#test-integration)
 - [Incoming Webhooks](#incoming-webhooks)
   - [GitHub Webhooks](#github-webhooks)
+    - [Global GitHub Webhook](#global-github-webhook)
+    - [Project-Specific Webhook](#project-specific-webhook-endpoint)
 - [Events Reference](#events-reference)
 - [Schemas](#schemas)
 
@@ -95,6 +100,36 @@ For organization-scoped endpoints, the user must be a member of the organization
 ## GitHub Integration
 
 GitHub integration uses OAuth 2.0 to connect user accounts and access repository data.
+
+### Check GitHub Configuration
+
+Check if GitHub OAuth is configured on the server.
+
+```http
+GET /integrations/github/config
+Authorization: Bearer <jwt_token>
+```
+
+**Response (200)**
+```json
+{
+  "success": true,
+  "data": {
+    "configured": true,
+    "scopes": ["repo", "user:email", "read:user", "admin:repo_hook"]
+  }
+}
+```
+
+**Response Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `configured` | boolean | Whether GitHub OAuth credentials are set on the server |
+| `scopes` | string[] | OAuth scopes that will be requested during authorization |
+
+> **Note:** If `configured` is `false`, GitHub integration is not available. Contact your server administrator.
+
+---
 
 ### Required OAuth Scopes
 
@@ -543,6 +578,73 @@ Authorization: Bearer <jwt_token>
   }
 }
 ```
+
+---
+
+## User Integrations
+
+User-scoped endpoints for managing integrations in your default organization.
+
+### List User Integrations
+
+Get all integrations configured for the user's default organization.
+
+```http
+GET /integrations
+Authorization: Bearer <jwt_token>
+```
+
+**Response (200)**
+```json
+{
+  "success": true,
+  "data": {
+    "integrations": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "type": "slack",
+        "status": "connected",
+        "connectedAt": "2026-02-24T10:00:00.000Z",
+        "enabledEvents": ["task_completed", "task_assigned", "mention"],
+        "metadata": {
+          "workspace": "My Workspace",
+          "channel": "#engineering",
+          "webhookConfigured": true
+        }
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440001",
+        "type": "discord",
+        "status": "connected",
+        "connectedAt": "2026-02-20T14:00:00.000Z",
+        "enabledEvents": ["task_completed", "mention"],
+        "metadata": {
+          "server": "My Server",
+          "webhookConfigured": true
+        }
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440002",
+        "type": "github",
+        "status": "connected",
+        "connectedAt": "2026-02-22T09:00:00.000Z",
+        "enabledEvents": [],
+        "metadata": {
+          "username": "octocat",
+          "avatarUrl": "https://avatars.githubusercontent.com/u/12345678"
+        }
+      }
+    ]
+  }
+}
+```
+
+**Integration Types:**
+| Type | Status Values | Description |
+|------|--------------|-------------|
+| `slack` | `connected`, `disconnected` | Slack webhook integration |
+| `discord` | `connected`, `disconnected` | Discord webhook integration |
+| `github` | `connected`, `disconnected` | GitHub OAuth integration |
 
 ---
 
@@ -1102,7 +1204,62 @@ PlanFlow receives webhooks from external services to trigger actions.
 
 GitHub can send webhooks to PlanFlow to auto-update task status when PRs are merged.
 
-#### Webhook Endpoint
+PlanFlow provides two webhook endpoints:
+1. **Global webhook** - Uses server-wide webhook secret
+2. **Project-specific webhook** - Uses project-specific webhook secret (recommended)
+
+---
+
+#### Global GitHub Webhook
+
+For server-wide GitHub webhook handling using the `GITHUB_WEBHOOK_SECRET` environment variable.
+
+```
+POST /webhooks/github
+```
+
+**Headers Required:**
+| Header | Description |
+|--------|-------------|
+| `x-hub-signature-256` | HMAC-SHA256 signature: `sha256=<hex_digest>` |
+| `x-github-event` | Event type: `pull_request`, `issues`, `push` |
+| `x-github-delivery` | Unique delivery ID (UUID) |
+
+**Response (200)**
+```json
+{
+  "success": true,
+  "data": {
+    "received": true,
+    "event": "pull_request",
+    "deliveryId": "abc123-def456-..."
+  }
+}
+```
+
+**Response (401) - Invalid Signature**
+```json
+{
+  "success": false,
+  "error": "Missing signature"
+}
+```
+
+**Response (400) - Missing Headers**
+```json
+{
+  "success": false,
+  "error": "Missing event headers"
+}
+```
+
+> **Note:** For multi-project setups, use the project-specific webhook endpoint below for better isolation.
+
+---
+
+#### Project-Specific Webhook Endpoint
+
+Recommended for production. Each project has its own webhook secret.
 
 ```
 POST /webhooks/github/project/:projectId
@@ -1353,4 +1510,4 @@ Now when PRs mentioning task IDs are merged, tasks will automatically be marked 
 
 ---
 
-*Last updated: 2026-02-25*
+*Last updated: 2026-02-24*

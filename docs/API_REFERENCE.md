@@ -1969,6 +1969,113 @@ interface ApiToken {
 }
 ```
 
+### Organization
+
+```typescript
+interface Organization {
+  id: string;              // UUID
+  name: string;            // 1-255 characters
+  slug: string;            // URL-friendly identifier (alphanumeric + hyphens)
+  description?: string;    // Max 2000 characters
+  createdBy: string;       // UUID of the creator
+  createdAt: string;       // ISO 8601 datetime
+  updatedAt: string;       // ISO 8601 datetime
+  role?: OrgMemberRole;    // User's role (included when listing)
+}
+```
+
+### OrganizationMember
+
+```typescript
+interface OrganizationMember {
+  id: string;              // UUID (membership record ID)
+  organizationId: string;  // UUID
+  userId: string;          // UUID
+  role: OrgMemberRole;     // Member's role
+  createdAt: string;       // ISO 8601 datetime
+  updatedAt: string;       // ISO 8601 datetime
+  userName: string;        // User's display name
+  userEmail: string;       // User's email
+}
+
+type OrgMemberRole = 'owner' | 'admin' | 'editor' | 'viewer';
+```
+
+### Invitation
+
+```typescript
+interface Invitation {
+  id: string;              // UUID
+  organizationId: string;  // UUID
+  email: string;           // Invitee's email
+  role: OrgMemberRole;     // Role to assign (not 'owner')
+  invitedBy: string;       // UUID of inviter
+  token: string;           // 64-character hex token
+  expiresAt: string;       // ISO 8601 datetime (7 days from creation)
+  acceptedAt?: string;     // ISO 8601 datetime (null until accepted)
+  createdAt: string;       // ISO 8601 datetime
+  inviterName?: string;    // Inviter's display name (in list response)
+}
+```
+
+### ActivityLog
+
+```typescript
+interface ActivityLog {
+  id: string;              // UUID
+  action: ActivityAction;  // Action type
+  entityType: ActivityEntity; // Entity type
+  entityId?: string;       // UUID of affected entity
+  taskId?: string;         // Human-readable task ID (e.g., "T1.1")
+  actorId: string;         // UUID of user who performed action
+  organizationId?: string; // UUID (for org-level activities)
+  projectId?: string;      // UUID (for project-level activities)
+  taskUuid?: string;       // UUID (for task-level activities)
+  metadata?: object;       // Additional context (JSON)
+  description?: string;    // Human-readable description
+  createdAt: string;       // ISO 8601 datetime
+  actor: {                 // Actor details
+    id: string;
+    email: string;
+    name: string;
+  };
+}
+
+type ActivityAction =
+  | 'member_invited'
+  | 'member_joined'
+  | 'member_removed'
+  | 'member_role_changed'
+  | 'task_created'
+  | 'task_updated'
+  | 'task_assigned'
+  | 'comment_created';
+
+type ActivityEntity =
+  | 'organization'
+  | 'member'
+  | 'invitation'
+  | 'project'
+  | 'task'
+  | 'comment';
+```
+
+### Pagination
+
+```typescript
+interface Pagination {
+  page?: number;           // Current page (1-indexed)
+  limit: number;           // Items per page
+  totalCount?: number;     // Total items
+  totalPages?: number;     // Total pages
+  hasNextPage?: boolean;   // More items available
+  hasPrevPage?: boolean;   // Previous items available
+  offset?: number;         // Items skipped (alternative to page)
+  total?: number;          // Total items (alternative to totalCount)
+  hasMore?: boolean;       // More items available (alternative)
+}
+```
+
 ### Error
 
 ```typescript

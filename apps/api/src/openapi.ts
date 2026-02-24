@@ -55,10 +55,12 @@ All endpoints return a consistent JSON structure:
     { name: 'Health', description: 'Health check endpoints' },
     { name: 'Auth', description: 'Authentication endpoints' },
     { name: 'API Tokens', description: 'API token management for MCP integration' },
+    { name: 'Organizations', description: 'Organization management (teams, members, invitations)' },
     { name: 'Projects', description: 'Project CRUD operations' },
     { name: 'Tasks', description: 'Task management endpoints' },
     { name: 'Notifications', description: 'User notification management' },
     { name: 'Mentions', description: '@mention parsing and user search for autocomplete' },
+    { name: 'Integrations', description: 'Third-party integrations (Slack, Discord, GitHub)' },
   ],
   components: {
     securitySchemes: {
@@ -309,6 +311,274 @@ All endpoints return a consistent JSON structure:
           offset: { type: 'integer' },
           hasMore: { type: 'boolean' },
         },
+      },
+
+      // Organization schemas
+      Organization: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          name: { type: 'string' },
+          slug: { type: 'string' },
+          description: { type: 'string', nullable: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+        required: ['id', 'name', 'slug', 'createdAt', 'updatedAt'],
+      },
+
+      OrganizationWithRole: {
+        allOf: [
+          { $ref: '#/components/schemas/Organization' },
+          {
+            type: 'object',
+            properties: {
+              role: { type: 'string', enum: ['owner', 'admin', 'editor', 'viewer'] },
+              memberCount: { type: 'integer' },
+            },
+          },
+        ],
+      },
+
+      CreateOrganizationRequest: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100, example: 'My Team' },
+          slug: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-z0-9-]+$', example: 'my-team' },
+          description: { type: 'string', maxLength: 500, nullable: true },
+        },
+        required: ['name', 'slug'],
+      },
+
+      UpdateOrganizationRequest: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100 },
+          description: { type: 'string', maxLength: 500, nullable: true },
+        },
+      },
+
+      OrganizationMember: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          email: { type: 'string', format: 'email' },
+          name: { type: 'string', nullable: true },
+          role: { type: 'string', enum: ['owner', 'admin', 'editor', 'viewer'] },
+          joinedAt: { type: 'string', format: 'date-time' },
+        },
+        required: ['id', 'email', 'role', 'joinedAt'],
+      },
+
+      UpdateMemberRoleRequest: {
+        type: 'object',
+        properties: {
+          role: { type: 'string', enum: ['admin', 'editor', 'viewer'] },
+        },
+        required: ['role'],
+      },
+
+      OrganizationInvitation: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          email: { type: 'string', format: 'email' },
+          role: { type: 'string', enum: ['admin', 'editor', 'viewer'] },
+          status: { type: 'string', enum: ['pending', 'accepted', 'declined', 'revoked'] },
+          expiresAt: { type: 'string', format: 'date-time' },
+          createdAt: { type: 'string', format: 'date-time' },
+          invitedBy: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              email: { type: 'string', format: 'email' },
+              name: { type: 'string', nullable: true },
+            },
+          },
+        },
+        required: ['id', 'email', 'role', 'status', 'expiresAt', 'createdAt'],
+      },
+
+      CreateInvitationRequest: {
+        type: 'object',
+        properties: {
+          email: { type: 'string', format: 'email', example: 'newmember@example.com' },
+          role: { type: 'string', enum: ['admin', 'editor', 'viewer'], default: 'editor' },
+        },
+        required: ['email'],
+      },
+
+      ActivityLogEntry: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          action: { type: 'string', enum: ['member_joined', 'member_removed', 'member_role_changed', 'invitation_sent', 'invitation_accepted', 'invitation_declined', 'invitation_revoked', 'project_created', 'project_deleted', 'task_created', 'task_updated', 'task_deleted', 'comment_added'] },
+          actorId: { type: 'string', format: 'uuid' },
+          targetId: { type: 'string', format: 'uuid', nullable: true },
+          targetType: { type: 'string', enum: ['user', 'project', 'task', 'invitation'], nullable: true },
+          metadata: { type: 'object', additionalProperties: true },
+          createdAt: { type: 'string', format: 'date-time' },
+          actor: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              email: { type: 'string', format: 'email' },
+              name: { type: 'string', nullable: true },
+            },
+          },
+        },
+        required: ['id', 'action', 'actorId', 'createdAt'],
+      },
+
+      // Integration schemas
+      Integration: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          organizationId: { type: 'string', format: 'uuid' },
+          type: { type: 'string', enum: ['slack', 'discord', 'github'] },
+          name: { type: 'string' },
+          config: { type: 'object', additionalProperties: true },
+          isActive: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+        required: ['id', 'organizationId', 'type', 'name', 'isActive', 'createdAt', 'updatedAt'],
+      },
+
+      CreateSlackIntegrationRequest: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100, example: 'Slack Notifications' },
+          webhookUrl: { type: 'string', format: 'uri', example: 'https://hooks.slack.com/services/xxx/yyy/zzz' },
+          channel: { type: 'string', example: '#planflow-updates' },
+          events: {
+            type: 'array',
+            items: { type: 'string', enum: ['task_created', 'task_updated', 'task_deleted', 'comment_added', 'member_joined'] },
+          },
+        },
+        required: ['name', 'webhookUrl'],
+      },
+
+      CreateDiscordIntegrationRequest: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100, example: 'Discord Notifications' },
+          webhookUrl: { type: 'string', format: 'uri', example: 'https://discord.com/api/webhooks/xxx/yyy' },
+          events: {
+            type: 'array',
+            items: { type: 'string', enum: ['task_created', 'task_updated', 'task_deleted', 'comment_added', 'member_joined'] },
+          },
+        },
+        required: ['name', 'webhookUrl'],
+      },
+
+      GitHubIntegrationStatus: {
+        type: 'object',
+        properties: {
+          connected: { type: 'boolean' },
+          username: { type: 'string', nullable: true },
+          scopes: { type: 'array', items: { type: 'string' } },
+          connectedAt: { type: 'string', format: 'date-time', nullable: true },
+        },
+        required: ['connected'],
+      },
+
+      GitHubRepo: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          name: { type: 'string' },
+          full_name: { type: 'string' },
+          description: { type: 'string', nullable: true },
+          html_url: { type: 'string', format: 'uri' },
+          private: { type: 'boolean' },
+          owner: {
+            type: 'object',
+            properties: {
+              login: { type: 'string' },
+              avatar_url: { type: 'string', format: 'uri' },
+            },
+          },
+        },
+      },
+
+      GitHubIssue: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          number: { type: 'integer' },
+          title: { type: 'string' },
+          body: { type: 'string', nullable: true },
+          state: { type: 'string', enum: ['open', 'closed'] },
+          html_url: { type: 'string', format: 'uri' },
+          created_at: { type: 'string', format: 'date-time' },
+          updated_at: { type: 'string', format: 'date-time' },
+          user: {
+            type: 'object',
+            properties: {
+              login: { type: 'string' },
+              avatar_url: { type: 'string', format: 'uri' },
+            },
+          },
+          labels: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                color: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+
+      GitHubPullRequest: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer' },
+          number: { type: 'integer' },
+          title: { type: 'string' },
+          body: { type: 'string', nullable: true },
+          state: { type: 'string', enum: ['open', 'closed', 'merged'] },
+          html_url: { type: 'string', format: 'uri' },
+          created_at: { type: 'string', format: 'date-time' },
+          updated_at: { type: 'string', format: 'date-time' },
+          merged_at: { type: 'string', format: 'date-time', nullable: true },
+          user: {
+            type: 'object',
+            properties: {
+              login: { type: 'string' },
+              avatar_url: { type: 'string', format: 'uri' },
+            },
+          },
+          head: {
+            type: 'object',
+            properties: {
+              ref: { type: 'string' },
+              sha: { type: 'string' },
+            },
+          },
+          base: {
+            type: 'object',
+            properties: {
+              ref: { type: 'string' },
+              sha: { type: 'string' },
+            },
+          },
+        },
+      },
+
+      CreateGitHubIssueRequest: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 256 },
+          body: { type: 'string', maxLength: 65536 },
+          labels: { type: 'array', items: { type: 'string' } },
+          assignees: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['title'],
       },
     },
   },
@@ -760,6 +1030,533 @@ All endpoints return a consistent JSON structure:
             description: 'Invalid, expired, or revoked token',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
           },
+        },
+      },
+    },
+
+    // Organization endpoints
+    '/organizations': {
+      get: {
+        tags: ['Organizations'],
+        summary: 'List organizations',
+        description: 'Get all organizations the authenticated user is a member of',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'List of organizations',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        organizations: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/OrganizationWithRole' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      post: {
+        tags: ['Organizations'],
+        summary: 'Create organization',
+        description: 'Create a new organization. The authenticated user becomes the owner.',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CreateOrganizationRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Organization created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        organization: { $ref: '#/components/schemas/Organization' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '409': { description: 'Slug already exists', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}': {
+      get: {
+        tags: ['Organizations'],
+        summary: 'Get organization',
+        description: 'Get details of a specific organization',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Organization details',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        organization: { $ref: '#/components/schemas/OrganizationWithRole' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      put: {
+        tags: ['Organizations'],
+        summary: 'Update organization',
+        description: 'Update organization details. Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/UpdateOrganizationRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Organization updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        organization: { $ref: '#/components/schemas/Organization' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      delete: {
+        tags: ['Organizations'],
+        summary: 'Delete organization',
+        description: 'Delete an organization and all its data. Requires owner role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Organization deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'Organization deleted successfully' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Only owner can delete organization', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/members': {
+      get: {
+        tags: ['Organizations'],
+        summary: 'List organization members',
+        description: 'Get all members of an organization',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'List of members',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        members: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/OrganizationMember' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/members/{memberId}': {
+      patch: {
+        tags: ['Organizations'],
+        summary: 'Update member role',
+        description: 'Update a member\'s role in the organization. Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'memberId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Member user ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/UpdateMemberRoleRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Member role updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        member: { $ref: '#/components/schemas/OrganizationMember' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error or cannot change owner role', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization or member not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      delete: {
+        tags: ['Organizations'],
+        summary: 'Remove member',
+        description: 'Remove a member from the organization. Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'memberId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Member user ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Member removed',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'Member removed successfully' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Cannot remove owner', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization or member not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/invitations': {
+      get: {
+        tags: ['Organizations'],
+        summary: 'List invitations',
+        description: 'Get all pending invitations for an organization',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'List of invitations',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        invitations: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/OrganizationInvitation' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      post: {
+        tags: ['Organizations'],
+        summary: 'Create invitation',
+        description: 'Invite a user to join the organization by email. Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CreateInvitationRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Invitation created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        invitation: { $ref: '#/components/schemas/OrganizationInvitation' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error or user already a member', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '409': { description: 'User already invited', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/invitations/{invitationId}': {
+      delete: {
+        tags: ['Organizations'],
+        summary: 'Revoke invitation',
+        description: 'Revoke a pending invitation. Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'invitationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Invitation ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Invitation revoked',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'Invitation revoked' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization or invitation not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/invitations/{token}/accept': {
+      post: {
+        tags: ['Organizations'],
+        summary: 'Accept invitation',
+        description: 'Accept an organization invitation using the invitation token',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'token', in: 'path', required: true, schema: { type: 'string' }, description: 'Invitation token' },
+        ],
+        responses: {
+          '200': {
+            description: 'Invitation accepted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        organization: { $ref: '#/components/schemas/Organization' },
+                        message: { type: 'string', example: 'Successfully joined organization' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid, expired, or already used invitation', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Invitation not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/invitations/{token}/decline': {
+      post: {
+        tags: ['Organizations'],
+        summary: 'Decline invitation',
+        description: 'Decline an organization invitation',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'token', in: 'path', required: true, schema: { type: 'string' }, description: 'Invitation token' },
+        ],
+        responses: {
+          '200': {
+            description: 'Invitation declined',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'Invitation declined' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid or already used invitation', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Invitation not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/activity': {
+      get: {
+        tags: ['Organizations'],
+        summary: 'Get activity log',
+        description: 'Get the activity log for an organization with pagination',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
+          { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+          { name: 'action', in: 'query', schema: { type: 'string' }, description: 'Filter by action type' },
+        ],
+        responses: {
+          '200': {
+            description: 'Activity log entries',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        activities: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/ActivityLogEntry' },
+                        },
+                        pagination: { $ref: '#/components/schemas/Pagination' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },
@@ -1637,6 +2434,677 @@ All endpoints return a consistent JSON structure:
           '400': { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
           '404': { description: 'Organization not found or access denied', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // Integration endpoints
+    '/organizations/{id}/integrations': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'List integrations',
+        description: 'Get all integrations configured for an organization',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'List of integrations',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        integrations: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/Integration' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      post: {
+        tags: ['Integrations'],
+        summary: 'Create integration',
+        description: 'Create a new integration (Slack or Discord webhook). Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                oneOf: [
+                  { $ref: '#/components/schemas/CreateSlackIntegrationRequest' },
+                  { $ref: '#/components/schemas/CreateDiscordIntegrationRequest' },
+                ],
+              },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Integration created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        integration: { $ref: '#/components/schemas/Integration' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/integrations/{integrationId}': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'Get integration',
+        description: 'Get details of a specific integration',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'integrationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Integration ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Integration details',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        integration: { $ref: '#/components/schemas/Integration' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization or integration not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      patch: {
+        tags: ['Integrations'],
+        summary: 'Update integration',
+        description: 'Update integration settings. Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'integrationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Integration ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', minLength: 1, maxLength: 100 },
+                  isActive: { type: 'boolean' },
+                  config: { type: 'object', additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Integration updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        integration: { $ref: '#/components/schemas/Integration' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization or integration not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      delete: {
+        tags: ['Integrations'],
+        summary: 'Delete integration',
+        description: 'Delete an integration. Requires owner or admin role.',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'integrationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Integration ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Integration deleted',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'Integration deleted successfully' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '403': { description: 'Insufficient permissions', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization or integration not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/organizations/{id}/integrations/{integrationId}/test': {
+      post: {
+        tags: ['Integrations'],
+        summary: 'Test integration',
+        description: 'Send a test message to verify the integration is working',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Organization ID' },
+          { name: 'integrationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Integration ID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Test message sent',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'Test message sent successfully' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Integration not active or test failed', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Organization or integration not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+
+    // GitHub Integration endpoints
+    '/integrations/github/config': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'Get GitHub OAuth config',
+        description: 'Get the GitHub OAuth client ID for initiating authorization',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'GitHub OAuth configuration',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        clientId: { type: 'string' },
+                        scopes: { type: 'array', items: { type: 'string' } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/status': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'Get GitHub connection status',
+        description: 'Check if the user has connected their GitHub account',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'GitHub connection status',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { $ref: '#/components/schemas/GitHubIntegrationStatus' },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/authorize': {
+      post: {
+        tags: ['Integrations'],
+        summary: 'Start GitHub OAuth flow',
+        description: 'Generate a state token and authorization URL for GitHub OAuth',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Authorization URL generated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        authorizationUrl: { type: 'string', format: 'uri' },
+                        state: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/callback': {
+      post: {
+        tags: ['Integrations'],
+        summary: 'Complete GitHub OAuth',
+        description: 'Exchange the OAuth code for an access token',
+        security: [{ BearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', description: 'OAuth authorization code' },
+                  state: { type: 'string', description: 'State token from authorize endpoint' },
+                },
+                required: ['code', 'state'],
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'GitHub account connected',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        username: { type: 'string' },
+                        message: { type: 'string', example: 'GitHub account connected' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Invalid code or state', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/disconnect': {
+      post: {
+        tags: ['Integrations'],
+        summary: 'Disconnect GitHub',
+        description: 'Disconnect the GitHub account from the user',
+        security: [{ BearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'GitHub account disconnected',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'GitHub account disconnected' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'No GitHub account connected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/repos': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'List GitHub repositories',
+        description: 'List repositories accessible to the connected GitHub account',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'per_page', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 30 } },
+          { name: 'sort', in: 'query', schema: { type: 'string', enum: ['created', 'updated', 'pushed', 'full_name'], default: 'updated' } },
+        ],
+        responses: {
+          '200': {
+            description: 'List of repositories',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        repos: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/GitHubRepo' },
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            page: { type: 'integer' },
+                            perPage: { type: 'integer' },
+                            hasMore: { type: 'boolean' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'GitHub not connected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/repos/{owner}/{repo}/issues': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'List repository issues',
+        description: 'List issues for a specific repository',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'owner', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository owner' },
+          { name: 'repo', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository name' },
+          { name: 'state', in: 'query', schema: { type: 'string', enum: ['open', 'closed', 'all'], default: 'open' } },
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'per_page', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 30 } },
+        ],
+        responses: {
+          '200': {
+            description: 'List of issues',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        issues: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/GitHubIssue' },
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            page: { type: 'integer' },
+                            perPage: { type: 'integer' },
+                            hasMore: { type: 'boolean' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'GitHub not connected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Repository not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+      post: {
+        tags: ['Integrations'],
+        summary: 'Create issue',
+        description: 'Create a new issue in a repository',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'owner', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository owner' },
+          { name: 'repo', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository name' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CreateGitHubIssueRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Issue created',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        issue: { $ref: '#/components/schemas/GitHubIssue' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation error or GitHub not connected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Repository not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/repos/{owner}/{repo}/issues/{issueNumber}': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'Get issue',
+        description: 'Get details of a specific issue',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'owner', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository owner' },
+          { name: 'repo', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository name' },
+          { name: 'issueNumber', in: 'path', required: true, schema: { type: 'integer' }, description: 'Issue number' },
+        ],
+        responses: {
+          '200': {
+            description: 'Issue details',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        issue: { $ref: '#/components/schemas/GitHubIssue' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'GitHub not connected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Issue or repository not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/repos/{owner}/{repo}/pulls': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'List pull requests',
+        description: 'List pull requests for a specific repository',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'owner', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository owner' },
+          { name: 'repo', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository name' },
+          { name: 'state', in: 'query', schema: { type: 'string', enum: ['open', 'closed', 'all'], default: 'open' } },
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'per_page', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 30 } },
+        ],
+        responses: {
+          '200': {
+            description: 'List of pull requests',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        pullRequests: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/GitHubPullRequest' },
+                        },
+                        pagination: {
+                          type: 'object',
+                          properties: {
+                            page: { type: 'integer' },
+                            perPage: { type: 'integer' },
+                            hasMore: { type: 'boolean' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'GitHub not connected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Repository not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+        },
+      },
+    },
+    '/integrations/github/repos/{owner}/{repo}/pulls/{prNumber}': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'Get pull request',
+        description: 'Get details of a specific pull request',
+        security: [{ BearerAuth: [] }],
+        parameters: [
+          { name: 'owner', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository owner' },
+          { name: 'repo', in: 'path', required: true, schema: { type: 'string' }, description: 'Repository name' },
+          { name: 'prNumber', in: 'path', required: true, schema: { type: 'integer' }, description: 'Pull request number' },
+        ],
+        responses: {
+          '200': {
+            description: 'Pull request details',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        pullRequest: { $ref: '#/components/schemas/GitHubPullRequest' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'GitHub not connected', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '401': { description: 'Not authenticated', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          '404': { description: 'Pull request or repository not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
         },
       },
     },

@@ -148,17 +148,19 @@ export default function OAuthCallbackPage() {
     // Mark as processing to prevent duplicate calls
     hasProcessedRef.current = true
 
-    // Extract provider from state (format: "provider:randomState")
-    const stateParts = stateParam.split(':')
-    const extractedProvider = stateParts[0] as OAuthProvider
-    if (extractedProvider === 'github' || extractedProvider === 'google') {
-      setProvider(extractedProvider)
-    }
+    // Determine provider - use URL param (from redirect) or default to github
+    // Note: state is just a random hex string, not "provider:state" format
+    const finalProvider: OAuthProvider =
+      (providerParam === 'github' || providerParam === 'google')
+        ? providerParam
+        : 'github'
+
+    setProvider(finalProvider)
 
     // Exchange code for token
     async function completeAuthorization() {
       try {
-        const result = await completeOAuthFlow(extractedProvider || 'github', code!, stateParam!)
+        const result = await completeOAuthFlow(finalProvider, code!, stateParam!)
 
         setUserName(result.user.name || result.user.email)
         setIsNewUser(result.isNewUser)
@@ -167,7 +169,7 @@ export default function OAuthCallbackPage() {
 
         // Track login/signup event (only for new logins, not account linking)
         if (!result.isLinkedAccount) {
-          trackLogin(result.user.id, result.user.email, extractedProvider || 'github')
+          trackLogin(result.user.id, result.user.email, finalProvider)
         }
 
         // Redirect after a short delay
@@ -183,7 +185,7 @@ export default function OAuthCallbackPage() {
       } catch (err) {
         setState('error')
         // Get formatted error message based on error type (T18.10)
-        const errorDetails = getErrorMessage(err, extractedProvider === 'github' ? 'GitHub' : 'Google')
+        const errorDetails = getErrorMessage(err, finalProvider === 'github' ? 'GitHub' : 'Google')
         setErrorInfo(errorDetails)
       }
     }

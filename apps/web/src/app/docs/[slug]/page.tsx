@@ -56,6 +56,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
+// Generate slug from text
+function generateSlug(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+}
+
 // Map markdown file links to Next.js routes
 function transformLinks(content: string): string {
   return content
@@ -146,18 +151,26 @@ export default async function DocPage({ params }: PageProps) {
             }
             return <code className={className} {...props}>{children}</code>
           },
-          h1: ({ children }) => (
-            <h1 className="text-3xl font-bold mt-8 mb-4 first:mt-0">{children}</h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="text-2xl font-semibold mt-8 mb-4 pb-2 border-b">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-xl font-semibold mt-6 mb-3">{children}</h3>
-          ),
-          h4: ({ children }) => (
-            <h4 className="text-lg font-semibold mt-4 mb-2">{children}</h4>
-          ),
+          h1: ({ children }) => {
+            const text = String(children)
+            const id = generateSlug(text)
+            return <h1 id={id} className="text-3xl font-bold mt-8 mb-4 first:mt-0 scroll-mt-4">{children}</h1>
+          },
+          h2: ({ children }) => {
+            const text = String(children)
+            const id = generateSlug(text)
+            return <h2 id={id} className="text-2xl font-semibold mt-8 mb-4 pb-2 border-b scroll-mt-4">{children}</h2>
+          },
+          h3: ({ children }) => {
+            const text = String(children)
+            const id = generateSlug(text)
+            return <h3 id={id} className="text-xl font-semibold mt-6 mb-3 scroll-mt-4">{children}</h3>
+          },
+          h4: ({ children }) => {
+            const text = String(children)
+            const id = generateSlug(text)
+            return <h4 id={id} className="text-lg font-semibold mt-4 mb-2 scroll-mt-4">{children}</h4>
+          },
           blockquote: ({ children }) => (
             <blockquote className="border-l-4 border-primary pl-4 italic my-4">{children}</blockquote>
           ),

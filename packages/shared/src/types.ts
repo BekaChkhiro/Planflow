@@ -114,6 +114,7 @@ export const CreateProjectRequestSchema = z.object({
     .max(2000, 'Description must be at most 2000 characters')
     .optional(),
   plan: z.string().optional(),
+  organizationId: z.string().uuid('Invalid organization ID'),
 })
 
 export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>

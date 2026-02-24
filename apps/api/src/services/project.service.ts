@@ -26,6 +26,7 @@ export interface CreateProjectInput {
   name: string
   description?: string | null
   plan?: string | null
+  organizationId: string
 }
 
 export interface UpdateProjectInput {
@@ -166,7 +167,7 @@ export class ProjectService {
       throw new AuthorizationError(limitCheck.reason || 'Project limit reached')
     }
 
-    const { name, description, plan } = input
+    const { name, description, plan, organizationId } = input
 
     const [newProject] = await this.db
       .insert(schema.projects)
@@ -175,6 +176,7 @@ export class ProjectService {
         description: description ?? null,
         plan: plan ?? null,
         userId,
+        organizationId,
       })
       .returning({
         id: schema.projects.id,

@@ -20,8 +20,10 @@ import {
   type ArchiveFilter,
 } from '@/hooks/use-projects'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { useOrganizationContext } from '@/hooks/use-organization-context'
 import { Input } from '@/components/ui/input'
 import { useProjectAnalytics } from '@/hooks/use-analytics'
+import { OrganizationSelector } from '@/components/organization-selector'
 import { CreateProjectRequestSchema, type CreateProjectRequest, type ProjectLimits } from '@planflow/shared'
 import { UpgradePrompt, ProjectLimitBadge } from '@/components/upgrade-prompt'
 import { Button } from '@/components/ui/button'
@@ -185,9 +187,11 @@ function ProjectsEmptyState({
 function CreateProjectDialog({
   open,
   onOpenChange,
+  organizationId,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  organizationId: string | null
 }) {
   const router = useRouter()
   const createProject = useCreateProject()
@@ -195,8 +199,8 @@ function CreateProjectDialog({
   const [apiError, setApiError] = useState<string | null>(null)
   const [isLimitError, setIsLimitError] = useState(false)
 
-  const form = useForm<CreateProjectRequest>({
-    resolver: zodResolver(CreateProjectRequestSchema),
+  const form = useForm<Omit<CreateProjectRequest, 'organizationId'>>({
+    resolver: zodResolver(CreateProjectRequestSchema.omit({ organizationId: true })),
     mode: 'onTouched', // Enable real-time validation after field is touched
     defaultValues: {
       name: '',
@@ -204,13 +208,18 @@ function CreateProjectDialog({
     },
   })
 
-  const onSubmit = async (data: CreateProjectRequest) => {
+  const onSubmit = async (data: Omit<CreateProjectRequest, 'organizationId'>) => {
+    if (!organizationId) {
+      setApiError('No organization selected')
+      return
+    }
     setApiError(null)
     setIsLimitError(false)
     try {
       const project = await createProject.mutateAsync({
         name: data.name,
         description: data.description || undefined,
+        organizationId,
       })
       // Track project creation
       trackProjectCreated(project.id, project.name)
@@ -348,10 +357,12 @@ function ProjectCard({
   project,
   onArchive,
   onRestore,
+  canManage,
 }: {
   project: Project
   onArchive: (id: string, name: string) => void
   onRestore: (id: string, name: string) => void
+  canManage: boolean  // true for owner/admin
 }) {
   const [showArchiveDialog, setShowArchiveDialog] = useState(false)
   const isArchived = !!project.archivedAt
@@ -388,7 +399,7 @@ function ProjectCard({
                     <Link href={`/dashboard/projects/${project.id}/settings`}>Settings</Link>
                   </DropdownMenuItem>
                 )}
-                {isArchived ? (
+                {canManage && (isArchived ? (
                   <DropdownMenuItem
                     className="text-green-600 focus:bg-green-50 focus:text-green-600"
                     onClick={() => onRestore(project.id, project.name)}
@@ -404,7 +415,7 @@ function ProjectCard({
                     <Archive className="mr-2 h-4 w-4" />
                     Archive
                   </DropdownMenuItem>
-                )}
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -461,6 +472,9 @@ export default function ProjectsPage() {
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('active')
   const debouncedSearch = useDebouncedValue(searchQuery, 300)
 
+  // Organization context
+  const { currentOrganizationId, isLoading: orgLoading, canEdit, canDelete } = useOrganizationContext()
+
   const {
     data,
     isLoading,
@@ -469,7 +483,12 @@ export default function ProjectsPage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useProjectsInfinite({ search: debouncedSearch, pageSize: PROJECTS_PAGE_SIZE, archived: archiveFilter })
+  } = useProjectsInfinite({
+    organizationId: currentOrganizationId,
+    search: debouncedSearch,
+    pageSize: PROJECTS_PAGE_SIZE,
+    archived: archiveFilter
+  })
   const archiveProject = useArchiveProject()
   const restoreProject = useRestoreProject()
   const { trackProjectDeleted } = useProjectAnalytics()
@@ -504,7 +523,7 @@ export default function ProjectsPage() {
     }
   }
 
-  const canCreate = limits ? limits.canCreate : true
+  const canCreate = limits ? limits.canCreate && canEdit : canEdit
   const showUpgradePrompt = limits && isAtProjectLimit(limits)
 
   return (
@@ -521,10 +540,13 @@ export default function ProjectsPage() {
             </div>
             {limits && <ProjectLimitBadge limits={limits} />}
           </div>
-          <Button onClick={() => setShowCreateDialog(true)} disabled={!canCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Project
-          </Button>
+          <div className="flex items-center gap-3">
+            <OrganizationSelector />
+            <Button onClick={() => setShowCreateDialog(true)} disabled={!canCreate || !currentOrganizationId}>
+              <Plus className="mr-2 h-4 w-4" />
+              New Project
+            </Button>
+          </div>
         </div>
 
         {/* Search and Filter */}
@@ -573,7 +595,7 @@ export default function ProjectsPage() {
       {showUpgradePrompt && limits && <UpgradePrompt limits={limits} />}
 
       {/* Content */}
-      {isLoading ? (
+      {isLoading || orgLoading ? (
         <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <ProjectCardSkeleton />
           <ProjectCardSkeleton />
@@ -590,6 +612,7 @@ export default function ProjectsPage() {
                 project={project}
                 onArchive={handleArchive}
                 onRestore={handleRestore}
+                canManage={canDelete}
               />
             ))}
           </div>
@@ -640,7 +663,11 @@ export default function ProjectsPage() {
       )}
 
       {/* Create Project Modal */}
-      <CreateProjectDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
+      <CreateProjectDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        organizationId={currentOrganizationId}
+      />
     </div>
   )
 }

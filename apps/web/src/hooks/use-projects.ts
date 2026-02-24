@@ -39,6 +39,7 @@ interface CreateProjectData {
   name: string
   description?: string
   plan?: string
+  organizationId: string
 }
 
 interface CreateProjectResponse {
@@ -105,6 +106,7 @@ export type ArchiveFilter = 'active' | 'archived' | 'all'
 
 // Search options for projects
 export interface UseProjectsOptions {
+  organizationId?: string | null
   search?: string
   limit?: number
   archived?: ArchiveFilter
@@ -112,14 +114,15 @@ export interface UseProjectsOptions {
 
 // Standard query for getting all projects with optional search and archive filter
 export function useProjects(options: UseProjectsOptions = {}) {
-  const { search, limit = 100, archived = 'active' } = options
+  const { organizationId, search, limit = 100, archived = 'active' } = options
 
   return useQuery({
-    queryKey: search
-      ? [...projectsQueryKey, { search, archived }]
+    queryKey: organizationId
+      ? [...projectsQueryKey, { organizationId, search, archived }]
       : [...projectsQueryKey, { archived }],
     queryFn: async () => {
       const params = new URLSearchParams()
+      if (organizationId) params.set('organizationId', organizationId)
       params.set('limit', String(limit))
       params.set('archived', archived)
       if (search?.trim()) {
@@ -134,25 +137,28 @@ export function useProjects(options: UseProjectsOptions = {}) {
         pagination: response.data.pagination,
       }
     },
+    enabled: !!organizationId,  // Only run query when organizationId is available
   })
 }
 
 // Infinite query for paginated projects with "Load More" support, search, and archive filter
 export interface UseProjectsInfiniteOptions {
+  organizationId?: string | null
   search?: string
   pageSize?: number
   archived?: ArchiveFilter
 }
 
 export function useProjectsInfinite(options: UseProjectsInfiniteOptions = {}) {
-  const { search, pageSize = PROJECTS_PAGE_SIZE, archived = 'active' } = options
+  const { organizationId, search, pageSize = PROJECTS_PAGE_SIZE, archived = 'active' } = options
 
   return useInfiniteQuery({
-    queryKey: search
-      ? [...projectsQueryKey, 'infinite', pageSize, { search, archived }]
+    queryKey: organizationId
+      ? [...projectsQueryKey, 'infinite', pageSize, { organizationId, search, archived }]
       : [...projectsQueryKey, 'infinite', pageSize, { archived }],
     queryFn: async ({ pageParam = 1 }) => {
       const params = new URLSearchParams()
+      if (organizationId) params.set('organizationId', organizationId)
       params.set('page', String(pageParam))
       params.set('limit', String(pageSize))
       params.set('archived', archived)
@@ -181,6 +187,7 @@ export function useProjectsInfinite(options: UseProjectsInfiniteOptions = {}) {
       }
       return undefined
     },
+    enabled: !!organizationId,  // Only run query when organizationId is available
   })
 }
 

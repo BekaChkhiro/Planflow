@@ -59,6 +59,15 @@ export default function DocsLayout({
       if (currentPage && 'slug' in currentPage) {
         setExpandedPages(new Set([pathname]))
       }
+
+      // Set initial active section from URL hash or first section
+      const hash = window.location.hash.slice(1)
+      const h2Items = items.filter(t => t.level === 2)
+      if (hash && h2Items.some(t => t.id === hash)) {
+        setActiveSection(hash)
+      } else if (h2Items.length > 0) {
+        setActiveSection(h2Items[0]!.id)
+      }
     }
 
     // Wait for content to render
@@ -67,18 +76,21 @@ export default function DocsLayout({
 
   // Track active section on scroll
   useEffect(() => {
+    if (toc.length === 0) return
+
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id)
-          }
-        })
+        // Find the first intersecting entry
+        const intersecting = entries.find(entry => entry.isIntersecting)
+        if (intersecting) {
+          setActiveSection(intersecting.target.id)
+        }
       },
-      { rootMargin: '-100px 0px -80% 0px' }
+      { rootMargin: '-80px 0px -70% 0px', threshold: 0 }
     )
 
-    const headings = document.querySelectorAll('article h2, article h3')
+    // Only observe h2 elements for active tracking
+    const headings = document.querySelectorAll('article h2')
     headings.forEach((heading) => observer.observe(heading))
 
     return () => observer.disconnect()
@@ -99,6 +111,8 @@ export default function DocsLayout({
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id)
     if (element) {
+      // Immediately set active section
+      setActiveSection(id)
       element.scrollIntoView({ behavior: 'smooth', block: 'start' })
       // Update URL with hash
       window.history.pushState(null, '', `${pathname}#${id}`)

@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, uuid, boolean, index } from 'drizzle-orm/pg-core'
 import { users } from './users'
+import { organizations } from './organizations'
 
 export const projects = pgTable('projects', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -8,6 +9,9 @@ export const projects = pgTable('projects', {
   userId: uuid('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
   plan: text('plan'), // Markdown content of PROJECT_PLAN.md
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -26,6 +30,8 @@ export const projects = pgTable('projects', {
 }, (table) => ({
   // Index for finding projects by repository
   githubRepositoryIdx: index('projects_github_repository_idx').on(table.githubRepository),
+  // Index for finding projects by organization
+  organizationIdIdx: index('projects_organization_id_idx').on(table.organizationId),
 }))
 
 export type Project = typeof projects.$inferSelect

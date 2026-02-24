@@ -42,7 +42,30 @@ const projectRoutes = new Hono()
 // Project Routes
 // ============================================
 
-// List all projects for the authenticated user (with pagination, search, and archive filter)
+// Helper to check user's membership and role in an organization
+async function getOrganizationMembership(db: ReturnType<typeof getDbClient>, organizationId: string, userId: string) {
+  const [membership] = await db
+    .select({ role: schema.organizationMembers.role })
+    .from(schema.organizationMembers)
+    .where(and(
+      eq(schema.organizationMembers.organizationId, organizationId),
+      eq(schema.organizationMembers.userId, userId)
+    ))
+    .limit(1)
+  return membership
+}
+
+// Helper to check if role can edit (owner, admin, editor)
+function canEdit(role: string | undefined): boolean {
+  return role === 'owner' || role === 'admin' || role === 'editor'
+}
+
+// Helper to check if role can delete (owner, admin)
+function canDelete(role: string | undefined): boolean {
+  return role === 'owner' || role === 'admin'
+}
+
+// List all projects for an organization (with pagination, search, and archive filter)
 projectRoutes.get('/', auth, async (c) => {
   try {
     const { user } = getAuth(c)
@@ -54,13 +77,31 @@ projectRoutes.get('/', auth, async (c) => {
     const searchParam = c.req.query('search')?.trim()
     // Archive filter: 'active' (default), 'archived', or 'all'
     const archiveFilter = c.req.query('archived') || 'active'
+    // Organization ID is required
+    const organizationId = c.req.query('organizationId')
+
+    if (!organizationId) {
+      return c.json({ success: false, error: 'organizationId is required' }, 400)
+    }
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(organizationId)) {
+      return c.json({ success: false, error: 'Invalid organization ID format' }, 400)
+    }
+
+    // Check if user is a member of the organization
+    const membership = await getOrganizationMembership(db, organizationId, user.id)
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
 
     const page = Math.max(1, parseInt(pageParam || '1', 10) || 1)
     const limit = Math.min(100, Math.max(1, parseInt(limitParam || '20', 10) || 20))
     const offset = (page - 1) * limit
 
-    // Build where clause with user, search, and archive filter
-    const conditions = [eq(schema.projects.userId, user.id)]
+    // Build where clause with organization, search, and archive filter
+    const conditions = [eq(schema.projects.organizationId, organizationId)]
 
     // Add archive filter condition
     if (archiveFilter === 'active') {
@@ -109,11 +150,11 @@ projectRoutes.get('/', auth, async (c) => {
     // Get project limits for the user
     const limits = await getProjectLimits(user.id)
 
-    // Also get count of archived projects for UI display
+    // Also get count of archived projects for UI display (for this organization)
     const archivedCountResult = await db
       .select({ count: count() })
       .from(schema.projects)
-      .where(and(eq(schema.projects.userId, user.id), isNotNull(schema.projects.archivedAt)))
+      .where(and(eq(schema.projects.organizationId, organizationId), isNotNull(schema.projects.archivedAt)))
     const archivedCount = archivedCountResult[0]?.count ?? 0
 
     // Calculate pagination metadata
@@ -147,6 +188,7 @@ projectRoutes.get('/', auth, async (c) => {
 projectRoutes.post('/', auth, async (c) => {
   try {
     const { user } = getAuth(c)
+    const db = getDbClient()
 
     const body = await c.req.json()
     const validation = CreateProjectRequestSchema.safeParse(body)
@@ -160,6 +202,18 @@ projectRoutes.post('/', auth, async (c) => {
         },
         400
       )
+    }
+
+    const { name, description, plan, organizationId } = validation.data
+
+    // Check if user is a member of the organization with editor+ role
+    const membership = await getOrganizationMembership(db, organizationId, user.id)
+    if (!membership) {
+      return c.json({ success: false, error: 'Organization not found' }, 404)
+    }
+
+    if (!canEdit(membership.role)) {
+      return c.json({ success: false, error: 'Viewers cannot create projects' }, 403)
     }
 
     // Check project limits before creating
@@ -182,9 +236,6 @@ projectRoutes.post('/', auth, async (c) => {
       )
     }
 
-    const { name, description, plan } = validation.data
-    const db = getDbClient()
-
     const [newProject] = await db
       .insert(schema.projects)
       .values({
@@ -192,6 +243,7 @@ projectRoutes.post('/', auth, async (c) => {
         description: description ?? null,
         plan: plan ?? null,
         userId: user.id,
+        organizationId,
       })
       .returning({
         id: schema.projects.id,
@@ -212,6 +264,37 @@ projectRoutes.post('/', auth, async (c) => {
   }
 })
 
+// Helper to get a project with membership verification
+async function getProjectWithAccess(
+  db: ReturnType<typeof getDbClient>,
+  projectId: string,
+  userId: string
+) {
+  const [result] = await db
+    .select({
+      id: schema.projects.id,
+      name: schema.projects.name,
+      description: schema.projects.description,
+      plan: schema.projects.plan,
+      createdAt: schema.projects.createdAt,
+      updatedAt: schema.projects.updatedAt,
+      archivedAt: schema.projects.archivedAt,
+      organizationId: schema.projects.organizationId,
+      memberRole: schema.organizationMembers.role,
+    })
+    .from(schema.projects)
+    .innerJoin(
+      schema.organizationMembers,
+      and(
+        eq(schema.organizationMembers.organizationId, schema.projects.organizationId),
+        eq(schema.organizationMembers.userId, userId)
+      )
+    )
+    .where(eq(schema.projects.id, projectId))
+    .limit(1)
+  return result
+}
+
 // GET /projects/:id - Get a single project
 projectRoutes.get('/:id', auth, async (c) => {
   try {
@@ -226,26 +309,16 @@ projectRoutes.get('/:id', auth, async (c) => {
 
     const db = getDbClient()
 
-    // Check if project exists and belongs to user
-    const [project] = await db
-      .select({
-        id: schema.projects.id,
-        name: schema.projects.name,
-        description: schema.projects.description,
-        plan: schema.projects.plan,
-        createdAt: schema.projects.createdAt,
-        updatedAt: schema.projects.updatedAt,
-        archivedAt: schema.projects.archivedAt,
-      })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-      .limit(1)
+    // Check if project exists and user is a member of its organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
 
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
 
-    return c.json({ success: true, data: { project } })
+    // Return project without internal fields
+    const { memberRole, ...projectData } = project
+    return c.json({ success: true, data: { project: projectData, memberRole } })
   } catch (error) {
     console.error('Get project error:', error)
     return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
@@ -293,6 +366,16 @@ projectRoutes.put('/:id', auth, async (c) => {
 
     const db = getDbClient()
 
+    // Check if project exists and user has edit access
+    const project = await getProjectWithAccess(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
+    }
+
     // Build update object with only provided fields
     const updateData: Record<string, unknown> = {
       updatedAt: new Date(),
@@ -304,7 +387,7 @@ projectRoutes.put('/:id', auth, async (c) => {
     const [updatedProject] = await db
       .update(schema.projects)
       .set(updateData)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .where(eq(schema.projects.id, projectId))
       .returning({
         id: schema.projects.id,
         name: schema.projects.name,
@@ -314,10 +397,6 @@ projectRoutes.put('/:id', auth, async (c) => {
         updatedAt: schema.projects.updatedAt,
         archivedAt: schema.projects.archivedAt,
       })
-
-    if (!updatedProject) {
-      return c.json({ success: false, error: 'Project not found' }, 404)
-    }
 
     return c.json({ success: true, data: { project: updatedProject } })
   } catch (error) {
@@ -342,18 +421,19 @@ projectRoutes.delete('/:id', auth, async (c) => {
 
     const db = getDbClient()
 
+    // Check if project exists and user has access
+    const project = await getProjectWithAccess(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Only owners and admins can delete/archive projects
+    if (!canDelete(project.memberRole)) {
+      return c.json({ success: false, error: 'Only owners and admins can delete projects' }, 403)
+    }
+
     if (permanent) {
       // Permanent delete - only allow for already archived projects
-      const [project] = await db
-        .select({ id: schema.projects.id, archivedAt: schema.projects.archivedAt })
-        .from(schema.projects)
-        .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-        .limit(1)
-
-      if (!project) {
-        return c.json({ success: false, error: 'Project not found' }, 404)
-      }
-
       if (!project.archivedAt) {
         return c.json(
           { success: false, error: 'Project must be archived before permanent deletion' },
@@ -363,7 +443,7 @@ projectRoutes.delete('/:id', auth, async (c) => {
 
       await db
         .delete(schema.projects)
-        .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+        .where(eq(schema.projects.id, projectId))
 
       return c.json({ success: true, data: { message: 'Project permanently deleted' } })
     }
@@ -372,16 +452,12 @@ projectRoutes.delete('/:id', auth, async (c) => {
     const [archivedProject] = await db
       .update(schema.projects)
       .set({ archivedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .where(eq(schema.projects.id, projectId))
       .returning({
         id: schema.projects.id,
         name: schema.projects.name,
         archivedAt: schema.projects.archivedAt,
       })
-
-    if (!archivedProject) {
-      return c.json({ success: false, error: 'Project not found' }, 404)
-    }
 
     return c.json({
       success: true,
@@ -407,15 +483,15 @@ projectRoutes.post('/:id/restore', auth, async (c) => {
 
     const db = getDbClient()
 
-    // Check if project exists and is archived
-    const [project] = await db
-      .select({ id: schema.projects.id, archivedAt: schema.projects.archivedAt })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-      .limit(1)
-
+    // Check if project exists and user has access
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Only owners and admins can restore projects
+    if (!canDelete(project.memberRole)) {
+      return c.json({ success: false, error: 'Only owners and admins can restore projects' }, 403)
     }
 
     if (!project.archivedAt) {
@@ -426,7 +502,7 @@ projectRoutes.post('/:id/restore', auth, async (c) => {
     const [restoredProject] = await db
       .update(schema.projects)
       .set({ archivedAt: null, updatedAt: new Date() })
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .where(eq(schema.projects.id, projectId))
       .returning({
         id: schema.projects.id,
         name: schema.projects.name,
@@ -461,15 +537,8 @@ projectRoutes.get('/:id/plan', auth, async (c) => {
 
     const db = getDbClient()
 
-    const [project] = await db
-      .select({
-        id: schema.projects.id,
-        name: schema.projects.name,
-        plan: schema.projects.plan,
-        updatedAt: schema.projects.updatedAt,
-      })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+    // Check if project exists and user has access
+    const project = await getProjectWithAccess(db, projectId, user.id)
 
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
@@ -519,6 +588,16 @@ projectRoutes.put('/:id/plan', largeBodyLimit, auth, async (c) => {
 
     const db = getDbClient()
 
+    // Check if project exists and user has edit access
+    const projectAccess = await getProjectWithAccess(db, projectId, user.id)
+    if (!projectAccess) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    if (!canEdit(projectAccess.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
+    }
+
     // Parse tasks from plan content first (before any DB operations)
     let parsedTasks: ReturnType<typeof parsePlanTasks> = []
     let tasksCount = 0
@@ -544,7 +623,7 @@ projectRoutes.put('/:id/plan', largeBodyLimit, auth, async (c) => {
           plan: body.plan,
           updatedAt: new Date(),
         })
-        .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+        .where(eq(schema.projects.id, projectId))
         .returning({
           id: schema.projects.id,
           name: schema.projects.name,
@@ -641,12 +720,8 @@ projectRoutes.get('/:id/tasks', auth, async (c) => {
 
     const db = getDbClient()
 
-    // First verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // First verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -673,7 +748,7 @@ projectRoutes.get('/:id/tasks', auth, async (c) => {
       )
       if (validStatuses.length > 0) {
         if (validStatuses.length === 1) {
-          conditions.push(eq(schema.tasks.status, validStatuses[0]))
+          conditions.push(eq(schema.tasks.status, validStatuses[0]!))
         } else {
           conditions.push(
             or(...validStatuses.map(s => eq(schema.tasks.status, s)))!
@@ -690,7 +765,7 @@ projectRoutes.get('/:id/tasks', auth, async (c) => {
       )
       if (validComplexities.length > 0) {
         if (validComplexities.length === 1) {
-          conditions.push(eq(schema.tasks.complexity, validComplexities[0]))
+          conditions.push(eq(schema.tasks.complexity, validComplexities[0]!))
         } else {
           conditions.push(
             or(...validComplexities.map(c => eq(schema.tasks.complexity, c)))!
@@ -831,14 +906,15 @@ projectRoutes.put('/:id/tasks', auth, async (c) => {
     const { tasks: taskUpdates } = validation.data
     const db = getDbClient()
 
-    // First verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // First verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Verify all task IDs belong to this project
@@ -991,14 +1067,15 @@ projectRoutes.patch('/:id/tasks/:taskId', auth, async (c) => {
 
     const db = getDbClient()
 
-    // Verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Find the task by taskId (e.g., T1.1)
@@ -1157,14 +1234,15 @@ projectRoutes.post('/:id/tasks/:taskId/duplicate', auth, async (c) => {
 
     const db = getDbClient()
 
-    // Verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Find the original task by taskId
@@ -1534,14 +1612,15 @@ projectRoutes.post('/:id/tasks/reorder', auth, async (c) => {
 
     const db = getDbClient()
 
-    // Verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Update each task's displayOrder (and optionally status for cross-column moves)
@@ -1654,14 +1733,15 @@ projectRoutes.post('/:id/tasks/bulk-status', auth, async (c) => {
     const { taskIds, status } = validation.data
     const db = getDbClient()
 
-    // Verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Verify all task IDs belong to this project
@@ -1784,14 +1864,15 @@ projectRoutes.post('/:id/tasks/bulk-assign', auth, async (c) => {
     const { taskIds, assigneeId } = validation.data
     const db = getDbClient()
 
-    // Verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // If assigneeId is provided, verify the user exists
@@ -1940,14 +2021,15 @@ projectRoutes.post('/:id/tasks/bulk-delete', auth, async (c) => {
     const { taskIds } = validation.data
     const db = getDbClient()
 
-    // Verify the project exists and belongs to the user
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has delete permissions
+    if (!canDelete(project.memberRole)) {
+      return c.json({ success: false, error: 'Only owners and admins can delete tasks' }, 403)
     }
 
     // Get tasks to be deleted (for response and validation)
@@ -2047,12 +2129,8 @@ projectRoutes.get('/:id/tasks/:taskId/github-link', jwtAuth, async (c) => {
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -2140,14 +2218,15 @@ projectRoutes.post('/:id/tasks/:taskId/link-github', jwtAuth, async (c) => {
       return c.json({ success: false, error: 'Repository must be in format "owner/repo"' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Find the task
@@ -2250,14 +2329,15 @@ projectRoutes.delete('/:id/tasks/:taskId/link-github', jwtAuth, async (c) => {
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Find the task
@@ -2340,14 +2420,15 @@ projectRoutes.post('/:id/tasks/:taskId/create-github-issue', jwtAuth, async (c) 
       return c.json({ success: false, error: 'Repository must be in format "owner/repo"' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id, name: schema.projects.name })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Get the task
@@ -2478,12 +2559,8 @@ projectRoutes.post('/:id/tasks/:taskId/sync-github-issue', jwtAuth, async (c) =>
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -2592,12 +2669,8 @@ projectRoutes.get('/:id/tasks/:taskId/github-pr', jwtAuth, async (c) => {
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -2693,14 +2766,15 @@ projectRoutes.post('/:id/tasks/:taskId/link-github-pr', jwtAuth, async (c) => {
       return c.json({ success: false, error: 'Repository must be in format "owner/repo"' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Find the task
@@ -2825,14 +2899,15 @@ projectRoutes.delete('/:id/tasks/:taskId/link-github-pr', jwtAuth, async (c) => 
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Find the task
@@ -2904,12 +2979,8 @@ projectRoutes.post('/:id/tasks/:taskId/sync-github-pr', jwtAuth, async (c) => {
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -3045,14 +3116,15 @@ projectRoutes.post('/:id/tasks/:taskId/create-github-pr', jwtAuth, async (c) => 
       return c.json({ success: false, error: 'Repository must be in format "owner/repo"' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Get task
@@ -3189,12 +3261,8 @@ projectRoutes.get('/:id/activity', auth, async (c) => {
     const entityType = c.req.query('entityType')
     const taskId = c.req.query('taskId')
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -3302,12 +3370,8 @@ projectRoutes.get('/:id/tasks/:taskId/activity', auth, async (c) => {
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -3397,12 +3461,8 @@ projectRoutes.get('/:id/tasks/:taskId/comments', auth, async (c) => {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -3494,14 +3554,15 @@ projectRoutes.post('/:id/tasks/:taskId/comments', auth, async (c) => {
       return c.json({ success: false, error: 'Content is required' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions (comments are write operations)
+    if (!canEdit(project.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
     }
 
     // Find the task
@@ -3584,12 +3645,8 @@ projectRoutes.patch('/:id/tasks/:taskId/comments/:commentId', auth, async (c) =>
     const body = await c.req.json()
     const { content, mentions } = body
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -3672,12 +3729,8 @@ projectRoutes.delete('/:id/tasks/:taskId/comments/:commentId', auth, async (c) =
       return c.json({ success: false, error: 'Invalid ID format' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -3744,12 +3797,8 @@ projectRoutes.get('/:id/tasks/:taskId/branch-name', jwtAuth, async (c) => {
       return c.json({ success: false, error: 'Invalid task ID format. Expected format: T1.1' }, 400)
     }
 
-    // Verify the project exists and user has access
-    const [project] = await db
-      .select({ id: schema.projects.id })
-      .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
-
+    // Verify the project exists and user has access via organization
+    const project = await getProjectWithAccess(db, projectId, user.id)
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
     }
@@ -3838,6 +3887,12 @@ projectRoutes.get('/:id/github', auth, async (c) => {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
     }
 
+    // Verify the project exists and user has access via organization
+    const projectAccess = await getProjectWithAccess(db, projectId, user.id)
+    if (!projectAccess) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
     // Get project with GitHub fields
     const [project] = await db
       .select({
@@ -3852,10 +3907,9 @@ projectRoutes.get('/:id/github', auth, async (c) => {
         githubWebhookId: schema.projects.githubWebhookId,
         githubLinkedAt: schema.projects.githubLinkedAt,
         githubLinkedBy: schema.projects.githubLinkedBy,
-        userId: schema.projects.userId,
       })
       .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .where(eq(schema.projects.id, projectId))
 
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
@@ -3938,17 +3992,27 @@ projectRoutes.post('/:id/github/link', auth, async (c) => {
     }
     const [owner, repoName] = repoParts
 
-    // Check if project exists and user has access
+    // Verify the project exists and user has access via organization
+    const projectAccess = await getProjectWithAccess(db, projectId, user.id)
+    if (!projectAccess) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(projectAccess.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
+    }
+
+    // Get project with GitHub fields
     const [project] = await db
       .select({
         id: schema.projects.id,
         name: schema.projects.name,
-        userId: schema.projects.userId,
         githubRepository: schema.projects.githubRepository,
         githubWebhookId: schema.projects.githubWebhookId,
       })
       .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .where(eq(schema.projects.id, projectId))
 
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
@@ -4144,19 +4208,29 @@ projectRoutes.delete('/:id/github/link', auth, async (c) => {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
     }
 
-    // Get project
+    // Verify the project exists and user has access via organization
+    const projectAccess = await getProjectWithAccess(db, projectId, user.id)
+    if (!projectAccess) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(projectAccess.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
+    }
+
+    // Get project with GitHub fields
     const [project] = await db
       .select({
         id: schema.projects.id,
         name: schema.projects.name,
-        userId: schema.projects.userId,
         githubRepository: schema.projects.githubRepository,
         githubOwner: schema.projects.githubOwner,
         githubRepoName: schema.projects.githubRepoName,
         githubWebhookId: schema.projects.githubWebhookId,
       })
       .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .where(eq(schema.projects.id, projectId))
 
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)
@@ -4250,12 +4324,22 @@ projectRoutes.post('/:id/github/webhook/sync', auth, async (c) => {
       return c.json({ success: false, error: 'Invalid project ID format' }, 400)
     }
 
-    // Get project
+    // Verify the project exists and user has access via organization
+    const projectAccess = await getProjectWithAccess(db, projectId, user.id)
+    if (!projectAccess) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check if user has edit permissions
+    if (!canEdit(projectAccess.memberRole)) {
+      return c.json({ success: false, error: 'Viewers have read-only access' }, 403)
+    }
+
+    // Get project with GitHub fields
     const [project] = await db
       .select({
         id: schema.projects.id,
         name: schema.projects.name,
-        userId: schema.projects.userId,
         githubRepository: schema.projects.githubRepository,
         githubOwner: schema.projects.githubOwner,
         githubRepoName: schema.projects.githubRepoName,
@@ -4263,7 +4347,7 @@ projectRoutes.post('/:id/github/webhook/sync', auth, async (c) => {
         githubWebhookSecret: schema.projects.githubWebhookSecret,
       })
       .from(schema.projects)
-      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.userId, user.id)))
+      .where(eq(schema.projects.id, projectId))
 
     if (!project) {
       return c.json({ success: false, error: 'Project not found' }, 404)

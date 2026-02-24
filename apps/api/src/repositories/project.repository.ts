@@ -14,6 +14,7 @@ export interface Project {
   description: string | null
   plan: string | null
   userId: string
+  organizationId: string
   createdAt: Date
   updatedAt: Date
 }
@@ -32,6 +33,7 @@ export interface CreateProjectInput {
   description?: string | null
   plan?: string | null
   userId: string
+  organizationId: string
 }
 
 export interface UpdateProjectInput {
@@ -55,6 +57,7 @@ export class ProjectRepository extends BaseRepository {
         description: schema.projects.description,
         plan: schema.projects.plan,
         userId: schema.projects.userId,
+        organizationId: schema.projects.organizationId,
         createdAt: schema.projects.createdAt,
         updatedAt: schema.projects.updatedAt,
       })
@@ -133,6 +136,7 @@ export class ProjectRepository extends BaseRepository {
         description: data.description ?? null,
         plan: data.plan ?? null,
         userId: data.userId,
+        organizationId: data.organizationId,
       })
       .returning({
         id: schema.projects.id,
@@ -140,6 +144,7 @@ export class ProjectRepository extends BaseRepository {
         description: schema.projects.description,
         plan: schema.projects.plan,
         userId: schema.projects.userId,
+        organizationId: schema.projects.organizationId,
         createdAt: schema.projects.createdAt,
         updatedAt: schema.projects.updatedAt,
       })
@@ -173,6 +178,7 @@ export class ProjectRepository extends BaseRepository {
         description: schema.projects.description,
         plan: schema.projects.plan,
         userId: schema.projects.userId,
+        organizationId: schema.projects.organizationId,
         createdAt: schema.projects.createdAt,
         updatedAt: schema.projects.updatedAt,
       })

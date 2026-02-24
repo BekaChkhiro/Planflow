@@ -273,6 +273,7 @@ describe('ProjectService', () => {
       const result = await projectService.createProject('user-123', {
         name: 'New Project',
         description: 'New Description',
+        organizationId: 'org-123',
       })
 
       expect(result.project.id).toBe('proj-new')
@@ -286,14 +287,14 @@ describe('ProjectService', () => {
         reason: 'Free tier limit reached',
       })
 
-      await expect(projectService.createProject('user-123', { name: 'Test' }))
+      await expect(projectService.createProject('user-123', { name: 'Test', organizationId: 'org-123' }))
         .rejects.toThrow(AuthorizationError)
     })
 
     it('should throw ServiceError if creation fails', async () => {
       mockDb._mocks.returning.mockResolvedValueOnce([])
 
-      await expect(projectService.createProject('user-123', { name: 'Test' }))
+      await expect(projectService.createProject('user-123', { name: 'Test', organizationId: 'org-123' }))
         .rejects.toThrow(ServiceError)
     })
 
@@ -311,6 +312,7 @@ describe('ProjectService', () => {
       const result = await projectService.createProject('user-123', {
         name: 'New Project',
         plan: '# Project Plan\n\n## Tasks',
+        organizationId: 'org-123',
       })
 
       expect(result.project.plan).toBe('# Project Plan\n\n## Tasks')

@@ -71,6 +71,13 @@
       "when": 1772179200000,
       "tag": "0009_project_github_integration",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1772265600000,
+      "tag": "0010_add_organization_to_projects",
+      "breakpoints": true
     }
   ]
 }

@@ -151,7 +151,7 @@ export default function ProjectSettingsPage() {
                 </div>
               </div>
               <Button variant="outline" asChild>
-                <Link href={`/dashboard/projects/${projectId}/settings/members`}>
+                <Link href={`/dashboard/projects/${projectId}?tab=team`}>
                   Manage Members
                 </Link>
               </Button>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -18,6 +18,7 @@ import {
   Activity,
   PanelRight,
   PanelRightClose,
+  Users,
 } from 'lucide-react'
 
 import { useProject, useDeleteProject, useUpdateProject, useProjectTasks } from '@/hooks/use-projects'
@@ -85,6 +86,14 @@ const TasksTab = dynamic(
   }
 )
 
+const TeamTab = dynamic(
+  () => import('./components/team-tab').then((mod) => ({ default: mod.TeamTab })),
+  {
+    loading: () => <TeamTabSkeleton />,
+    ssr: false,
+  }
+)
+
 // Lazy load edit dialog (only needed when editing)
 const EditProjectDialog = dynamic(
   () => import('./components/edit-project-dialog').then((mod) => ({ default: mod.EditProjectDialog })),
@@ -95,11 +104,14 @@ const EditProjectDialog = dynamic(
 import { OverviewTabSkeleton } from './components/overview-tab'
 import { PlanTabSkeleton } from './components/plan-tab'
 import { TasksTabSkeleton } from './components/tasks-tab'
+import { TeamTabSkeleton } from './components/team-tab'
 
 export default function ProjectDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const projectId = params['id'] as string
+  const defaultTab = searchParams.get('tab') || 'overview'
 
   const { data: project, isLoading, error, refetch } = useProject(projectId)
   const { data: tasks = [], isLoading: tasksLoading } = useProjectTasks(projectId)
@@ -289,7 +301,7 @@ export default function ProjectDetailPage() {
         {/* Main Content Area */}
         <div className={`flex-1 min-w-0 ${showActivitySidebar ? 'lg:pr-0' : ''}`}>
           {/* Tabs */}
-          <Tabs defaultValue="overview" className="space-y-6">
+          <Tabs defaultValue={defaultTab} className="space-y-6">
             <TabsList>
               <TabsTrigger value="overview" className="gap-2">
                 <LayoutDashboard className="h-4 w-4" />
@@ -307,6 +319,10 @@ export default function ProjectDetailPage() {
                     {stats.total}
                   </Badge>
                 )}
+              </TabsTrigger>
+              <TabsTrigger value="team" className="gap-2">
+                <Users className="h-4 w-4" />
+                Team
               </TabsTrigger>
               <TabsTrigger value="activity" className="gap-2 lg:hidden">
                 <Activity className="h-4 w-4" />
@@ -329,6 +345,10 @@ export default function ProjectDetailPage() {
 
             <TabsContent value="tasks">
               <TasksTab tasks={tasks} projectId={projectId} getPresenceStatus={getPresenceStatus} />
+            </TabsContent>
+
+            <TabsContent value="team">
+              <TeamTab projectId={projectId} />
             </TabsContent>
 
             <TabsContent value="activity" className="lg:hidden">

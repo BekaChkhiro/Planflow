@@ -66,7 +66,7 @@ const faqItems: FAQItem[] = [
   {
     question: "How do I get started?",
     answer:
-      "Getting started takes less than 5 minutes: 1) Sign up for a free account, 2) Generate an API token from your dashboard, 3) Install our MCP server with 'npm install -g planflow-mcp', 4) Run 'claude mcp add planflow-mcp -- planflow-mcp' to configure Claude Code, and 5) Start managing projects by saying 'Login to PlanFlow with my token'.",
+      "Getting started takes less than 5 minutes: 1) Sign up for a free account, 2) Generate an API token from your dashboard, 3) Install our MCP server with 'npm install -g planflow-mcp', 4) Run 'claude mcp add planflow-mcp -- planflow-mcp' to configure Claude Code, 5) Optionally install slash commands with 'npm install -g planflow-plugin', and 6) Start managing projects by saying 'Login to PlanFlow with my token'.",
     category: "general",
   },
   {

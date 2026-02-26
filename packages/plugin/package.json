@@ -1,0 +1,48 @@
+{
+  "name": "planflow-plugin",
+  "version": "0.1.0",
+  "description": "PlanFlow CLI plugin for Claude Code - slash commands for project planning",
+  "author": "PlanFlow <hello@planflow.tools>",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "planflow-plugin": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "commands",
+    "locales",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node bin/postinstall.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "planflow",
+    "project-management",
+    "planning",
+    "cli",
+    "plugin",
+    "skills"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/planflow-tools/planflow.git",
+    "directory": "packages/plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/planflow-tools/planflow/issues"
+  },
+  "homepage": "https://planflow.tools",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

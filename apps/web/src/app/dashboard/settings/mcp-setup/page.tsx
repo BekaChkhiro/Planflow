@@ -249,6 +249,20 @@ export default function MCPSetupPage() {
               inside your existing <code className="rounded bg-muted px-1 py-0.5">&quot;mcpServers&quot;</code> object.
             </p>
           </div>
+
+          <Separator className="my-6" />
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">
+              Optional: Install slash commands for enhanced workflow
+            </p>
+            <CodeBlock code="npm install -g planflow-plugin" />
+            <p className="text-sm text-muted-foreground">
+              This installs 50+ slash commands like <code className="rounded bg-muted px-1 py-0.5">/planNew</code>,{' '}
+              <code className="rounded bg-muted px-1 py-0.5">/planUpdate</code>, and{' '}
+              <code className="rounded bg-muted px-1 py-0.5">/pfSyncPush</code> for quick access to common actions.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

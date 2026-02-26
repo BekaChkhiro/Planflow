@@ -121,7 +121,7 @@ export function Navbar() {
       className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
       role="banner"
     >
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+      <div className="container mx-auto flex h-16 items-center px-4">
         {/* Logo */}
         <Link
           href="/"
@@ -134,8 +134,8 @@ export function Navbar() {
           <span className="text-xl font-bold">PlanFlow</span>
         </Link>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex md:items-center md:space-x-6" aria-label="Main navigation">
+        {/* Desktop Navigation - Centered */}
+        <nav className="hidden md:flex md:items-center md:justify-center md:space-x-6 md:flex-1" aria-label="Main navigation">
           {navLinks.map((link) => {
             const isCurrent = isCurrentPage(link.href)
             return (

@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, Sparkles } from "lucide-react"
+import { Check, Sparkles, Gift } from "lucide-react"
 import Link from "next/link"
 
 import { Badge } from "@/components/ui/badge"
@@ -14,78 +14,15 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 
-interface Tier {
-  name: string
-  price: string
-  priceUnit?: string
-  description: string
-  features: string[]
-  cta: string
-  ctaHref: string
-  popular: boolean
-}
-
-const tiers: Tier[] = [
-  {
-    name: "Free",
-    price: "$0",
-    description: "Perfect for getting started with personal projects",
-    features: [
-      "3 projects",
-      "Local plans only",
-      "Basic task management",
-      "Community support",
-    ],
-    cta: "Get Started",
-    ctaHref: "/register",
-    popular: false,
-  },
-  {
-    name: "Pro",
-    price: "$12",
-    description: "For developers who want to level up their workflow",
-    features: [
-      "Unlimited projects",
-      "Cloud sync",
-      "GitHub integration",
-      "Priority support",
-      "AI-powered suggestions",
-    ],
-    cta: "Start Free Trial",
-    ctaHref: "/register?plan=pro",
-    popular: true,
-  },
-  {
-    name: "Team",
-    price: "$29",
-    priceUnit: "/user",
-    description: "Collaborate with your team on complex projects",
-    features: [
-      "Everything in Pro",
-      "Team management",
-      "Role-based access",
-      "Code review workflows",
-      "Sprint planning",
-    ],
-    cta: "Start Free Trial",
-    ctaHref: "/register?plan=team",
-    popular: false,
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    description: "For organizations with advanced security needs",
-    features: [
-      "Everything in Team",
-      "Self-hosted option",
-      "SLA guarantee",
-      "Custom integrations",
-      "SSO & SAML",
-    ],
-    cta: "Contact Sales",
-    ctaHref: "/contact",
-    popular: false,
-  },
+const features = [
+  "Unlimited projects",
+  "Cloud sync",
+  "Team collaboration",
+  "MCP integration for Claude Code",
+  "50+ slash commands",
+  "GitHub integration",
+  "Real-time notifications",
+  "Task assignments & comments",
 ]
 
 export function Pricing() {
@@ -95,95 +32,59 @@ export function Pricing() {
         {/* Section Header */}
         <div className="mx-auto max-w-2xl text-center mb-16">
           <Badge variant="secondary" className="mb-4">
-            <Sparkles className="mr-1 h-3 w-3" />
-            Simple Pricing
+            <Gift className="mr-1 h-3 w-3" />
+            Early Access
           </Badge>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
-            Choose your plan,{" "}
-            <span className="text-primary">start shipping</span>
+            Currently{" "}
+            <span className="text-primary">free</span>
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            All plans include a 14-day free trial. No credit card required.
+            Get full access to all features while we&apos;re in early access.
+            No credit card required.
           </p>
         </div>
 
-        {/* Pricing Grid */}
-        <div className="mx-auto max-w-6xl">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {tiers.map((tier) => (
-              <Card
-                key={tier.name}
-                className={`group relative flex flex-col overflow-hidden transition-all duration-300 hover:shadow-lg ${
-                  tier.popular
-                    ? "border-primary shadow-lg scale-[1.02] bg-gradient-to-b from-primary/5 to-background"
-                    : "border-border/50 bg-gradient-to-b from-background to-muted/20 hover:border-primary/50"
-                }`}
-              >
-                {tier.popular && (
-                  <Badge className="absolute -top-0 right-4 rounded-t-none">
-                    Most Popular
-                  </Badge>
-                )}
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">{tier.name}</CardTitle>
-                  <CardDescription className="min-h-[40px]">
-                    {tier.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1 pb-6">
-                  <div className="mb-6">
-                    <span className="text-4xl font-bold tracking-tight">
-                      {tier.price}
-                    </span>
-                    {tier.price !== "Custom" && (
-                      <span className="text-muted-foreground ml-1">
-                        {tier.priceUnit || ""}/month
-                      </span>
-                    )}
-                  </div>
-                  <ul className="space-y-3">
-                    {tier.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2">
-                        <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <span className="text-sm text-muted-foreground">
-                          {feature}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <CardFooter className="pt-0">
-                  <Button
-                    variant={tier.popular ? "default" : "outline"}
-                    className="w-full"
-                    asChild
-                  >
-                    <Link href={tier.ctaHref}>{tier.cta}</Link>
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+        {/* Pricing Card */}
+        <div className="mx-auto max-w-lg">
+          <Card className="relative border-primary shadow-lg bg-gradient-to-b from-primary/5 to-background">
+            <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <Sparkles className="mr-1 h-3 w-3" />
+              All Features Included
+            </Badge>
+            <CardHeader className="text-center pt-8">
+              <CardTitle className="text-2xl">Full Access</CardTitle>
+              <CardDescription>
+                Everything you need for AI-native project management
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center mb-8">
+                <span className="text-5xl font-bold">$0</span>
+                <span className="text-muted-foreground ml-2">/month</span>
+              </div>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2">
+                    <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <span className="text-sm text-muted-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+            <CardFooter className="flex flex-col gap-4">
+              <Button className="w-full" size="lg" asChild>
+                <Link href="/register">Get Started Free</Link>
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
 
-        {/* CTA Footer */}
+        {/* Future Pricing Notice */}
         <div className="mt-12 text-center">
-          <p className="text-muted-foreground">
-            Need help choosing?{" "}
-            <Link
-              href="/pricing"
-              className="text-primary font-medium hover:underline"
-            >
-              Compare all features
-            </Link>{" "}
-            or{" "}
-            <Link
-              href="/contact"
-              className="text-primary font-medium hover:underline"
-            >
-              talk to our team
-            </Link>
-            .
+          <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+            In the future, we may introduce paid features or plans.
+            If we do, we&apos;ll clearly describe the terms and pricing before you&apos;re charged.
           </p>
         </div>
       </div>

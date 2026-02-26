@@ -40,15 +40,15 @@ const faqItems: FAQItem[] = [
     category: "technical",
   },
   {
-    question: "What's included in the free plan?",
+    question: "Is PlanFlow really free?",
     answer:
-      "The free plan includes up to 3 projects, local plan management with our CLI plugin, and basic web dashboard access. It's perfect for individual developers or those wanting to try PlanFlow before committing. No credit card required.",
+      "Yes! PlanFlow is currently free during our early access period. You get full access to all features including unlimited projects, cloud sync, team collaboration, and MCP integration. No credit card required.",
     category: "pricing",
   },
   {
-    question: "Can I upgrade or downgrade my plan anytime?",
+    question: "Will PlanFlow always be free?",
     answer:
-      "Absolutely! You can upgrade to Pro or Team at any time, and the change takes effect immediately. If you downgrade, you'll retain access to your current plan until the end of your billing period. Your data is never deleted—you just won't be able to access premium features.",
+      "We're currently in early access and offering full access for free. In the future, we may introduce paid features or plans. If we do, we'll clearly describe the terms and pricing before you're charged. Early adopters will always have special benefits.",
     category: "pricing",
   },
   {
@@ -60,7 +60,7 @@ const faqItems: FAQItem[] = [
   {
     question: "Can I self-host PlanFlow?",
     answer:
-      "Yes! Our Enterprise plan includes a self-hosted option. You get the full source code, deployment guides, and dedicated support for running PlanFlow on your own infrastructure. This is ideal for organizations with strict data residency requirements.",
+      "Self-hosting options are coming soon! If you have specific requirements for data residency or security, contact us at support@planflow.tools and we'll work with you on a solution.",
     category: "security",
   },
   {
@@ -70,10 +70,10 @@ const faqItems: FAQItem[] = [
     category: "general",
   },
   {
-    question: "Do you offer refunds?",
+    question: "How can I give feedback?",
     answer:
-      "Yes, we offer a 14-day money-back guarantee for all paid plans. If PlanFlow isn't right for you, just contact our support team within 14 days of your purchase for a full refund—no questions asked.",
-    category: "pricing",
+      "We love hearing from our users! You can reach us at support@planflow.tools, open an issue on our GitHub repository, or join our Discord community. Your feedback helps shape the future of PlanFlow.",
+    category: "general",
   },
 ]
 

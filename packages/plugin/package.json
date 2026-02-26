@@ -1,6 +1,6 @@
 {
   "name": "planflow-plugin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "PlanFlow CLI plugin for Claude Code - slash commands for project planning",
   "author": "PlanFlow <hello@planflow.tools>",
   "license": "MIT",

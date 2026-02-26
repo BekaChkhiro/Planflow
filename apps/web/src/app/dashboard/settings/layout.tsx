@@ -3,7 +3,7 @@
 import { ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { User, Key, CreditCard, Server, Plug, Bell, Shield } from 'lucide-react'
+import { User, Key, Server, Plug, Bell, Shield } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -48,12 +48,13 @@ const settingsNavItems = [
     icon: Bell,
     description: 'Push, email & in-app alerts',
   },
-  {
-    title: 'Billing',
-    href: '/dashboard/settings/billing',
-    icon: CreditCard,
-    description: 'Manage your subscription',
-  },
+  // Billing hidden during free early access period
+  // {
+  //   title: 'Billing',
+  //   href: '/dashboard/settings/billing',
+  //   icon: CreditCard,
+  //   description: 'Manage your subscription',
+  // },
 ]
 
 export default function SettingsLayout({ children }: SettingsLayoutProps) {

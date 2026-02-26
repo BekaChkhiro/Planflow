@@ -259,17 +259,8 @@ function CreateProjectDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {apiError && (
-              <div className={`rounded-md p-3 text-sm ${isLimitError ? 'bg-status-info text-status-info' : 'bg-status-error text-status-error'}`}>
+              <div className="rounded-md p-3 text-sm bg-status-error text-status-error">
                 <p>{apiError}</p>
-                {isLimitError && (
-                  <Link
-                    href="/settings/billing"
-                    className="mt-2 inline-block font-medium underline hover:no-underline"
-                    onClick={() => handleOpenChange(false)}
-                  >
-                    Upgrade to Pro
-                  </Link>
-                )}
               </div>
             )}
             <FormField

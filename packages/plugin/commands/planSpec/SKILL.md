@@ -694,58 +694,120 @@ try {
    ```
 
 **Task generation from features:**
+
+**CRITICAL: Use this EXACT markdown format for each task!**
+
+```markdown
+#### T{phase}.{num}: {Task Name}
+- [ ] **Status**: TODO
+- **Complexity**: Low/Medium/High
+- **Dependencies**: None (or T1.1, T1.2)
+- **Description**:
+  - Detail from specification
+  - Implementation notes
+```
+
+**Example generated tasks:**
+
+```markdown
+#### T2.1: Implement User Authentication
+- [ ] **Status**: TODO
+- **Complexity**: High
+- **Dependencies**: T1.2
+- **Description**:
+  - Setup JWT authentication
+  - Implement login/register endpoints
+  - Add password hashing
+
+#### T2.2: Create User Dashboard
+- [ ] **Status**: TODO
+- **Complexity**: Medium
+- **Dependencies**: T2.1
+- **Description**:
+  - Build dashboard layout
+  - Display user statistics
+  - Add navigation menu
+```
+
+**Pseudo-code for task generation:**
 ```javascript
+function generateTaskMarkdown(taskId, name, complexity, dependencies, description) {
+  const depStr = dependencies.length > 0 ? dependencies.join(", ") : "None"
+  const descLines = description.map(d => `  - ${d}`).join("\n")
+
+  return `#### ${taskId}: ${name}
+- [ ] **Status**: TODO
+- **Complexity**: ${complexity}
+- **Dependencies**: ${depStr}
+- **Description**:
+${descLines}`
+}
+
 function generateTasks(features, phase) {
   const tasks = []
   let taskNum = 1
 
   for (const feature of features) {
-    // Simple feature → 1 task
-    // Complex feature → 2-3 tasks
-
     const complexity = estimateComplexity(feature)
 
     if (complexity === "High") {
       // Split into multiple tasks
-      tasks.push({
-        id: `T${phase}.${taskNum}`,
-        name: `Setup ${feature.name}`,
-        complexity: "Medium",
-        status: "TODO"
-      })
+      tasks.push(generateTaskMarkdown(
+        `T${phase}.${taskNum}`,
+        `Setup ${feature.name}`,
+        "Medium",
+        taskNum > 1 ? [`T${phase}.${taskNum-1}`] : [],
+        ["Initialize component structure", "Setup dependencies"]
+      ))
       taskNum++
 
-      tasks.push({
-        id: `T${phase}.${taskNum}`,
-        name: `Implement ${feature.name} core logic`,
-        complexity: "High",
-        status: "TODO",
-        dependencies: [`T${phase}.${taskNum-1}`]
-      })
+      tasks.push(generateTaskMarkdown(
+        `T${phase}.${taskNum}`,
+        `Implement ${feature.name} core logic`,
+        "High",
+        [`T${phase}.${taskNum-1}`],
+        ["Implement business logic", "Add validation", "Handle edge cases"]
+      ))
       taskNum++
 
-      tasks.push({
-        id: `T${phase}.${taskNum}`,
-        name: `${feature.name} UI and integration`,
-        complexity: "Medium",
-        status: "TODO",
-        dependencies: [`T${phase}.${taskNum-1}`]
-      })
+      tasks.push(generateTaskMarkdown(
+        `T${phase}.${taskNum}`,
+        `${feature.name} UI and integration`,
+        "Medium",
+        [`T${phase}.${taskNum-1}`],
+        ["Build UI components", "Connect to backend", "Add error handling"]
+      ))
       taskNum++
     } else {
-      // Single task
-      tasks.push({
-        id: `T${phase}.${taskNum}`,
-        name: `Implement ${feature.name}`,
-        complexity: complexity,
-        status: "TODO"
-      })
+      tasks.push(generateTaskMarkdown(
+        `T${phase}.${taskNum}`,
+        `Implement ${feature.name}`,
+        complexity,
+        [],
+        feature.description ? [feature.description] : ["Implement feature as specified"]
+      ))
       taskNum++
     }
   }
 
-  return tasks
+  return tasks.join("\n\n")
 }
+```
+
+**IMPORTANT: Never use these WRONG formats:**
+```markdown
+❌ - T2.1: Task Name         (bullet format - won't parse)
+❌ 1. T2.1: Task Name        (numbered format - won't parse)
+❌ T2.1: Task Name           (plain format - won't parse)
+❌ ## T2.1: Task Name        (wrong header level)
+```
+
+**Always use this CORRECT format:**
+```markdown
+✅ #### T2.1: Task Name
+✅ - [ ] **Status**: TODO
+✅ - **Complexity**: Medium
+✅ - **Dependencies**: T2.0
 ```
 
 **Write the file:**

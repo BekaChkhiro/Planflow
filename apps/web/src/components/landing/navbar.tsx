@@ -42,7 +42,6 @@ function getInitials(name: string | undefined): string {
 }
 
 const navLinks = [
-  { label: "Features", href: "#features" },
   { label: "Pricing", href: "/pricing" },
   { label: "Docs", href: "/docs" },
 ]

@@ -193,22 +193,191 @@ echo "Tasks: $TASKS_COUNT, Completed: $COMPLETED_COUNT, Progress: $PROGRESS%"
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ```
 
-**If tasksCount is 0 or null, show warning card:**
+**If tasksCount is 0 or null, run automatic format validation (Step 3d):**
+
+## Step 3d: Automatic Format Validation (if tasksCount is 0)
+
+**CRITICAL: If no tasks were parsed, automatically validate and fix the format!**
+
+When tasksCount is 0, you MUST:
+
+1. **Read PROJECT_PLAN.md and scan for potential tasks**
+2. **Check for common format issues**
+3. **Offer to auto-fix if fixable**
+
+### Format Detection Logic
+
+```javascript
+// Read the plan content
+const planContent = readFile("PROJECT_PLAN.md")
+
+// Check for tasks in various formats
+const validHeaderFormat = /^#{2,4}\s*\*{0,2}T\d+[A-Za-z]?\.\d+\*{0,2}[:\s]+.+/gm
+const validTableFormat = /\|\s*T\d+[A-Za-z]?\.\d+\s*\|/g
+
+// Check for INVALID formats (common mistakes)
+const wrongFormat1 = /^[-*]\s*T\d+[A-Za-z]?\.\d+[:\s]+.+/gm  // Bullet list format
+const wrongFormat2 = /^\d+\.\s*T\d+[A-Za-z]?\.\d+[:\s]+.+/gm // Numbered list format
+const wrongFormat3 = /^T\d+[A-Za-z]?\.\d+[:\s]+.+/gm         // No header prefix
+
+const validTasks = (planContent.match(validHeaderFormat) || []).length +
+                   (planContent.match(validTableFormat) || []).length
+const invalidTasks = (planContent.match(wrongFormat1) || []).length +
+                     (planContent.match(wrongFormat2) || []).length +
+                     (planContent.match(wrongFormat3) || []).length
+
+if (invalidTasks > 0 && validTasks === 0) {
+  // Tasks exist but in wrong format - offer to fix
+  showFormatFixCard()
+} else if (validTasks === 0 && invalidTasks === 0) {
+  // No tasks at all
+  showNoTasksCard()
+}
+```
+
+### If wrong format detected, show fix offer card:
 
 ```
 ╭──────────────────────────────────────────────────────────────────────────────╮
-│  ⚠️  WARNING                                                                  │
+│  ⚠️  FORMAT ISSUE DETECTED                                                   │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  No tasks were parsed from the plan.                                         │
+│  Found {invalidTasks} tasks in incorrect format.                             │
 │                                                                              │
-│  This could mean:                                                            │
-│  • The plan format is not recognized                                         │
-│  • Tasks should use format: #### T1.1: Task Name                             │
-│  • Or table format: | T1.1 | Task Name | Low | TODO | - |                    │
+│  ── Current Format (incorrect) ─────────────────────────────────────────     │
+│                                                                              │
+│  - T1.1: Task Name           ❌ Bullet list not supported                    │
+│  1. T1.2: Another Task       ❌ Numbered list not supported                  │
+│  T1.3: Direct task           ❌ Missing header prefix                        │
+│                                                                              │
+│  ── Required Format ────────────────────────────────────────────────────     │
+│                                                                              │
+│  #### T1.1: Task Name        ✅ Header format                                │
+│  - [ ] **Status**: TODO                                                      │
+│  - **Complexity**: Low                                                       │
+│  - **Dependencies**: None                                                    │
+│                                                                              │
+│  OR table format:                                                            │
+│  | ID    | Task      | Complexity | Status | Dependencies |                 │
+│  |-------|-----------|------------|--------|--------------|                 │
+│  | T1.1  | Task Name | Low        | TODO   | -            |                 │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  🔧 Would you like me to auto-fix the format?                                │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+**Use AskUserQuestion:**
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "Would you like me to convert tasks to the correct format?",
+    header: "Fix Format",
+    multiSelect: false,
+    options: [
+      {
+        label: "Yes, auto-fix (Recommended)",
+        description: "Convert all tasks to header format and re-sync"
+      },
+      {
+        label: "No, I'll fix manually",
+        description: "Keep current format, sync without tasks"
+      }
+    ]
+  }]
+})
+```
+
+### If user chooses auto-fix:
+
+**Convert tasks to correct format:**
+
+```javascript
+// Find all tasks in wrong format and convert
+let fixedContent = planContent
+
+// Convert bullet format: "- T1.1: Task" → "#### T1.1: Task\n- [ ] **Status**: TODO\n- **Complexity**: Medium\n- **Dependencies**: None"
+fixedContent = fixedContent.replace(
+  /^[-*]\s*(T\d+[A-Za-z]?\.\d+)[:\s]+(.+)$/gm,
+  (match, taskId, taskName) => {
+    return `#### ${taskId}: ${taskName}
+- [ ] **Status**: TODO
+- **Complexity**: Medium
+- **Dependencies**: None`
+  }
+)
+
+// Convert numbered format: "1. T1.1: Task" → header format
+fixedContent = fixedContent.replace(
+  /^\d+\.\s*(T\d+[A-Za-z]?\.\d+)[:\s]+(.+)$/gm,
+  (match, taskId, taskName) => {
+    return `#### ${taskId}: ${taskName}
+- [ ] **Status**: TODO
+- **Complexity**: Medium
+- **Dependencies**: None`
+  }
+)
+
+// Convert plain format: "T1.1: Task" → header format
+fixedContent = fixedContent.replace(
+  /^(T\d+[A-Za-z]?\.\d+)[:\s]+(.+)$/gm,
+  (match, taskId, taskName) => {
+    return `#### ${taskId}: ${taskName}
+- [ ] **Status**: TODO
+- **Complexity**: Medium
+- **Dependencies**: None`
+  }
+)
+
+// Write fixed content
+writeFile("PROJECT_PLAN.md", fixedContent)
+```
+
+**After fixing, re-push automatically:**
+
+```
+╭──────────────────────────────────────────────────────────────────────────────╮
+│  🔧 FORMAT FIXED                                                             │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Converted {fixedCount} tasks to correct format.                             │
+│                                                                              │
+│  Re-syncing to cloud...                                                      │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Then repeat Step 3b (API call) with the fixed content.
+
+### If no tasks found at all:
+
+```
+╭──────────────────────────────────────────────────────────────────────────────╮
+│  ⚠️  NO TASKS FOUND                                                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  The plan was synced but no tasks were detected.                             │
+│                                                                              │
+│  Your plan may be missing the Tasks section.                                 │
+│                                                                              │
+│  ── Expected Task Format ───────────────────────────────────────────────     │
+│                                                                              │
+│  ## Tasks & Implementation Plan                                              │
+│                                                                              │
+│  ### Phase 1: Foundation                                                     │
+│                                                                              │
+│  #### T1.1: Setup Project                                                    │
+│  - [ ] **Status**: TODO                                                      │
+│  - **Complexity**: Low                                                       │
+│  - **Dependencies**: None                                                    │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  💡 {t.ui.labels.nextSteps}                                                  │
-│     • /planNext              Verify your plan format                         │
+│     • /planNew               Create a new plan with tasks                    │
+│     • Manually add tasks in the format shown above                           │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

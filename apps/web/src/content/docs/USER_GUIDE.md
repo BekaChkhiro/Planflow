@@ -157,8 +157,6 @@ Click **+ New Project** to open the creation dialog:
 
 After creation, you'll be redirected to the project detail page.
 
-> **Note**: Free tier is limited to 3 projects. Upgrade to Pro for unlimited projects.
-
 ### Project Detail Page
 
 The project detail page provides a comprehensive view of your project with three main tabs.
@@ -1295,28 +1293,18 @@ Control how you receive notifications:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Billing
+### Pricing
 
-Manage your subscription:
+PlanFlow is currently **free** during early access! You get full access to all features:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Billing                                                                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Current Plan: Pro                                         $12/month       │
-│                                                                             │
-│  ✅ Unlimited projects                                                     │
-│  ✅ Cloud sync                                                             │
-│  ✅ GitHub integration                                                     │
-│  ✅ Priority support                                                       │
-│                                                                             │
-│  Next billing date: February 15, 2026                                      │
-│                                                                             │
-│  [Manage Subscription]  [View Invoices]  [Upgrade to Team]                 │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+- ✅ Unlimited projects
+- ✅ Cloud sync
+- ✅ Team collaboration
+- ✅ MCP integration for Claude Code
+- ✅ GitHub integration
+- ✅ Real-time notifications
+
+Visit [planflow.tools/pricing](https://planflow.tools/pricing) for more details.
 
 ---
 
@@ -1437,7 +1425,7 @@ If you need assistance:
 
 - 📖 **Documentation**: [planflow.tools/docs](https://planflow.tools/docs)
 - 💬 **Discord Community**: [discord.gg/planflow](https://discord.gg/planflow)
-- 📧 **Email Support**: [support@planflow.tools](mailto:support@planflow.tools)
+- 📧 **Email Support**: [bekachkhirodze1@gmail.com](mailto:bekachkhirodze1@gmail.com)
 - 🐛 **Report Issues**: [github.com/planflow/planflow/issues](https://github.com/planflow/planflow/issues)
 
 ---

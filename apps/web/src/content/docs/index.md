@@ -163,7 +163,7 @@ See [API Reference](./API_REFERENCE.md) for complete documentation.
 
 - **Issues & Bugs**: [GitHub Issues](https://github.com/planflow/planflow/issues)
 - **Feature Requests**: [GitHub Discussions](https://github.com/planflow/planflow/discussions)
-- **Email Support**: support@planflow.tools
+- **Email Support**: bekachkhirodze1@gmail.com
 
 ---
 

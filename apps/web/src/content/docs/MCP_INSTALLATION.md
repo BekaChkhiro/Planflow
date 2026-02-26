@@ -797,7 +797,7 @@ If none of the above solutions work:
    - MCP server version (`planflow-mcp --version`)
    - Debug log output
    - Steps to reproduce
-4. **Email support:** [support@planflow.tools](mailto:support@planflow.tools)
+4. **Email support:** [bekachkhirodze1@gmail.com](mailto:bekachkhirodze1@gmail.com)
 
 ---
 
@@ -938,4 +938,4 @@ Now that you have the MCP server installed:
 
 ---
 
-*Need help? Contact us at [support@planflow.tools](mailto:support@planflow.tools) or join our [Discord community](https://discord.gg/planflow).*
+*Need help? Contact us at [bekachkhirodze1@gmail.com](mailto:bekachkhirodze1@gmail.com) or join our [Discord community](https://discord.gg/planflow).*

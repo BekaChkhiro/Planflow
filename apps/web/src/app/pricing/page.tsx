@@ -116,9 +116,9 @@ export default function PricingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
             <p className="text-muted-foreground">
               Have questions?{" "}
-              <Link href="/contact" className="text-primary hover:underline">
+              <a href="mailto:bekachkhirodze1@gmail.com" className="text-primary hover:underline">
                 Contact us
-              </Link>{" "}
+              </a>{" "}
               or check out our{" "}
               <Link href="/docs" className="text-primary hover:underline">
                 documentation

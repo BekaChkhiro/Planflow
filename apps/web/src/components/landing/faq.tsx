@@ -60,7 +60,7 @@ const faqItems: FAQItem[] = [
   {
     question: "Can I self-host PlanFlow?",
     answer:
-      "Self-hosting options are coming soon! If you have specific requirements for data residency or security, contact us at support@planflow.tools and we'll work with you on a solution.",
+      "Self-hosting options are coming soon! If you have specific requirements for data residency or security, contact us at bekachkhirodze1@gmail.com and we'll work with you on a solution.",
     category: "security",
   },
   {
@@ -72,7 +72,7 @@ const faqItems: FAQItem[] = [
   {
     question: "How can I give feedback?",
     answer:
-      "We love hearing from our users! You can reach us at support@planflow.tools, open an issue on our GitHub repository, or join our Discord community. Your feedback helps shape the future of PlanFlow.",
+      "We love hearing from our users! You can reach us at bekachkhirodze1@gmail.com, open an issue on our GitHub repository, or join our Discord community. Your feedback helps shape the future of PlanFlow.",
     category: "general",
   },
 ]
@@ -123,7 +123,7 @@ export function FAQ() {
           <p className="text-muted-foreground">
             Still have questions?{" "}
             <a
-              href="mailto:support@planflow.tools"
+              href="mailto:bekachkhirodze1@gmail.com"
               className="text-primary hover:underline font-medium"
             >
               Contact our support team

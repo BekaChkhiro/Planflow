@@ -11,7 +11,7 @@ function getDb() {
 // Initialize VAPID keys from environment variables
 const VAPID_PUBLIC_KEY = process.env['VAPID_PUBLIC_KEY']
 const VAPID_PRIVATE_KEY = process.env['VAPID_PRIVATE_KEY']
-const VAPID_SUBJECT = process.env['VAPID_SUBJECT'] || 'mailto:support@planflow.tools'
+const VAPID_SUBJECT = process.env['VAPID_SUBJECT'] || 'mailto:bekachkhirodze1@gmail.com'
 
 // Track if push is configured
 let pushConfigured = false

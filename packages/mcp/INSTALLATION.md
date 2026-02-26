@@ -532,7 +532,7 @@ Edit `~/.config/claude/claude_desktop_config.json` and remove the `planflow` ent
 
 - **Documentation:** [docs.planflow.tools](https://docs.planflow.tools)
 - **GitHub Issues:** [github.com/planflow/planflow/issues](https://github.com/planflow/planflow/issues)
-- **Email Support:** support@planflow.tools
+- **Email Support:** bekachkhirodze1@gmail.com
 
 ---
 

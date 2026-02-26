@@ -509,18 +509,13 @@ Now that you're set up with PlanFlow, here's what to explore next:
 ### Learn More
 
 - 📖 [MCP Installation Guide](./MCP_INSTALLATION.md) - Complete installation & configuration guide
-- 📖 [Package Installation](../packages/mcp/INSTALLATION.md) - Quick package setup
 - 📖 [API Reference](./API_REFERENCE.md) - Complete API documentation
-- 🎥 [Video Tutorials](https://planflow.tools/tutorials) - Watch PlanFlow in action
 
-### Upgrade Your Plan
+### Pricing
 
-Need more projects or team features?
+PlanFlow is currently **free** during early access! You get full access to all features including unlimited projects, cloud sync, team collaboration, and MCP integration.
 
-- **Pro** ($12/month) - Unlimited projects, GitHub integration
-- **Team** ($29/user/month) - Team management, code review, sprints
-
-Visit [planflow.tools/pricing](https://planflow.tools/pricing) to upgrade.
+Visit [planflow.tools/pricing](https://planflow.tools/pricing) for more details.
 
 ### Join the Community
 
@@ -581,4 +576,4 @@ PlanFlow is built for developers, by developers. We'd love your feedback:
 
 **Happy planning!** 🚀
 
-If you have questions, reach out at [support@planflow.tools](mailto:support@planflow.tools) or join our [Discord](https://discord.gg/planflow).
+If you have questions, reach out at [bekachkhirodze1@gmail.com](mailto:bekachkhirodze1@gmail.com) or join our [Discord](https://discord.gg/planflow).

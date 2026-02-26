@@ -1,8 +1,39 @@
+"use client"
+
+import { useState } from "react"
 import Link from "next/link"
-import { Terminal } from "lucide-react"
+import { Terminal, Copy, Check } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+
+function CopyableCommand({ command, label }: { command: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="group flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2.5 font-mono text-sm">
+      <span className="text-zinc-500">{label}</span>
+      <span className="text-zinc-300">{command}</span>
+      <button
+        onClick={handleCopy}
+        className="ml-auto p-1 rounded hover:bg-zinc-800 transition-colors"
+        title="Copy to clipboard"
+      >
+        {copied ? (
+          <Check className="h-4 w-4 text-green-500" />
+        ) : (
+          <Copy className="h-4 w-4 text-zinc-500 group-hover:text-zinc-300" />
+        )}
+      </button>
+    </div>
+  )
+}
 
 export function Hero() {
   return (
@@ -38,6 +69,19 @@ export function Hero() {
             <Button size="lg" variant="outline" asChild>
               <Link href="/pricing">View Pricing</Link>
             </Button>
+          </div>
+
+          {/* npm Install Commands */}
+          <div className="mt-10 flex flex-col gap-3 max-w-xl mx-auto">
+            <p className="text-sm text-muted-foreground mb-1">Quick install:</p>
+            <CopyableCommand
+              label="$"
+              command="npm install -g planflow-mcp"
+            />
+            <CopyableCommand
+              label="$"
+              command="npm install -g planflow-plugin"
+            />
           </div>
 
           {/* Terminal Mockup */}

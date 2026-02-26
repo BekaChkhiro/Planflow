@@ -27,7 +27,7 @@ export function Footer() {
                 Pricing
               </Link>
               <Link
-                href="https://github.com/BekaChkhiro/Planflow"
+                href="https://github.com/BekaChkhiro"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-muted-foreground transition-colors hover:text-foreground"

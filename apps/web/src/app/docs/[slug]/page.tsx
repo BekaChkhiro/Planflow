@@ -97,7 +97,7 @@ export default async function DocPage({ params }: PageProps) {
   }
 
   return (
-    <article className="prose prose-slate dark:prose-invert max-w-none">
+    <article className="prose prose-slate dark:prose-invert max-w-none prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-strong:text-foreground prose-code:text-foreground">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -105,7 +105,7 @@ export default async function DocPage({ params }: PageProps) {
             if (href?.startsWith('/') || href?.startsWith('#')) {
               return <Link href={href} className="text-primary hover:underline">{children}</Link>
             }
-            return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+            return <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{children}</a>
           },
           table: ({ children }) => (
             <div className="overflow-x-auto my-4">
@@ -113,43 +113,58 @@ export default async function DocPage({ params }: PageProps) {
             </div>
           ),
           th: ({ children }) => (
-            <th className="border border-border bg-muted px-4 py-2 text-left font-semibold">{children}</th>
+            <th className="border border-border bg-muted px-4 py-2 text-left font-semibold text-foreground">{children}</th>
           ),
           td: ({ children }) => (
-            <td className="border border-border px-4 py-2">{children}</td>
+            <td className="border border-border px-4 py-2 text-foreground">{children}</td>
           ),
           pre: ({ children }) => (
-            <pre className="bg-muted rounded-lg p-4 overflow-x-auto">{children}</pre>
+            <pre className="bg-zinc-100 dark:bg-zinc-900 rounded-lg p-4 overflow-x-auto text-zinc-800 dark:text-zinc-200">{children}</pre>
           ),
           code: ({ className, children, ...props }) => {
             const isInline = !className
             if (isInline) {
-              return <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono" {...props}>{children}</code>
+              return <code className="bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>{children}</code>
             }
-            return <code className={className} {...props}>{children}</code>
+            return <code className={`${className} text-zinc-800 dark:text-zinc-200`} {...props}>{children}</code>
           },
           h1: ({ children }) => {
             const text = String(children)
             const id = generateSlug(text)
-            return <h1 id={id} className="text-3xl font-bold mt-8 mb-4 first:mt-0 scroll-mt-4">{children}</h1>
+            return <h1 id={id} className="text-3xl font-bold mt-8 mb-4 first:mt-0 scroll-mt-4 text-foreground">{children}</h1>
           },
           h2: ({ children }) => {
             const text = String(children)
             const id = generateSlug(text)
-            return <h2 id={id} className="text-2xl font-semibold mt-8 mb-4 pb-2 border-b scroll-mt-4">{children}</h2>
+            return <h2 id={id} className="text-2xl font-semibold mt-8 mb-4 pb-2 border-b border-border scroll-mt-4 text-foreground">{children}</h2>
           },
           h3: ({ children }) => {
             const text = String(children)
             const id = generateSlug(text)
-            return <h3 id={id} className="text-xl font-semibold mt-6 mb-3 scroll-mt-4">{children}</h3>
+            return <h3 id={id} className="text-xl font-semibold mt-6 mb-3 scroll-mt-4 text-foreground">{children}</h3>
           },
           h4: ({ children }) => {
             const text = String(children)
             const id = generateSlug(text)
-            return <h4 id={id} className="text-lg font-semibold mt-4 mb-2 scroll-mt-4">{children}</h4>
+            return <h4 id={id} className="text-lg font-semibold mt-4 mb-2 scroll-mt-4 text-foreground">{children}</h4>
           },
+          p: ({ children }) => (
+            <p className="my-4 text-foreground leading-7">{children}</p>
+          ),
+          ul: ({ children }) => (
+            <ul className="my-4 list-disc list-inside space-y-2 text-foreground">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="my-4 list-decimal list-inside space-y-2 text-foreground">{children}</ol>
+          ),
+          li: ({ children }) => (
+            <li className="text-foreground">{children}</li>
+          ),
+          strong: ({ children }) => (
+            <strong className="font-semibold text-foreground">{children}</strong>
+          ),
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-primary pl-4 italic my-4">{children}</blockquote>
+            <blockquote className="border-l-4 border-primary pl-4 italic my-4 text-muted-foreground">{children}</blockquote>
           ),
           hr: () => <hr className="my-8 border-border" />,
         }}

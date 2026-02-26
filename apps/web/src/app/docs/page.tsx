@@ -87,9 +87,9 @@ export default function DocsPage() {
         <h2 className="font-semibold mb-2">Quick Start</h2>
         <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
           <li>Create a PlanFlow account at <Link href="/register" className="text-primary hover:underline">planflow.tools/register</Link></li>
-          <li>Install the MCP server with <code className="bg-muted px-1.5 py-0.5 rounded text-xs">npx @anthropic/claude-code mcp add @anthropic/planflow-mcp</code></li>
-          <li>Run <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/pfLogin</code> in Claude Code to connect</li>
-          <li>Create your first plan with <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/planNew</code></li>
+          <li>Install the MCP server with <code className="bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-1.5 py-0.5 rounded text-xs font-mono">npm install -g planflow-mcp</code></li>
+          <li>Run <code className="bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-1.5 py-0.5 rounded text-xs font-mono">/pfLogin</code> in Claude Code to connect</li>
+          <li>Create your first plan with <code className="bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-1.5 py-0.5 rounded text-xs font-mono">/planNew</code></li>
         </ol>
       </div>
     </div>

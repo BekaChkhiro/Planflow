@@ -79,25 +79,22 @@ For experienced developers who want to get running fast:
 # 1. Install the MCP server globally
 npm install -g planflow-mcp
 
-# 2. Sign up at planflow.tools and generate an API token
+# 2. Add MCP server to Claude Code
+claude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp
+
+# 3. (Optional) Install slash commands for enhanced workflow
+npm install -g planflow-plugin
+
+# 4. Sign up at planflow.tools and generate an API token
 #    Go to: https://planflow.tools/dashboard/settings/tokens
 
-# 3. Add to your Claude config (~/.config/claude/claude_desktop_config.json):
-{
-  "mcpServers": {
-    "planflow": {
-      "command": "planflow-mcp"
-    }
-  }
-}
-
-# 4. Restart Claude and login
+# 5. Restart Claude and login
 # In Claude, say: "Login to PlanFlow with token pf_your_token_here"
 
-# 5. Start managing projects!
+# 6. Start managing projects!
 # "Show my PlanFlow projects"
 # "Create a new project called MyApp"
-# "Sync my PROJECT_PLAN.md to PlanFlow"
+# "/planNew" (using slash command)
 ```
 
 ---
@@ -164,6 +161,16 @@ Verify the installation:
 ```bash
 planflow-mcp --version
 ```
+
+**Optional: Install Slash Commands**
+
+For an enhanced workflow with 50+ slash commands like `/planNew`, `/planUpdate`, and `/pfSyncPush`:
+
+```bash
+npm install -g planflow-plugin
+```
+
+The plugin automatically installs commands to `~/.claude/commands/`. If needed, run `planflow-plugin install` manually.
 
 **Alternative: Local Installation**
 

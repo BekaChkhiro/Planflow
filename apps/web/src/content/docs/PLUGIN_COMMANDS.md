@@ -63,6 +63,34 @@
 
 ---
 
+## Installation
+
+Install the PlanFlow plugin to get all slash commands:
+
+```bash
+npm install -g planflow-plugin
+```
+
+The plugin automatically installs 50+ slash commands to `~/.claude/commands/`.
+
+**Manual Commands:**
+
+```bash
+planflow-plugin install    # Install/reinstall commands
+planflow-plugin uninstall  # Remove all commands
+planflow-plugin list       # List installed commands
+planflow-plugin help       # Show help
+```
+
+**Note:** The MCP server (`planflow-mcp`) must be installed separately for cloud features:
+
+```bash
+npm install -g planflow-mcp
+claude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp
+```
+
+---
+
 ## Overview
 
 PlanFlow provides two types of commands:

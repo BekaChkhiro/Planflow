@@ -162,12 +162,25 @@ nvm install 20
 The fastest way to get started:
 
 ```bash
-# Install globally using npm
+# Install MCP server globally
 npm install -g planflow-mcp
+
+# Add to Claude Code
+claude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp
 
 # Verify installation
 planflow-mcp --version
 ```
+
+**Optional: Install Slash Commands**
+
+For an enhanced workflow with 50+ slash commands:
+
+```bash
+npm install -g planflow-plugin
+```
+
+This installs commands like `/planNew`, `/planUpdate`, `/pfSyncPush`, and more directly to `~/.claude/commands/`.
 
 That's it! Now proceed to [Configuration](#configuration).
 

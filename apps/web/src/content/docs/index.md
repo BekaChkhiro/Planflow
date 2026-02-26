@@ -6,6 +6,19 @@ Welcome to the PlanFlow documentation. This index provides quick access to all d
 
 ---
 
+## Quick Install
+
+```bash
+# MCP Server (required for cloud features)
+npm install -g planflow-mcp
+claude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp
+
+# Slash Commands (50+ commands like /planNew, /planUpdate)
+npm install -g planflow-plugin
+```
+
+---
+
 ## Quick Links
 
 | Getting Started | For Developers | API & Integrations |
@@ -154,15 +167,22 @@ See [API Reference](./API_REFERENCE.md) for complete documentation.
 
 ---
 
+## npm Packages
+
+| Package | Version | Description |
+|---------|---------|-------------|
+| [planflow-mcp](https://www.npmjs.com/package/planflow-mcp) | 0.1.2 | MCP server for Claude Code integration |
+| [planflow-plugin](https://www.npmjs.com/package/planflow-plugin) | 0.1.1 | 50+ slash commands for Claude Code |
+
 ## Version Info
 
 | Component | Version |
 |-----------|---------|
 | API | 0.0.1 |
-| MCP Server | 1.6.0 |
-| Plugin | 1.6.0 |
+| MCP Server | 0.1.2 |
+| Plugin | 0.1.1 |
 | Web Dashboard | 0.0.1 |
 
 ---
 
-*Last Updated: 2026-02-24*
+*Last Updated: 2026-02-26*

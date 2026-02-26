@@ -65,11 +65,7 @@ function StepNumber({ number }: { number: number }) {
 const mcpConfigMac = `{
   "mcpServers": {
     "planflow": {
-      "command": "npx",
-      "args": ["-y", "@planflow/mcp-server"],
-      "env": {
-        "PLANFLOW_API_TOKEN": "your-api-token-here"
-      }
+      "command": "planflow-mcp"
     }
   }
 }`
@@ -77,14 +73,12 @@ const mcpConfigMac = `{
 const mcpConfigWindows = `{
   "mcpServers": {
     "planflow": {
-      "command": "npx.cmd",
-      "args": ["-y", "@planflow/mcp-server"],
-      "env": {
-        "PLANFLOW_API_TOKEN": "your-api-token-here"
-      }
+      "command": "planflow-mcp"
     }
   }
 }`
+
+const cliCommand = `claude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp`
 
 export default function MCPSetupPage() {
   return (
@@ -200,10 +194,17 @@ export default function MCPSetupPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Open your Claude Code settings file and add the PlanFlow MCP server configuration.
-            Replace <code className="rounded bg-muted px-1.5 py-0.5 text-sm">your-api-token-here</code> with
-            the token you created in Step 1.
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">
+                Option 1: Install globally and use CLI command (Recommended)
+              </p>
+              <CodeBlock code={`npm install -g planflow-mcp\nclaude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp`} />
+            </div>
+          </div>
+
+          <p className="text-sm text-muted-foreground mt-4">
+            Or manually configure by editing your Claude settings file:
           </p>
 
           <Tabs defaultValue="mac" className="w-full">
@@ -266,25 +267,24 @@ export default function MCPSetupPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Restart Claude Code to load the new configuration. Then try one of these commands
-            to verify the connection:
+            Restart Claude Code to load the new configuration. Then authenticate with your API token:
           </p>
 
           <div className="space-y-3">
             <div className="rounded-lg border p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Terminal className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-medium text-foreground">Check your account</p>
+                <p className="text-sm font-medium text-foreground">Step 1: Login with your token</p>
               </div>
-              <CodeBlock code="Ask Claude: &quot;Use planflow_whoami to check my account&quot;" />
+              <CodeBlock code={`Tell Claude: "Login to PlanFlow with token: pf_your_token_here"`} />
             </div>
 
             <div className="rounded-lg border p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Terminal className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-medium text-foreground">List your projects</p>
+                <p className="text-sm font-medium text-foreground">Step 2: List your projects</p>
               </div>
-              <CodeBlock code="Ask Claude: &quot;Use planflow_projects to list my projects&quot;" />
+              <CodeBlock code={`Tell Claude: "Show my PlanFlow projects"`} />
             </div>
           </div>
 

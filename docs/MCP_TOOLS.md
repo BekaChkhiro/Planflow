@@ -93,7 +93,7 @@ The Model Context Protocol (MCP) is an open standard that allows AI assistants l
 ### Install via npm
 
 ```bash
-npm install -g @planflow/mcp-server
+npm install -g planflow-mcp-server
 ```
 
 ### Configure Claude Code
@@ -105,7 +105,7 @@ Add to your Claude Code configuration (`~/.config/claude/claude_desktop_config.j
   "mcpServers": {
     "planflow": {
       "command": "npx",
-      "args": ["-y", "@planflow/mcp-server"]
+      "args": ["-y", "planflow-mcp-server"]
     }
   }
 }

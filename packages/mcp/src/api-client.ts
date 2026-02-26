@@ -65,6 +65,18 @@ interface TokenVerifyResponse {
   tokenName: string
 }
 
+interface Organization {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  role: 'owner' | 'admin' | 'member'
+}
+
+interface OrganizationsListResponse {
+  organizations: Organization[]
+}
+
 interface MessageResponse {
   message: string
 }
@@ -431,10 +443,36 @@ export class ApiClient {
   // ============================================================
 
   /**
+   * List all organizations for the authenticated user
+   */
+  async listOrganizations(): Promise<Organization[]> {
+    const response = await this.request<OrganizationsListResponse>('GET', '/organizations')
+    return response.organizations
+  }
+
+  /**
+   * Get the user's default organization (first one they own or are a member of)
+   */
+  async getDefaultOrganization(): Promise<Organization | null> {
+    const orgs = await this.listOrganizations()
+    // Prefer owned organizations, then fall back to any membership
+    return orgs.find(o => o.role === 'owner') || orgs[0] || null
+  }
+
+  /**
    * List all projects for the authenticated user
    */
-  async listProjects(): Promise<Array<Omit<Project, 'userId'>>> {
-    const response = await this.request<ProjectsListResponse>('GET', '/projects')
+  async listProjects(organizationId?: string): Promise<Array<Omit<Project, 'userId'>>> {
+    // If no organizationId provided, get the default organization
+    let orgId = organizationId
+    if (!orgId) {
+      const defaultOrg = await this.getDefaultOrganization()
+      if (!defaultOrg) {
+        throw new ApiError('No organization found. Please create an organization first.', 400)
+      }
+      orgId = defaultOrg.id
+    }
+    const response = await this.request<ProjectsListResponse>('GET', `/projects?organizationId=${orgId}`)
     return response.projects
   }
 

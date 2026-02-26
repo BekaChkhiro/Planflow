@@ -1,6 +1,6 @@
 {
-  "name": "@planflow/mcp",
-  "version": "0.1.0",
+  "name": "planflow-mcp",
+  "version": "0.1.2",
   "description": "PlanFlow MCP Server for Claude Code - AI-native project management from your terminal",
   "author": "PlanFlow <hello@planflow.tools>",
   "license": "MIT",
@@ -37,11 +37,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/planflow/planflow.git",
+    "url": "git+https://github.com/planflow-tools/planflow.git",
     "directory": "packages/mcp"
   },
   "bugs": {
-    "url": "https://github.com/planflow/planflow/issues"
+    "url": "https://github.com/planflow-tools/planflow/issues"
   },
   "homepage": "https://planflow.tools",
   "engines": {
@@ -53,7 +53,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsup src/index.ts --format esm --dts --clean",
+    "build": "tsup",
     "start": "node dist/index.js",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
@@ -64,7 +64,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@planflow/shared": "workspace:*",
     "zod": "^3.23.0"
   },
   "devDependencies": {

@@ -327,7 +327,7 @@ pnpm --filter @planflow/api dev
 pnpm --filter @planflow/web dev
 
 # MCP server (for Claude Code integration)
-pnpm --filter @planflow/mcp dev
+pnpm --filter planflow-mcp dev
 ```
 
 ### Using Docker for Redis (Optional)
@@ -536,7 +536,7 @@ export const exampleTool: Tool = {
 ```bash
 # Run all unit tests
 pnpm --filter @planflow/api test
-pnpm --filter @planflow/mcp test
+pnpm --filter planflow-mcp test
 
 # Watch mode
 pnpm --filter @planflow/api test:watch
@@ -723,7 +723,7 @@ pnpm lint && pnpm typecheck && pnpm format:check
 
 1. Build the MCP package:
    ```bash
-   pnpm --filter @planflow/mcp build
+   pnpm --filter planflow-mcp build
    ```
 
 2. Check Claude Code MCP configuration

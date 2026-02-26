@@ -1,4 +1,4 @@
-# @planflow/mcp
+# planflow-mcp
 
 MCP (Model Context Protocol) server for PlanFlow - AI-native project management from your terminal.
 
@@ -10,7 +10,7 @@ This package provides a MCP server that integrates PlanFlow with Claude Code, al
 
 ```bash
 # 1. Install globally
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 
 # 2. Add to Claude Desktop config (~/.config/claude/claude_desktop_config.json)
 {
@@ -32,20 +32,30 @@ Requires Node.js >= 20.0.0. See [INSTALLATION.md](./INSTALLATION.md) for detaile
 ## Installation
 
 ```bash
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 ```
 
 Or with pnpm:
 
 ```bash
-pnpm add -g @planflow/mcp
+pnpm add -g planflow-mcp
 ```
 
 > **Need help?** See the [complete installation guide](./INSTALLATION.md) for detailed instructions, troubleshooting, and configuration options.
 
 ## Configuration
 
-Add the MCP server to your Claude Code configuration file (`~/.config/claude/claude_desktop_config.json`):
+### Option 1: CLI Command (Recommended)
+
+```bash
+claude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp
+```
+
+This automatically adds PlanFlow to your Claude Code configuration.
+
+### Option 2: Manual Configuration
+
+Add the MCP server to your Claude Code configuration file (`~/.claude.json` or `~/.config/claude/settings.json`):
 
 ```json
 {
@@ -64,11 +74,13 @@ Or if installed locally in a project:
   "mcpServers": {
     "planflow": {
       "command": "npx",
-      "args": ["@planflow/mcp"]
+      "args": ["planflow-mcp"]
     }
   }
 }
 ```
+
+After configuration, restart Claude Code to load the MCP server.
 
 ## Authentication
 

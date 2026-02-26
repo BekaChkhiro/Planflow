@@ -91,11 +91,24 @@ Returns:
     }
 
     try {
-      // Get the API client and create the project
+      // Get the API client
       const client = getApiClient()
+
+      // Get the default organization
+      const defaultOrg = await client.getDefaultOrganization()
+      if (!defaultOrg) {
+        return createErrorResult(
+          '❌ No organization found.\n\n' +
+            'Please create an organization first at:\n' +
+            '  https://planflow.tools/dashboard/team'
+        )
+      }
+
+      // Create the project
       const project = await client.createProject({
         name: input.name,
         description: input.description,
+        organizationId: defaultOrg.id,
       })
 
       logger.info('Successfully created project', { projectId: project.id })

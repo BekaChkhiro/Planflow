@@ -2106,7 +2106,7 @@ For interactive API exploration, visit:
 Install the PlanFlow MCP server for Claude Code integration:
 
 ```bash
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 ```
 
 See [MCP Installation Guide](./MCP_INSTALLATION.md) for configuration.

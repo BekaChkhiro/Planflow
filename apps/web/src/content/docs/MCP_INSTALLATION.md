@@ -163,7 +163,7 @@ The fastest way to get started:
 
 ```bash
 # Install globally using npm
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 
 # Verify installation
 planflow-mcp --version
@@ -177,7 +177,7 @@ That's it! Now proceed to [Configuration](#configuration).
 
 ```bash
 # Install with npm
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 
 # Or with Homebrew (coming soon)
 # brew install planflow/tap/planflow-mcp
@@ -189,7 +189,7 @@ npm install -g @planflow/mcp
 
 ```powershell
 # Install with npm (run as Administrator if needed)
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 
 # Verify the installation path
 where planflow-mcp
@@ -210,7 +210,7 @@ npm config get prefix
 
 ```bash
 # Install with npm
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 
 # If you get EACCES permission errors:
 mkdir -p ~/.npm-global
@@ -219,7 +219,7 @@ echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
 source ~/.bashrc
 
 # Then reinstall
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 ```
 
 ### Alternative Installation Methods
@@ -227,13 +227,13 @@ npm install -g @planflow/mcp
 #### Using pnpm
 
 ```bash
-pnpm add -g @planflow/mcp
+pnpm add -g planflow-mcp
 ```
 
 #### Using yarn
 
 ```bash
-yarn global add @planflow/mcp
+yarn global add planflow-mcp
 ```
 
 #### Using npx (No Installation)
@@ -241,7 +241,7 @@ yarn global add @planflow/mcp
 Run without installing - useful for trying out or CI/CD:
 
 ```bash
-npx @planflow/mcp
+npx planflow-mcp
 ```
 
 #### Local Project Installation
@@ -249,7 +249,7 @@ npx @planflow/mcp
 Install as a dev dependency in your project:
 
 ```bash
-npm install --save-dev @planflow/mcp
+npm install --save-dev planflow-mcp
 ```
 
 Then reference it in your Claude config using npx or the full path.
@@ -329,7 +329,7 @@ New-Item -ItemType File -Force -Path "$env:APPDATA\claude\claude_desktop_config.
   "mcpServers": {
     "planflow": {
       "command": "npx",
-      "args": ["@planflow/mcp"]
+      "args": ["planflow-mcp"]
     }
   }
 }
@@ -342,7 +342,7 @@ New-Item -ItemType File -Force -Path "$env:APPDATA\claude\claude_desktop_config.
   "mcpServers": {
     "planflow": {
       "command": "/usr/local/bin/node",
-      "args": ["/usr/local/lib/node_modules/@planflow/mcp/dist/index.js"]
+      "args": ["/usr/local/lib/node_modules/planflow-mcp/dist/index.js"]
     }
   }
 }
@@ -359,7 +359,24 @@ Completely quit Claude Desktop (not just close the window) and reopen it.
 
 For the Claude Code command-line interface.
 
-#### Option 1: Project-Level Config
+#### Option 1: CLI Command (Recommended)
+
+The easiest way to add PlanFlow to Claude Code:
+
+```bash
+# Add to user config (available in all projects)
+claude mcp add --transport stdio --scope user planflow-mcp -- planflow-mcp
+
+# Or add to current project only
+claude mcp add --transport stdio planflow-mcp -- planflow-mcp
+
+# Verify it's configured
+claude mcp list
+```
+
+After running this command, restart Claude Code.
+
+#### Option 2: Project-Level Config
 
 Create `.mcp.json` in your project root:
 
@@ -615,7 +632,7 @@ Debug logs are written to stderr and won't interfere with MCP communication.
 
 1. Verify installation:
    ```bash
-   npm list -g @planflow/mcp
+   npm list -g planflow-mcp
    ```
 
 2. Find the installation path:
@@ -641,7 +658,7 @@ Debug logs are written to stderr and won't interfere with MCP communication.
      "mcpServers": {
        "planflow": {
          "command": "npx",
-         "args": ["@planflow/mcp"]
+         "args": ["planflow-mcp"]
        }
      }
    }
@@ -737,7 +754,7 @@ nvm use 20      # Switch to Node.js 20
    npm config set prefix '~/.npm-global'
    echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
    source ~/.bashrc
-   npm install -g @planflow/mcp
+   npm install -g planflow-mcp
    ```
 
 2. Or use npx without global installation
@@ -778,20 +795,20 @@ If none of the above solutions work:
 ```bash
 planflow-mcp --version
 # or
-npm list -g @planflow/mcp
+npm list -g planflow-mcp
 ```
 
 ### Update to Latest Version
 
 ```bash
 # npm
-npm update -g @planflow/mcp
+npm update -g planflow-mcp
 
 # pnpm
-pnpm update -g @planflow/mcp
+pnpm update -g planflow-mcp
 
 # yarn
-yarn global upgrade @planflow/mcp
+yarn global upgrade planflow-mcp
 ```
 
 ### Uninstall
@@ -800,13 +817,13 @@ yarn global upgrade @planflow/mcp
 
 ```bash
 # npm
-npm uninstall -g @planflow/mcp
+npm uninstall -g planflow-mcp
 
 # pnpm
-pnpm remove -g @planflow/mcp
+pnpm remove -g planflow-mcp
 
 # yarn
-yarn global remove @planflow/mcp
+yarn global remove planflow-mcp
 ```
 
 #### Remove Configuration

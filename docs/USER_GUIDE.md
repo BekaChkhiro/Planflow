@@ -1193,7 +1193,7 @@ Step-by-step guide to connect Claude Code:
 │                                                                             │
 │  Step 1: Install the MCP Server                                            │
 │  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │ npm install -g @planflow/mcp                                   [Copy]│ │
+│  │ npm install -g planflow-mcp                                   [Copy]│ │
 │  └───────────────────────────────────────────────────────────────────────┘ │
 │                                                                             │
 │  Step 2: Add to Claude Config                                              │

@@ -1361,7 +1361,7 @@ const tools = [
   "mcpServers": {
     "planflow": {
       "command": "npx",
-      "args": ["@planflow/mcp"],
+      "args": ["planflow-mcp"],
       "env": {}
     }
   }
@@ -1602,7 +1602,7 @@ const tools = [
 │  ├── npm package setup                                          │
 │  └── Installation documentation                                 │
 │                                                                 │
-│  ✅ Deliverable: npm install @planflow/mcp                      │
+│  ✅ Deliverable: npm install planflow-mcp                      │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```

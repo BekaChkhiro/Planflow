@@ -36,7 +36,7 @@ By the end of this tutorial, viewers will be able to:
 **Visual:** Terminal
 
 ```
-$ npm install -g @planflow/mcp
+$ npm install -g planflow-mcp
 
 added 45 packages in 8s
 
@@ -57,7 +57,7 @@ $ planflow-mcp --version
 ```
 $ mkdir -p ~/.local/planflow && cd ~/.local/planflow
 $ npm init -y
-$ npm install @planflow/mcp
+$ npm install planflow-mcp
 
 $ ls node_modules/.bin/
 planflow-mcp
@@ -102,7 +102,7 @@ $ code ~/.config/claude/claude_desktop_config.json
     "planflow": {
       "command": "node",
       "args": [
-        "/Users/you/.local/planflow/node_modules/@planflow/mcp/dist/index.js"
+        "/Users/you/.local/planflow/node_modules/planflow-mcp/dist/index.js"
       ]
     }
   }

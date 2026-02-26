@@ -66,26 +66,26 @@ Install the MCP server globally to use it across all projects.
 **Using npm:**
 
 ```bash
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 ```
 
 **Using pnpm:**
 
 ```bash
-pnpm add -g @planflow/mcp
+pnpm add -g planflow-mcp
 ```
 
 **Using yarn:**
 
 ```bash
-yarn global add @planflow/mcp
+yarn global add planflow-mcp
 ```
 
 **Verify installation:**
 
 ```bash
 planflow-mcp --version
-# Should output: @planflow/mcp v0.1.0
+# Should output: planflow-mcp v0.1.0
 ```
 
 ### Local Project Installation
@@ -94,13 +94,13 @@ Install as a dev dependency in your project for version-locked usage.
 
 ```bash
 # npm
-npm install --save-dev @planflow/mcp
+npm install --save-dev planflow-mcp
 
 # pnpm
-pnpm add -D @planflow/mcp
+pnpm add -D planflow-mcp
 
 # yarn
-yarn add -D @planflow/mcp
+yarn add -D planflow-mcp
 ```
 
 ### Run Without Installing (npx)
@@ -108,7 +108,7 @@ yarn add -D @planflow/mcp
 Use npx to run without installation (downloads on first use).
 
 ```bash
-npx @planflow/mcp
+npx planflow-mcp
 ```
 
 This is useful for:
@@ -155,7 +155,7 @@ If the file doesn't exist, create it. Add the PlanFlow server to the `mcpServers
   "mcpServers": {
     "planflow": {
       "command": "npx",
-      "args": ["@planflow/mcp"]
+      "args": ["planflow-mcp"]
     }
   }
 }
@@ -168,7 +168,7 @@ If the file doesn't exist, create it. Add the PlanFlow server to the `mcpServers
   "mcpServers": {
     "planflow": {
       "command": "node",
-      "args": ["/path/to/your/project/node_modules/@planflow/mcp/dist/index.js"]
+      "args": ["/path/to/your/project/node_modules/planflow-mcp/dist/index.js"]
     }
   }
 }
@@ -450,26 +450,26 @@ Debug logs are written to stderr and won't interfere with MCP communication.
 
 ```bash
 # npm
-npm update -g @planflow/mcp
+npm update -g planflow-mcp
 
 # pnpm
-pnpm update -g @planflow/mcp
+pnpm update -g planflow-mcp
 
 # yarn
-yarn global upgrade @planflow/mcp
+yarn global upgrade planflow-mcp
 ```
 
 ### Local Installation
 
 ```bash
 # npm
-npm update @planflow/mcp
+npm update planflow-mcp
 
 # pnpm
-pnpm update @planflow/mcp
+pnpm update planflow-mcp
 
 # yarn
-yarn upgrade @planflow/mcp
+yarn upgrade planflow-mcp
 ```
 
 ### Check Current Version
@@ -477,7 +477,7 @@ yarn upgrade @planflow/mcp
 ```bash
 planflow-mcp --version
 # or
-npm list -g @planflow/mcp
+npm list -g planflow-mcp
 ```
 
 ---
@@ -490,19 +490,19 @@ npm list -g @planflow/mcp
 
 ```bash
 # npm
-npm uninstall -g @planflow/mcp
+npm uninstall -g planflow-mcp
 
 # pnpm
-pnpm remove -g @planflow/mcp
+pnpm remove -g planflow-mcp
 
 # yarn
-yarn global remove @planflow/mcp
+yarn global remove planflow-mcp
 ```
 
 **Local:**
 
 ```bash
-npm uninstall @planflow/mcp
+npm uninstall planflow-mcp
 ```
 
 ### Remove Configuration

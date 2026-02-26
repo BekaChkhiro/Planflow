@@ -44,7 +44,7 @@ PlanFlow is an AI-native project management tool designed specifically for devel
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
 │   Claude Code   │ ←──→ │   MCP Server    │ ←──→ │  PlanFlow API   │
-│   (Your IDE)    │      │ (@planflow/mcp) │      │ (planflow.tools)  │
+│   (Your IDE)    │      │ (planflow-mcp) │      │ (planflow.tools)  │
 └─────────────────┘      └─────────────────┘      └─────────────────┘
         ↑                                                  ↑
         │                                                  │
@@ -77,7 +77,7 @@ For experienced developers who want to get running fast:
 
 ```bash
 # 1. Install the MCP server globally
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 
 # 2. Sign up at planflow.tools and generate an API token
 #    Go to: https://planflow.tools/dashboard/settings/tokens
@@ -156,7 +156,7 @@ Store it somewhere safe - you'll need it in a moment.
 Open your terminal and install the PlanFlow MCP server globally:
 
 ```bash
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 ```
 
 Verify the installation:
@@ -173,7 +173,7 @@ If you prefer not to install globally:
 # Install locally in a directory
 mkdir -p ~/.local/planflow && cd ~/.local/planflow
 npm init -y
-npm install @planflow/mcp
+npm install planflow-mcp
 
 # Use npx in your Claude config instead
 ```
@@ -442,7 +442,7 @@ npm root -g
 export PATH="$PATH:$(npm root -g)/../bin"
 
 # Or reinstall
-npm install -g @planflow/mcp
+npm install -g planflow-mcp
 ```
 
 ### "Authentication failed"

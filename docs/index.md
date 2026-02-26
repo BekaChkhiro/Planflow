@@ -92,7 +92,7 @@ For contributors and developers building on PlanFlow.
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
 │   Claude Code   │ ←──→ │   MCP Server    │ ←──→ │  PlanFlow API   │
-│   (Your IDE)    │      │ (@planflow/mcp) │      │ (planflow.tools)│
+│   (Your IDE)    │      │ (planflow-mcp) │      │ (planflow.tools)│
 └─────────────────┘      └─────────────────┘      └─────────────────┘
         │                                                  │
         │  PROJECT_PLAN.md                                 │

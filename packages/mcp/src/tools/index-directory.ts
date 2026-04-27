@@ -3,14 +3,6 @@
  *
  * Recursively indexes an entire directory into a PlanFlow project.
  * Handles batching and rate-limit delays automatically.
- *
- * Usage:
- *   planflow_index_directory(
- *     projectId: "uuid",
- *     directory: "/path/to/project",
- *     include: ["star/star/*.ts", "star/star/*.tsx", "star/star/*.md"],
- *     exclude: ["star/star/node_modules/star", "star/star/.next/star", "star/star/*.test.ts"]
- *   )
  */
 
 import { z } from 'zod'
@@ -36,6 +28,22 @@ const DELAY_MS = 21000 // 21s — safe for Voyage AI free tier (3 RPM)
 const MAX_FILE_SIZE = 1024 * 1024 // 1 MB per file
 
 // ---------------------------------------------------------------------------
+// Coercible array schema — accepts string or string[]
+// ---------------------------------------------------------------------------
+
+function coercibleStringArray(defaultValue: string[]) {
+  return z.preprocess(
+    (val) => {
+      if (val === undefined || val === null) return defaultValue
+      if (typeof val === 'string') return [val]
+      if (Array.isArray(val)) return val
+      return defaultValue
+    },
+    z.array(z.string())
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Input schema
 // ---------------------------------------------------------------------------
 
@@ -49,101 +57,96 @@ const IndexDirectoryInputSchema = z.object({
     .string()
     .min(1, 'Directory path cannot be empty')
     .describe('Absolute or relative path to the directory to index.'),
-  include: z
-    .array(z.string())
-    .default(['**/*'])
-    .describe('Glob patterns for files to include (e.g. ["**/*.ts", "**/*.tsx"]).'),
-  exclude: z
-    .array(z.string())
-    .default([
-      '**/node_modules/**',
-      '**/.git/**',
-      '**/.next/**',
-      '**/dist/**',
-      '**/build/**',
-      '**/.turbo/**',
-      '**/coverage/**',
-      '**/test-results/**',
-      '**/playwright-report/**',
-      '**/*.test.ts',
-      '**/*.test.tsx',
-      '**/*.spec.ts',
-      '**/*.spec.tsx',
-      '**/__tests__/**',
-    ])
-    .describe('Glob patterns for files to exclude.'),
+  include: coercibleStringArray([
+    '**/*.ts',
+    '**/*.tsx',
+    '**/*.js',
+    '**/*.jsx',
+    '**/*.md',
+    '**/*.mdx',
+    '**/*.json',
+    '**/*.prisma',
+    '**/*.sql',
+    '**/*.css',
+    '**/*.html',
+    '**/*.yml',
+    '**/*.yaml',
+  ]).describe('Glob patterns for files to include. Can be a single pattern or array.'),
+  exclude: coercibleStringArray([
+    '**/node_modules/**',
+    '**/.git/**',
+    '**/.next/**',
+    '**/dist/**',
+    '**/build/**',
+    '**/.turbo/**',
+    '**/coverage/**',
+    '**/test-results/**',
+    '**/playwright-report/**',
+    '**/*.test.ts',
+    '**/*.test.tsx',
+    '**/*.spec.ts',
+    '**/*.spec.tsx',
+    '**/__tests__/**',
+  ]).describe('Glob patterns for files to exclude. Can be a single pattern or array.'),
 })
 
 type IndexDirectoryInput = z.infer<typeof IndexDirectoryInputSchema>
 
 // ---------------------------------------------------------------------------
-// File matching helpers
+// Glob matching (minimatch-style)
 // ---------------------------------------------------------------------------
 
-function matchGlob(path: string, pattern: string): boolean {
-  // Simple glob matching: ** matches any directories, * matches any chars except /
-  const parts = pattern.split('/')
-  const pathParts = path.split('/')
-
-  let pi = 0
-  let gi = 0
-
-  while (gi < parts.length && pi < pathParts.length) {
-    const g = parts[gi]
-    const p = pathParts[pi]
-
-    if (g === '**') {
-      // ** matches zero or more directories
-      if (gi === parts.length - 1) return true // ** at end matches everything
-      gi++
-      const nextG = parts[gi]
-      // Find nextG in remaining path
-      while (pi < pathParts.length) {
-        if (matchSegment(pathParts[pi], nextG)) {
-          break
-        }
-        pi++
-      }
-      if (pi >= pathParts.length) return false
-      gi++
-      pi++
-    } else {
-      if (!matchSegment(p, g)) return false
-      gi++
-      pi++
+function minimatch(path: string, pattern: string): boolean {
+  // Handle ** at start: **/rest
+  if (pattern.startsWith('**/')) {
+    const rest = pattern.slice(3)
+    if (rest === '') return true
+    const parts = path.split('/')
+    for (let i = 0; i < parts.length; i++) {
+      const suffix = parts.slice(i).join('/')
+      if (minimatch(suffix, rest)) return true
     }
+    return false
   }
 
-  // Handle trailing **
-  while (gi < parts.length && parts[gi] === '**') gi++
-
-  return gi === parts.length && pi === pathParts.length
-}
-
-function matchSegment(value: string, pattern: string): boolean {
-  // Simple * matching within a segment
-  const parts = pattern.split('*')
-  if (parts.length === 1) return value === pattern
-
-  let pos = 0
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]
-    if (part === '') continue
-    const idx = value.indexOf(part, pos)
-    if (idx === -1) return false
-    pos = idx + part.length
+  // Handle ** in middle: prefix/**/suffix
+  const globstarIdx = pattern.indexOf('/**/')
+  if (globstarIdx !== -1) {
+    const prefix = pattern.slice(0, globstarIdx)
+    const suffix = pattern.slice(globstarIdx + 4)
+    if (!path.startsWith(prefix)) return false
+    const restPath = path.slice(prefix.length)
+    const parts = restPath.split('/')
+    for (let i = 0; i < parts.length; i++) {
+      const subPath = parts.slice(i).join('/')
+      if (minimatch(subPath, suffix)) return true
+    }
+    return false
   }
-  return true
+
+  // Handle ** at end: prefix/**
+  if (pattern.endsWith('/**')) {
+    const prefix = pattern.slice(0, -3)
+    return path === prefix || path.startsWith(prefix + '/')
+  }
+
+  // Simple glob: convert * and ? to regex
+  const regexPattern = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\?/g, '[^/]')
+  const regex = new RegExp(`^${regexPattern}$`)
+  return regex.test(path)
 }
 
 function shouldIncludeFile(relPath: string, include: string[], exclude: string[]): boolean {
   // Check exclude first
   for (const pattern of exclude) {
-    if (matchGlob(relPath, pattern)) return false
+    if (minimatch(relPath, pattern)) return false
   }
-  // Check include
+  // Check include — if any include pattern matches, include it
   for (const pattern of include) {
-    if (matchGlob(relPath, pattern)) return true
+    if (minimatch(relPath, pattern)) return true
   }
   return false
 }
@@ -191,10 +194,12 @@ function scanDirectory(
 
     if (item.isDirectory()) {
       // Skip excluded directories early for performance
-      if (['node_modules', '.git', '.next', 'dist', 'build', '.turbo', 'coverage',
-           'test-results', 'playwright-report', '__tests__'].includes(item.name)) {
-        continue
-      }
+      const skipDirs = new Set([
+        'node_modules', '.git', '.next', 'dist', 'build', '.turbo',
+        'coverage', 'test-results', 'playwright-report', '__tests__',
+        '.svelte-kit', '.vercel', '.cache', 'out', '.nuxt',
+      ])
+      if (skipDirs.has(item.name)) continue
       scanDirectory(fullPath, baseDir, include, exclude, files)
     } else {
       if (shouldIncludeFile(relPath, include, exclude)) {
@@ -237,25 +242,20 @@ export const indexDirectoryTool: ToolDefinition<IndexDirectoryInput> = {
 
   description: `Recursively index an entire directory into a PlanFlow project.
 
-Automatically handles:
-  • File discovery via glob patterns
-  • Batching (20 files per API call)
-  • Rate-limit delays between batches (21s)
-
-Perfect for indexing a full codebase without manually listing every file.
+Automatically handles file discovery, batching (20 files per call), and rate-limit delays (21s between batches).
 
 Usage:
   planflow_index_directory(
     directory: "/Users/you/project",
-    include: ["**/*.ts", "**/*.tsx", "**/*.md"],
-    exclude: ["**/node_modules/**", "**/*.test.ts"]
+    include: "**/*.ts",
+    exclude: "**/node_modules/**"
   )
 
 Parameters:
   - projectId (optional): Project UUID (uses current project if omitted)
   - directory (required): Path to directory to index
-  - include (optional): Glob patterns for files to include (default: all files)
-  - exclude (optional): Glob patterns for files to skip (default: common build/test dirs)
+  - include (optional): Glob pattern(s) for files to include. Default: common source files (ts, tsx, js, md, json, prisma, etc.)
+  - exclude (optional): Glob pattern(s) to skip. Default: node_modules, .next, dist, test files
 
 Prerequisites:
   • Must be logged in with planflow_login()
@@ -283,7 +283,7 @@ Prerequisites:
       )
     }
 
-    // Resolve directory path
+    // Resolve directory path (expand ~)
     const dirPath = input.directory.startsWith('~')
       ? input.directory.replace(/^~/, process.env.HOME || '')
       : input.directory

@@ -6,6 +6,7 @@ RUN corepack enable
 
 WORKDIR /app
 
+# Cache-bust: include a hash that changes when deps change
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY turbo.json tsconfig.json ./
 COPY apps/api/package.json ./apps/api/
@@ -29,6 +30,9 @@ ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
 WORKDIR /app
+
+# Create directories before COPY to avoid cache key issues
+RUN mkdir -p apps/api packages/shared packages/rag
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/

@@ -76,3 +76,22 @@ export type {
   LemonSqueezyWebhookPayload,
   WebhookProcessResult,
 } from './webhook.service.js'
+
+// Knowledge service
+export { knowledgeService, KnowledgeService } from './knowledge.service.js'
+export type { KnowledgeQuery } from './knowledge.service.js'
+
+// Tech Stack Detector service (T20.6)
+export { techStackDetectorService, TechStackDetectorService } from './tech-stack-detector.service.js'
+export type { DetectionInput, DetectedItem, DetectionResult } from './tech-stack-detector.service.js'
+
+// Knowledge Aggregator service (T20.8)
+export { knowledgeAggregatorService, KnowledgeAggregatorService } from './knowledge-aggregator.service.js'
+export type {
+  AggregatorQuery,
+  AggregatedContext,
+  KnowledgeLayer,
+  RealtimeLayer,
+  ActivityLayer,
+  ContextSummary,
+} from './knowledge-aggregator.service.js'

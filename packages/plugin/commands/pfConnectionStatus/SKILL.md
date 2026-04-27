@@ -46,7 +46,7 @@ function getMergedConfig() {
 const config = getMergedConfig()
 const language = config.language || "en"
 const cloudConfig = config.cloud || {}
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ### Step 1: Check Authentication

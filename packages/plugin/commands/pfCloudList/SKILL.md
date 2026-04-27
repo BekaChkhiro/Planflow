@@ -39,7 +39,7 @@ const isAuthenticated = !!cloudConfig.apiToken
 const currentProjectId = cloudConfig.projectId
 const apiUrl = cloudConfig.apiUrl || "https://api.planflow.tools"
 
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ## Step 1: Validate Authentication
@@ -61,7 +61,32 @@ If not authenticated, display error card:
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## Step 2: Fetch Projects (with Loading)
+## Step 2: Fetch User's Organizations
+
+First, fetch the user's organizations to get the default organization ID:
+
+**API Call:**
+```bash
+curl -s \
+  -H "Authorization: Bearer {TOKEN}" \
+  "https://api.planflow.tools/organizations"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "organizations": [
+      { "id": "org-uuid", "name": "My Org", "role": "owner" }
+    ]
+  }
+}
+```
+
+Use the first organization with `owner` role, or fall back to the first organization.
+
+## Step 3: Fetch Projects (with Loading)
 
 **Loading Card:**
 
@@ -79,10 +104,10 @@ If not authenticated, display error card:
 ```bash
 curl -s \
   -H "Authorization: Bearer {TOKEN}" \
-  "https://api.planflow.tools/projects"
+  "https://api.planflow.tools/projects?organizationId={ORG_ID}"
 ```
 
-## Step 3: Display Projects Card
+## Step 4: Display Projects Card
 
 ```
 ╭──────────────────────────────────────────────────────────────────────────────╮

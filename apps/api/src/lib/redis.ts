@@ -4,6 +4,8 @@ import { loggers } from './logger.js'
 const log = loggers.redis
 const rateLimitLog = loggers.rateLimit
 const taskLockLog = loggers.taskLock
+const activeWorkLog = loggers.activeWork
+const recentChangesLog = loggers.recentChanges
 
 // ============================================
 // Redis Client Configuration
@@ -1046,4 +1048,684 @@ export function resetTaskLockStore(): void {
     taskLockStore.clearAllTimers()
   }
   taskLockStore = null
+}
+
+// ============================================
+// Active Work Store Interface (T20.4)
+// ============================================
+
+/** Default TTL: 2 minutes — clients must heartbeat before this expires */
+export const ACTIVE_WORK_TTL_MS = 2 * 60 * 1000
+
+export interface ActiveWorkData {
+  taskId: string          // Human-readable ID (e.g., "T1.1")
+  taskUuid: string        // Database UUID
+  taskName: string        // Task display name
+  userId: string
+  userEmail: string
+  userName: string | null
+  startedAt: string       // ISO timestamp
+  lastHeartbeat: string   // ISO timestamp — updated on each heartbeat
+  filePaths?: string[]    // Files the user is currently working on (T20.9)
+}
+
+/**
+ * A detected file conflict: two users working on the same file(s).
+ */
+export interface FileConflict {
+  filePath: string
+  users: Array<{
+    userId: string
+    userEmail: string
+    userName: string | null
+    taskId: string
+    taskName: string
+  }>
+}
+
+export interface ActiveWorkStore {
+  /**
+   * Set a user as actively working on a task in a project.
+   * Automatically clears any previous active work for this user in the project.
+   */
+  setActiveWork(
+    projectId: string,
+    userId: string,
+    data: Omit<ActiveWorkData, 'startedAt' | 'lastHeartbeat'>
+  ): Promise<ActiveWorkData>
+
+  /**
+   * Clear a user's active work in a project.
+   */
+  clearActiveWork(projectId: string, userId: string): Promise<boolean>
+
+  /**
+   * Extend the TTL for a user's active work (heartbeat).
+   * Returns false if no active work found (expired or never set).
+   */
+  heartbeat(projectId: string, userId: string): Promise<boolean>
+
+  /**
+   * Get a user's active work in a project.
+   */
+  getActiveWork(projectId: string, userId: string): Promise<ActiveWorkData | null>
+
+  /**
+   * Get all active work entries for a project.
+   */
+  getProjectActiveWork(projectId: string): Promise<ActiveWorkData[]>
+
+  /**
+   * Clear all active work for a user across a project (e.g., on disconnect).
+   */
+  clearUserActiveWork(projectId: string, userId: string): Promise<boolean>
+
+  /**
+   * Update the file paths a user is working on (T20.9).
+   * Returns the updated ActiveWorkData, or null if no active work found.
+   */
+  updateFilePaths(projectId: string, userId: string, filePaths: string[]): Promise<ActiveWorkData | null>
+}
+
+/**
+ * Redis-based active work store (T20.4)
+ * Uses Redis with TTL for automatic expiration when clients stop sending heartbeats.
+ */
+export class RedisActiveWorkStore implements ActiveWorkStore {
+  private redis: Redis
+
+  constructor(redis: Redis) {
+    this.redis = redis
+  }
+
+  private getUserKey(projectId: string, userId: string): string {
+    return `activework:${projectId}:${userId}`
+  }
+
+  private getProjectIndexKey(projectId: string): string {
+    return `activework:${projectId}`
+  }
+
+  async setActiveWork(
+    projectId: string,
+    userId: string,
+    data: Omit<ActiveWorkData, 'startedAt' | 'lastHeartbeat'>
+  ): Promise<ActiveWorkData> {
+    const userKey = this.getUserKey(projectId, userId)
+    const indexKey = this.getProjectIndexKey(projectId)
+    const now = new Date().toISOString()
+
+    const activeWork: ActiveWorkData = {
+      ...data,
+      startedAt: now,
+      lastHeartbeat: now,
+    }
+
+    const ttlSeconds = Math.ceil(ACTIVE_WORK_TTL_MS / 1000)
+
+    const multi = this.redis.multi()
+    multi.set(userKey, JSON.stringify(activeWork), 'PX', ACTIVE_WORK_TTL_MS)
+    multi.sadd(indexKey, userId)
+    // Index TTL slightly longer than entry TTL to allow cleanup
+    multi.expire(indexKey, ttlSeconds + 120)
+    await multi.exec()
+
+    activeWorkLog.info({ projectId, userId, taskId: data.taskId }, 'Active work set')
+    return activeWork
+  }
+
+  async clearActiveWork(projectId: string, userId: string): Promise<boolean> {
+    const userKey = this.getUserKey(projectId, userId)
+    const indexKey = this.getProjectIndexKey(projectId)
+
+    const existed = await this.redis.del(userKey)
+    await this.redis.srem(indexKey, userId)
+
+    if (existed > 0) {
+      activeWorkLog.debug({ projectId, userId }, 'Active work cleared')
+    }
+    return existed > 0
+  }
+
+  async heartbeat(projectId: string, userId: string): Promise<boolean> {
+    const userKey = this.getUserKey(projectId, userId)
+    const data = await this.redis.get(userKey)
+
+    if (!data) return false
+
+    try {
+      const activeWork: ActiveWorkData = JSON.parse(data)
+      activeWork.lastHeartbeat = new Date().toISOString()
+
+      await this.redis.set(userKey, JSON.stringify(activeWork), 'PX', ACTIVE_WORK_TTL_MS)
+
+      // Also refresh the index TTL
+      const indexKey = this.getProjectIndexKey(projectId)
+      const ttlSeconds = Math.ceil(ACTIVE_WORK_TTL_MS / 1000)
+      await this.redis.expire(indexKey, ttlSeconds + 120)
+
+      return true
+    } catch {
+      await this.redis.del(userKey)
+      return false
+    }
+  }
+
+  async getActiveWork(projectId: string, userId: string): Promise<ActiveWorkData | null> {
+    const userKey = this.getUserKey(projectId, userId)
+    const data = await this.redis.get(userKey)
+
+    if (!data) return null
+
+    try {
+      return JSON.parse(data) as ActiveWorkData
+    } catch {
+      await this.redis.del(userKey)
+      return null
+    }
+  }
+
+  async getProjectActiveWork(projectId: string): Promise<ActiveWorkData[]> {
+    const indexKey = this.getProjectIndexKey(projectId)
+    const userIds = await this.redis.smembers(indexKey)
+
+    if (userIds.length === 0) return []
+
+    const userKeys = userIds.map(uid => this.getUserKey(projectId, uid))
+    const dataArray = await this.redis.mget(...userKeys)
+
+    const results: ActiveWorkData[] = []
+    const expiredUserIds: string[] = []
+
+    for (let i = 0; i < userIds.length; i++) {
+      const raw = dataArray[i]
+      if (!raw) {
+        expiredUserIds.push(userIds[i]!)
+        continue
+      }
+      try {
+        results.push(JSON.parse(raw) as ActiveWorkData)
+      } catch {
+        expiredUserIds.push(userIds[i]!)
+      }
+    }
+
+    // Clean up expired entries from index
+    if (expiredUserIds.length > 0) {
+      await this.redis.srem(indexKey, ...expiredUserIds)
+    }
+
+    return results
+  }
+
+  async clearUserActiveWork(projectId: string, userId: string): Promise<boolean> {
+    return this.clearActiveWork(projectId, userId)
+  }
+
+  async updateFilePaths(projectId: string, userId: string, filePaths: string[]): Promise<ActiveWorkData | null> {
+    const userKey = this.getUserKey(projectId, userId)
+    const data = await this.redis.get(userKey)
+
+    if (!data) return null
+
+    try {
+      const activeWork: ActiveWorkData = JSON.parse(data)
+      activeWork.filePaths = filePaths
+      activeWork.lastHeartbeat = new Date().toISOString()
+
+      // Preserve existing TTL by reading it first
+      const ttl = await this.redis.pttl(userKey)
+      const effectiveTtl = ttl > 0 ? ttl : ACTIVE_WORK_TTL_MS
+
+      await this.redis.set(userKey, JSON.stringify(activeWork), 'PX', effectiveTtl)
+
+      activeWorkLog.debug({ projectId, userId, fileCount: filePaths.length }, 'File paths updated')
+      return activeWork
+    } catch {
+      return null
+    }
+  }
+}
+
+/**
+ * In-memory active work store (fallback when Redis is unavailable)
+ * Note: Active work state is lost on server restart.
+ */
+export class InMemoryActiveWorkStore implements ActiveWorkStore {
+  // projectId -> userId -> { data, timer }
+  private store = new Map<string, Map<string, { data: ActiveWorkData; timer: NodeJS.Timeout }>>()
+
+  async setActiveWork(
+    projectId: string,
+    userId: string,
+    data: Omit<ActiveWorkData, 'startedAt' | 'lastHeartbeat'>
+  ): Promise<ActiveWorkData> {
+    if (!this.store.has(projectId)) {
+      this.store.set(projectId, new Map())
+    }
+    const projectStore = this.store.get(projectId)!
+
+    // Clear existing timer if any
+    const existing = projectStore.get(userId)
+    if (existing) {
+      clearTimeout(existing.timer)
+    }
+
+    const now = new Date().toISOString()
+    const activeWork: ActiveWorkData = {
+      ...data,
+      startedAt: now,
+      lastHeartbeat: now,
+    }
+
+    const timer = setTimeout(() => {
+      this.expire(projectId, userId)
+    }, ACTIVE_WORK_TTL_MS)
+
+    projectStore.set(userId, { data: activeWork, timer })
+
+    activeWorkLog.info({ projectId, userId, taskId: data.taskId, store: 'memory' }, 'Active work set')
+    return activeWork
+  }
+
+  async clearActiveWork(projectId: string, userId: string): Promise<boolean> {
+    const projectStore = this.store.get(projectId)
+    if (!projectStore) return false
+
+    const entry = projectStore.get(userId)
+    if (!entry) return false
+
+    clearTimeout(entry.timer)
+    projectStore.delete(userId)
+
+    if (projectStore.size === 0) {
+      this.store.delete(projectId)
+    }
+
+    activeWorkLog.debug({ projectId, userId, store: 'memory' }, 'Active work cleared')
+    return true
+  }
+
+  async heartbeat(projectId: string, userId: string): Promise<boolean> {
+    const projectStore = this.store.get(projectId)
+    if (!projectStore) return false
+
+    const entry = projectStore.get(userId)
+    if (!entry) return false
+
+    // Update heartbeat timestamp
+    entry.data.lastHeartbeat = new Date().toISOString()
+
+    // Reset timer
+    clearTimeout(entry.timer)
+    entry.timer = setTimeout(() => {
+      this.expire(projectId, userId)
+    }, ACTIVE_WORK_TTL_MS)
+
+    return true
+  }
+
+  async getActiveWork(projectId: string, userId: string): Promise<ActiveWorkData | null> {
+    const projectStore = this.store.get(projectId)
+    if (!projectStore) return null
+
+    const entry = projectStore.get(userId)
+    return entry ? entry.data : null
+  }
+
+  async getProjectActiveWork(projectId: string): Promise<ActiveWorkData[]> {
+    const projectStore = this.store.get(projectId)
+    if (!projectStore) return []
+
+    return Array.from(projectStore.values()).map(e => e.data)
+  }
+
+  async clearUserActiveWork(projectId: string, userId: string): Promise<boolean> {
+    return this.clearActiveWork(projectId, userId)
+  }
+
+  async updateFilePaths(projectId: string, userId: string, filePaths: string[]): Promise<ActiveWorkData | null> {
+    const projectStore = this.store.get(projectId)
+    if (!projectStore) return null
+
+    const entry = projectStore.get(userId)
+    if (!entry) return null
+
+    entry.data.filePaths = filePaths
+    entry.data.lastHeartbeat = new Date().toISOString()
+
+    return entry.data
+  }
+
+  private expire(projectId: string, userId: string): void {
+    const projectStore = this.store.get(projectId)
+    if (!projectStore) return
+
+    projectStore.delete(userId)
+    if (projectStore.size === 0) {
+      this.store.delete(projectId)
+    }
+
+    activeWorkLog.debug({ projectId, userId, store: 'memory' }, 'Active work expired')
+  }
+
+  /**
+   * Clear all timers (for cleanup on shutdown)
+   */
+  clearAllTimers(): void {
+    for (const projectStore of this.store.values()) {
+      for (const entry of projectStore.values()) {
+        clearTimeout(entry.timer)
+      }
+    }
+    this.store.clear()
+  }
+}
+
+// ============================================
+// Global Active Work Store Instance (T20.4)
+// ============================================
+
+let activeWorkStore: ActiveWorkStore | null = null
+
+/**
+ * Get the active work store.
+ * Uses Redis if available, falls back to in-memory.
+ */
+export function getActiveWorkStore(): ActiveWorkStore {
+  if (activeWorkStore) {
+    return activeWorkStore
+  }
+
+  const redis = getRedis()
+  if (redis && isRedisAvailable()) {
+    activeWorkStore = new RedisActiveWorkStore(redis)
+    activeWorkLog.info('Using Redis store (active work persists across restarts)')
+  } else {
+    activeWorkStore = new InMemoryActiveWorkStore()
+    activeWorkLog.info('Using in-memory store (active work lost on restart)')
+  }
+
+  return activeWorkStore
+}
+
+/**
+ * Initialize the active work store.
+ * Should be called after Redis initialization.
+ */
+export function initActiveWorkStore(): ActiveWorkStore {
+  const redis = getRedis()
+  if (redis && isRedisAvailable()) {
+    activeWorkStore = new RedisActiveWorkStore(redis)
+    activeWorkLog.info('Initialized with Redis store')
+  } else {
+    activeWorkStore = new InMemoryActiveWorkStore()
+    activeWorkLog.info('Initialized with in-memory store (Redis not available)')
+  }
+
+  return activeWorkStore
+}
+
+/**
+ * Reset the active work store.
+ */
+export function resetActiveWorkStore(): void {
+  if (activeWorkStore instanceof InMemoryActiveWorkStore) {
+    activeWorkStore.clearAllTimers()
+  }
+  activeWorkStore = null
+}
+
+// ============================================
+// Recent Changes Store (T20.5)
+// ============================================
+
+/** Maximum number of change entries per project */
+export const RECENT_CHANGES_MAX_ENTRIES = 1000
+
+export interface RecentChangeEntry {
+  id: string              // Unique ID (timestamp-based)
+  projectId: string
+  userId: string
+  userEmail: string
+  userName: string | null
+  entityType: 'task' | 'knowledge' | 'comment' | 'project'
+  entityId: string        // The entity's ID (taskId like "T1.1", or UUID)
+  action: 'created' | 'updated' | 'deleted' | 'status_changed' | 'assigned' | 'unassigned'
+  summary: string         // Human-readable description, e.g. "T1.1 status changed to DONE"
+  metadata?: Record<string, unknown>
+  timestamp: string       // ISO timestamp
+}
+
+export type AddChangeInput = Omit<RecentChangeEntry, 'id' | 'timestamp'>
+
+export interface RecentChangesQueryOptions {
+  limit?: number          // Default 50, max 200
+  offset?: number         // Default 0
+  entityType?: RecentChangeEntry['entityType']
+  userId?: string
+  since?: string          // ISO timestamp — only return entries after this time
+}
+
+export interface RecentChangesStore {
+  /** Add a change entry. Returns the created entry with id and timestamp. */
+  addChange(projectId: string, input: AddChangeInput): Promise<RecentChangeEntry>
+
+  /** Get recent changes for a project with optional filtering. */
+  getRecentChanges(projectId: string, options?: RecentChangesQueryOptions): Promise<RecentChangeEntry[]>
+
+  /** Get the count of changes for a project. */
+  getChangeCount(projectId: string): Promise<number>
+
+  /** Clear all changes for a project. */
+  clearChanges(projectId: string): Promise<void>
+}
+
+/**
+ * Redis-based recent changes store (T20.5)
+ * Uses a Redis List (LPUSH + LTRIM) capped at RECENT_CHANGES_MAX_ENTRIES.
+ * Newest entries are at the head (index 0).
+ */
+export class RedisRecentChangesStore implements RecentChangesStore {
+  private redis: Redis
+
+  constructor(redis: Redis) {
+    this.redis = redis
+  }
+
+  private getListKey(projectId: string): string {
+    return `changes:${projectId}`
+  }
+
+  async addChange(projectId: string, input: AddChangeInput): Promise<RecentChangeEntry> {
+    const key = this.getListKey(projectId)
+    const now = new Date()
+
+    const entry: RecentChangeEntry = {
+      ...input,
+      id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: now.toISOString(),
+    }
+
+    const multi = this.redis.multi()
+    multi.lpush(key, JSON.stringify(entry))
+    multi.ltrim(key, 0, RECENT_CHANGES_MAX_ENTRIES - 1)
+    // Expire the list after 30 days of inactivity
+    multi.expire(key, 30 * 24 * 60 * 60)
+    await multi.exec()
+
+    recentChangesLog.debug(
+      { projectId, entityType: input.entityType, entityId: input.entityId, action: input.action },
+      'Change recorded'
+    )
+    return entry
+  }
+
+  async getRecentChanges(projectId: string, options: RecentChangesQueryOptions = {}): Promise<RecentChangeEntry[]> {
+    const key = this.getListKey(projectId)
+    const limit = Math.min(options.limit || 50, 200)
+
+    // If we have filters, we need to fetch more and filter in-memory
+    const hasFilters = !!(options.entityType || options.userId || options.since)
+    const fetchCount = hasFilters ? RECENT_CHANGES_MAX_ENTRIES : limit
+    const fetchStart = hasFilters ? 0 : (options.offset || 0)
+    const fetchEnd = fetchStart + fetchCount - 1
+
+    const rawEntries = await this.redis.lrange(key, fetchStart, fetchEnd)
+
+    let entries: RecentChangeEntry[] = []
+    for (const raw of rawEntries) {
+      try {
+        entries.push(JSON.parse(raw) as RecentChangeEntry)
+      } catch {
+        // Skip malformed entries
+      }
+    }
+
+    // Apply filters
+    if (options.entityType) {
+      entries = entries.filter(e => e.entityType === options.entityType)
+    }
+    if (options.userId) {
+      entries = entries.filter(e => e.userId === options.userId)
+    }
+    if (options.since) {
+      const sinceTime = new Date(options.since).getTime()
+      entries = entries.filter(e => new Date(e.timestamp).getTime() > sinceTime)
+    }
+
+    // Apply offset/limit after filtering
+    if (hasFilters) {
+      const offset = options.offset || 0
+      entries = entries.slice(offset, offset + limit)
+    }
+
+    return entries
+  }
+
+  async getChangeCount(projectId: string): Promise<number> {
+    const key = this.getListKey(projectId)
+    return this.redis.llen(key)
+  }
+
+  async clearChanges(projectId: string): Promise<void> {
+    const key = this.getListKey(projectId)
+    await this.redis.del(key)
+    recentChangesLog.info({ projectId }, 'Changes cleared')
+  }
+}
+
+/**
+ * In-memory recent changes store (fallback when Redis is unavailable)
+ * Note: Changes are lost on server restart.
+ */
+export class InMemoryRecentChangesStore implements RecentChangesStore {
+  // projectId -> entries (newest first)
+  private store = new Map<string, RecentChangeEntry[]>()
+
+  async addChange(projectId: string, input: AddChangeInput): Promise<RecentChangeEntry> {
+    const now = new Date()
+    const entry: RecentChangeEntry = {
+      ...input,
+      id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: now.toISOString(),
+    }
+
+    if (!this.store.has(projectId)) {
+      this.store.set(projectId, [])
+    }
+
+    const list = this.store.get(projectId)!
+    list.unshift(entry)
+
+    // Trim to max
+    if (list.length > RECENT_CHANGES_MAX_ENTRIES) {
+      list.length = RECENT_CHANGES_MAX_ENTRIES
+    }
+
+    recentChangesLog.debug(
+      { projectId, entityType: input.entityType, entityId: input.entityId, action: input.action, store: 'memory' },
+      'Change recorded'
+    )
+    return entry
+  }
+
+  async getRecentChanges(projectId: string, options: RecentChangesQueryOptions = {}): Promise<RecentChangeEntry[]> {
+    let entries = this.store.get(projectId) || []
+    const limit = Math.min(options.limit || 50, 200)
+
+    if (options.entityType) {
+      entries = entries.filter(e => e.entityType === options.entityType)
+    }
+    if (options.userId) {
+      entries = entries.filter(e => e.userId === options.userId)
+    }
+    if (options.since) {
+      const sinceTime = new Date(options.since).getTime()
+      entries = entries.filter(e => new Date(e.timestamp).getTime() > sinceTime)
+    }
+
+    const offset = options.offset || 0
+    return entries.slice(offset, offset + limit)
+  }
+
+  async getChangeCount(projectId: string): Promise<number> {
+    return (this.store.get(projectId) || []).length
+  }
+
+  async clearChanges(projectId: string): Promise<void> {
+    this.store.delete(projectId)
+    recentChangesLog.info({ projectId, store: 'memory' }, 'Changes cleared')
+  }
+}
+
+// ============================================
+// Global Recent Changes Store Instance (T20.5)
+// ============================================
+
+let recentChangesStore: RecentChangesStore | null = null
+
+/**
+ * Get the recent changes store.
+ * Uses Redis if available, falls back to in-memory.
+ */
+export function getRecentChangesStore(): RecentChangesStore {
+  if (recentChangesStore) {
+    return recentChangesStore
+  }
+
+  const redis = getRedis()
+  if (redis && isRedisAvailable()) {
+    recentChangesStore = new RedisRecentChangesStore(redis)
+    recentChangesLog.info('Using Redis store (changes persist across restarts)')
+  } else {
+    recentChangesStore = new InMemoryRecentChangesStore()
+    recentChangesLog.info('Using in-memory store (changes lost on restart)')
+  }
+
+  return recentChangesStore
+}
+
+/**
+ * Initialize the recent changes store.
+ * Should be called after Redis initialization.
+ */
+export function initRecentChangesStore(): RecentChangesStore {
+  const redis = getRedis()
+  if (redis && isRedisAvailable()) {
+    recentChangesStore = new RedisRecentChangesStore(redis)
+    recentChangesLog.info('Initialized with Redis store')
+  } else {
+    recentChangesStore = new InMemoryRecentChangesStore()
+    recentChangesLog.info('Initialized with in-memory store (Redis not available)')
+  }
+
+  return recentChangesStore
+}
+
+/**
+ * Reset the recent changes store.
+ */
+export function resetRecentChangesStore(): void {
+  recentChangesStore = null
 }

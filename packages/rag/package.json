@@ -1,0 +1,50 @@
+{
+  "name": "@planflow/rag",
+  "version": "0.1.0",
+  "description": "PlanFlow RAG Engine - Codebase indexing and semantic search powered by LanceDB, Tree-sitter, and Voyage-code-3",
+  "author": "PlanFlow <hello@planflow.tools>",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@lancedb/lancedb": "^0.13.0",
+    "apache-arrow": "^17.0.0",
+    "ignore": "^7.0.0",
+    "web-tree-sitter": "^0.24.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^20.11.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^2.0.0"
+  }
+}

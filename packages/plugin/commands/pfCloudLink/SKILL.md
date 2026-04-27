@@ -40,7 +40,7 @@ const isAuthenticated = !!cloudConfig.apiToken
 const currentProjectId = cloudConfig.projectId
 const apiUrl = cloudConfig.apiUrl || "https://api.planflow.tools"
 
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ## Step 1: Parse Arguments

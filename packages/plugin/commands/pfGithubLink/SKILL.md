@@ -49,7 +49,7 @@ const isAuthenticated = !!cloudConfig.apiToken
 const apiUrl = cloudConfig.apiUrl || "https://api.planflow.tools"
 const projectId = cloudConfig.projectId || null
 
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ## Step 0.5: Show Notification Badge

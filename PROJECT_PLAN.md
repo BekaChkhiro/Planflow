@@ -3,7 +3,7 @@
 > AI-Native Project Management for Claude Code
 
 **Created:** 2026-01-28
-**Last Updated:** 2026-02-24
+**Last Updated:** 2026-04-11
 **Dark Mode Analysis Date:** 2026-02-24
 **Analysis Date:** 2026-02-21
 **Status:** Complete ✅
@@ -37,12 +37,15 @@
 | **Web Hosting**  | Vercel                                                                    |
 | **Payments**     | LemonSqueezy                                                              |
 | **Cache/PubSub** | Redis                                                                     |
+| **Vector DB**    | LanceDB (embedded, serverless)                                            |
+| **Code Parsing** | Tree-sitter (web-tree-sitter WASM)                                        |
+| **Embeddings**   | Voyage-code-3 (API) + Ollama nomic-embed-text (local fallback)            |
 
 ---
 
 ## Progress
 
-**Overall:** 100% complete (216/216 tasks) ✅
+**Overall:** 94% complete (233/248 tasks)
 
 | Phase                          | Status      | Progress | Tasks |
 | ------------------------------ | ----------- | -------- | ----- |
@@ -64,12 +67,16 @@
 | Phase 16: Dashboard Layout     | DONE        | 100%     | 12/12 ✅ |
 | Phase 17: Dark Mode Optimization | DONE      | 100%     | 13/13 ✅ |
 | Phase 18: OAuth Authentication | DONE        | 100%     | 12/12 ✅ |
+| Phase 19: RAG Engine           | DONE        | 100%     | 10/10 ✅  |
+| Phase 20: Shared Agent Memory  | IN_PROGRESS 🔄 | 80%   | 8/10  |
+| Phase 21: MCP Intelligence Tools | TODO      | 0%       | 0/12  |
 
 ### Current Focus
-🎯 **Status**: Project Complete
-📋 **Current Task**: All tasks completed
-📊 **Total Tasks**: 216/216 (100%)
-🎉 **Goal**: GitHub & Google Login/Register - DONE
+🎯 **Status**: Intelligence Layer Development
+📋 **Current Phase**: Phase 20 - Shared Agent Memory
+📋 **Current Task**: T20.7 - Auto-detection: coding patterns (IN_PROGRESS 🔄)
+📊 **Total Tasks**: 233/248 (94%)
+🎯 **Goal**: Codebase RAG + Shared Agent Memory + MCP Intelligence Tools
 
 ---
 
@@ -1519,8 +1526,81 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3000/auth/callback/google
 | Phase 16    | Dashboard Layout | 12 |
 | Phase 17    | Dark Mode Optimization | 13 |
 | Phase 18    | OAuth Authentication | 12 |
-| **Total**   | | **216** |
+| Phase 19    | RAG Engine | 10 |
+| Phase 20    | Shared Agent Memory | 10 |
+| Phase 21    | MCP Intelligence Tools | 12 |
+| **Total**   | | **248** |
 
 ---
 
 _Generated from specification: PRODUCT_VISION.md_
+
+---
+
+## Phase 19: RAG Engine (Sprint 19)
+
+**Goal:** Codebase-ის და დოკუმენტაციის ინდექსირება ვექტორულ ბაზაში, semantic search კოდის სწრაფად მოსაძებნად — AI agent-ებმა ფაილების წაკითხვის ნაცვლად RAG-ით მიიღონ რელევანტური კონტექსტი, რაც ტოკენების ~80% ეკონომიას იძლევა.
+
+**Key Technologies:** LanceDB (embedded vector DB), Tree-sitter (AST parsing), Voyage-code-3 (embeddings)
+
+### Tasks
+
+| ID    | Task                                                                       | Complexity | Status | Dependencies |
+| ----- | -------------------------------------------------------------------------- | ---------- | ------ | ------------ |
+| T19.1 | `packages/rag/` პაკეტის scaffold (tsconfig, package.json, vitest config)  | Low        | DONE ✅ | -            |
+| T19.2 | FileScanner — ფაილების აღმოჩენა (.gitignore respect, language detection)   | Medium     | DONE ✅ | T19.1        |
+| T19.3 | CodeChunker — Tree-sitter AST-based კოდის დაყოფა ჩანქებად (ფუნქცია/კლასი/მოდული) | High | DONE ✅ | T19.2        |
+| T19.4 | Embedder — Voyage-code-3 API integration (PlanFlow-ის server-side proxy, მომხმარებელი არაფერს არ აკონფიგურირებს) | High | DONE ✅ | T19.1 |
+| T19.5 | VectorStore — LanceDB integration (create/update/delete index, schema)     | Medium     | DONE ✅ | T19.4        |
+| T19.6 | Incremental Indexing — git diff-based, მხოლოდ შეცვლილი ფაილების reindex    | High       | DONE ✅ | T19.3, T19.5 |
+| T19.7 | Hybrid Search — ვექტორული similarity + BM25 keyword search კომბინაცია      | High       | DONE ✅ | T19.5        |
+| T19.8 | Docs Indexer — URL/llms.txt-დან ბიბლიოთეკის დოკუმენტაციის crawl და ინდექსირება | High    | DONE ✅ | T19.5        |
+| T19.9 | Unit tests + integration tests RAG engine-ის ყველა კომპონენტისთვის         | Medium     | DONE ✅ | T19.1-T19.8  |
+| T19.10 | API endpoint: POST /projects/:id/embed — server-side embedding proxy (rate limiting, Voyage API key PlanFlow-ის მხრიდან) | Medium | DONE ✅ | T19.4 |
+
+---
+
+## Phase 20: Shared Agent Memory (Sprint 20)
+
+**Goal:** პროექტის ცოდნის შენახვის სისტემა — არქიტექტურული გადაწყვეტილებები, coding patterns, გუნდის წესები და real-time state. AI agent-ები (ნებისმიერი IDE-დან) ამ ცოდნას იღებენ MCP-ით და ფაილების წაკითხვის გარეშე იცნობენ პროექტს.
+
+**Storage Layers:** PostgreSQL (structured knowledge), Redis (real-time state), LanceDB (vector search), Git (change history)
+
+### Tasks
+
+| ID     | Task                                                                           | Complexity | Status | Dependencies |
+| ------ | ------------------------------------------------------------------------------ | ---------- | ------ | ------------ |
+| T20.1  | DB schema: `project_knowledge` table + Drizzle migration                       | Medium     | DONE ✅ | -            |
+| T20.2  | DB schema: `code_changes` table — AI-ის მიერ განხორციელებული ცვლილებების log    | Medium     | DONE ✅ | T20.1        |
+| T20.3  | Knowledge CRUD API endpoints (POST/GET/PUT/DELETE /projects/:id/knowledge)      | Medium     | DONE ✅ | T20.1        |
+| T20.4  | Redis: active_work state — ვინ რომელ თასქზე მუშაობს (heartbeat + TTL)           | Medium     | DONE ✅ | -            |
+| T20.5  | Redis: recent changes stream — ცვლილებების log (max 1000 entries)               | Medium     | DONE ✅ | T20.4        |
+| T20.6  | Auto-detection: package.json/tsconfig-დან tech stack-ის ავტომატური ამოცნობა     | Medium     | DONE ✅ | T20.1        |
+| T20.7  | Auto-detection: folder structure-დან coding patterns-ის ამოცნობა (route→service→repo) | High  | IN_PROGRESS 🔄 | T20.6        |
+| T20.8  | Knowledge Aggregator — 4 layer-ის (PG + LanceDB + Redis + Git) ერთიან response-ში გაერთიანება | High | DONE ✅ | T20.3, T20.5, T19.7 |
+| T20.9  | Conflict detection — ვინ რომელ ფაილზე მუშაობს, overlap warning                  | Medium     | DONE ✅ | T20.4        |
+| T20.10 | Unit tests + integration tests Shared Memory სისტემისთვის                       | Medium     | TODO   | T20.1-T20.9  |
+
+---
+
+## Phase 21: MCP Intelligence Tools (Sprint 21)
+
+**Goal:** ახალი MCP tool-ები რომლებიც AI agent-ებს (Claude Code, Cursor, Windsurf, Cline) პროექტის სრულ კონტექსტს აძლევს — ნებისმიერი IDE-დან PlanFlow MCP სერვერთან დაკავშირებით agent-ი იღებს არქიტექტურის ცოდნას, რელევანტურ კოდს და გუნდის წესებს.
+
+**Integration:** packages/mcp/ სერვერში ახალი tool-ების დამატება, packages/plugin/-ში შესაბამისი slash commands
+
+### Tasks
+
+| ID    | Task                                                                             | Complexity | Status | Dependencies     |
+| ----- | -------------------------------------------------------------------------------- | ---------- | ------ | ---------------- |
+| T21.1 | MCP tool: `planflow_index` — codebase-ის ინდექსირება on-demand                   | Medium     | TODO   | T19.6            |
+| T21.2 | MCP tool: `planflow_index_docs` — docs URL-ის ან llms.txt-ის ინდექსირება         | Medium     | TODO   | T19.8            |
+| T21.3 | MCP tool: `planflow_search` — hybrid search (კოდი + docs + knowledge ერთად)       | High       | TODO   | T19.7, T20.8     |
+| T21.4 | MCP tool: `planflow_context` — თასქის ID-ით სრული კონტექსტის ავტომატური შეკრება  | High       | TODO   | T21.3            |
+| T21.5 | MCP tool: `planflow_remember` — გუნდის ცოდნის ხელით დამატება/განახლება             | Low        | TODO   | T20.3            |
+| T21.6 | MCP tool: `planflow_working_on` — "ამ ფაილზე/თასქზე ვმუშაობ" state update         | Low        | TODO   | T20.4            |
+| T21.7 | MCP tool: `planflow_changes` — ბოლო ცვლილებების ნახვა (ვინ რა შეცვალა)           | Low        | TODO   | T20.5            |
+| T21.8 | Plugin slash commands: `/pfIndex`, `/pfSearch`, `/pfRemember`, `/pfChanges`       | Medium     | TODO   | T21.1-T21.7      |
+| T21.9 | Integration tests — MCP tools end-to-end (index → search → context)               | Medium     | TODO   | T21.1-T21.8      |
+| T21.10 | Web Dashboard: Knowledge Manager UI — project settings-ში ცოდნის ნახვა/დამატება/წაშლა | Medium | TODO | T20.3 |
+| T21.11 | Web Dashboard: Index Status UI — ინდექსის სტატუსი, ბოლო ინდექსირების დრო, ფაილების რაოდენობა | Low | TODO | T19.10 |

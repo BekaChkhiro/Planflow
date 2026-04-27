@@ -11,12 +11,14 @@ import type {
   TaskLockInfo,
   WebSocketMessage,
 } from './types.js'
+import type { ActiveWorkData } from '../lib/redis.js'
 
 // Import managers
 import { PresenceManager } from './managers/presence-manager.js'
 import { WorkingOnManager } from './managers/working-on-manager.js'
 import { TypingManager } from './managers/typing-manager.js'
 import { TaskLockManager } from './managers/task-lock-manager.js'
+import { ConflictDetectionManager } from './managers/conflict-detection-manager.js'
 
 // Re-export types for backwards compatibility
 export type {
@@ -50,6 +52,7 @@ class ConnectionManager {
   private readonly workingOnManager: WorkingOnManager
   private readonly typingManager: TypingManager
   private readonly taskLockManager: TaskLockManager
+  readonly conflictDetection: ConflictDetectionManager
 
   constructor() {
     // Initialize managers with shared connection store
@@ -57,6 +60,7 @@ class ConnectionManager {
     this.workingOnManager = new WorkingOnManager(this.connections)
     this.typingManager = new TypingManager(this.connections)
     this.taskLockManager = new TaskLockManager()
+    this.conflictDetection = new ConflictDetectionManager()
   }
 
   // ============================================
@@ -263,23 +267,39 @@ class ConnectionManager {
   }
 
   // ============================================
-  // Working On Methods (T6.1) - Delegated
+  // Working On Methods (T6.1 + T20.4) - Delegated
   // ============================================
 
-  setWorkingOn(
+  async setWorkingOn(
     projectId: string,
     userId: string,
-    taskData: { taskId: string; taskUuid: string; taskName: string }
-  ): Date {
-    return this.workingOnManager.setWorkingOn(projectId, userId, taskData)
+    taskData: { taskId: string; taskUuid: string; taskName: string },
+    userInfo: { email: string; name: string | null }
+  ): Promise<Date> {
+    return this.workingOnManager.setWorkingOn(projectId, userId, taskData, userInfo)
   }
 
-  clearWorkingOn(projectId: string, userId: string): void {
-    this.workingOnManager.clearWorkingOn(projectId, userId)
+  async clearWorkingOn(projectId: string, userId: string): Promise<void> {
+    await this.workingOnManager.clearWorkingOn(projectId, userId)
   }
 
   getWorkingOn(projectId: string, userId: string): WorkingOnData | null {
     return this.workingOnManager.getWorkingOn(projectId, userId)
+  }
+
+  /** Heartbeat — extend TTL for a user's active work (T20.4) */
+  async heartbeatActiveWork(projectId: string, userId: string): Promise<boolean> {
+    return this.workingOnManager.heartbeat(projectId, userId)
+  }
+
+  /** Get all active work for a project from the persistent store (T20.4) */
+  async getProjectActiveWork(projectId: string): Promise<ActiveWorkData[]> {
+    return this.workingOnManager.getProjectActiveWork(projectId)
+  }
+
+  /** Get active work for a specific user from the persistent store (T20.4) */
+  async getActiveWork(projectId: string, userId: string): Promise<ActiveWorkData | null> {
+    return this.workingOnManager.getActiveWork(projectId, userId)
   }
 
   // ============================================

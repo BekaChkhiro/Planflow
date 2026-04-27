@@ -66,7 +66,7 @@ const apiUrl = cloudConfig.apiUrl || "https://api.planflow.tools"
 const currentUserEmail = cloudConfig.userEmail
 
 // Load translations
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ### Step 1: Check Authentication

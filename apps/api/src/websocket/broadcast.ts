@@ -699,3 +699,96 @@ export async function extendTaskLock(projectId: string, taskId: string, userId: 
 export async function releaseUserLocks(projectId: string, userId: string): Promise<string[]> {
   return connectionManager.releaseUserLocks(projectId, userId)
 }
+
+// ============================================
+// Recent Changes Broadcasts (T20.5)
+// ============================================
+
+export interface RecentChangeData {
+  id: string
+  entityType: string
+  entityId: string
+  action: string
+  summary: string
+  userId: string
+  userEmail: string
+  userName: string | null
+  metadata?: Record<string, unknown>
+  timestamp: string
+}
+
+/**
+ * Broadcast that a new change was recorded in the project.
+ * All connected clients in the project receive this event.
+ */
+export function broadcastRecentChange(
+  projectId: string,
+  change: RecentChangeData,
+  excludeUserId?: string
+): void {
+  const message: WebSocketMessage = {
+    type: 'recent_change',
+    projectId,
+    timestamp: new Date().toISOString(),
+    data: { change },
+  }
+
+  connectionManager.broadcast(projectId, message, excludeUserId)
+}
+
+// ============================================
+// File Conflict Broadcasts (T20.9)
+// ============================================
+
+export interface FileConflictData {
+  filePath: string
+  users: Array<{
+    userId: string
+    userEmail: string
+    userName: string | null
+    taskId: string
+    taskName: string
+  }>
+}
+
+/**
+ * Send file conflict warnings to specific users involved in the overlap.
+ * Each user in the conflict receives a warning about the overlapping files.
+ */
+export function broadcastFileConflictWarning(
+  projectId: string,
+  conflicts: FileConflictData[],
+  triggeredByUserId: string
+): void {
+  if (conflicts.length === 0) return
+
+  // Collect all user IDs involved in conflicts
+  const involvedUserIds = new Set<string>()
+  for (const conflict of conflicts) {
+    for (const user of conflict.users) {
+      involvedUserIds.add(user.userId)
+    }
+  }
+
+  // Send warning to each involved user
+  for (const targetUserId of involvedUserIds) {
+    const message: WebSocketMessage = {
+      type: 'file_conflict_warning',
+      projectId,
+      timestamp: new Date().toISOString(),
+      data: {
+        triggeredBy: triggeredByUserId,
+        conflicts,
+      },
+    }
+
+    connectionManager.sendToUser(projectId, targetUserId, message)
+  }
+}
+
+/**
+ * Get all current file conflicts in a project.
+ */
+export async function getProjectFileConflicts(projectId: string) {
+  return connectionManager.conflictDetection.getProjectConflicts(projectId)
+}

@@ -41,7 +41,7 @@ function getConfig() {
 
 const config = getConfig()
 const language = config.language || "en"
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ## Step 1: Parse Arguments

@@ -93,6 +93,7 @@ export type LogoutAllResponse = z.infer<typeof LogoutAllResponseSchema>
 // Project types
 export const ProjectSchema = z.object({
   id: z.string().uuid(),
+  organizationId: z.string().uuid(),
   name: z.string().min(1),
   description: z.string().optional(),
   userId: z.string().uuid(),

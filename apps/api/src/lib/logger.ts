@@ -114,6 +114,8 @@ export const loggers = {
   webhook: logger.child({ module: 'Webhook' }),
   rateLimit: logger.child({ module: 'RateLimit' }),
   taskLock: logger.child({ module: 'TaskLock' }),
+  activeWork: logger.child({ module: 'ActiveWork' }),
+  recentChanges: logger.child({ module: 'RecentChanges' }),
   cron: logger.child({ module: 'Cron' }),
   sentry: logger.child({ module: 'Sentry' }),
   server: logger.child({ module: 'Server' }),

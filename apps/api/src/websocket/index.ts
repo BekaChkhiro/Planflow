@@ -12,11 +12,17 @@ export {
   type TaskLockInfo,
 } from './connection-manager.js'
 
+// Active work types (T20.4) - re-exported from redis module
+export type { ActiveWorkData, FileConflict } from '../lib/redis.js'
+
+// Recent changes types (T20.5) - re-exported from redis module
+export type { RecentChangeEntry, AddChangeInput, RecentChangesQueryOptions } from '../lib/redis.js'
+
 // Also export types directly for new consumers
 export type { ConnectionStore } from './types.js'
 
 // Export managers for direct use if needed
-export { PresenceManager, WorkingOnManager, TypingManager, TaskLockManager } from './managers/index.js'
+export { PresenceManager, WorkingOnManager, TypingManager, TaskLockManager, ConflictDetectionManager } from './managers/index.js'
 export { verifyToken, verifyProjectAccess, authenticateWebSocket } from './auth.js'
 export {
   broadcastTaskUpdated,
@@ -56,6 +62,13 @@ export {
   // Task reorder broadcast (T14.3)
   broadcastTasksReordered,
   getProjectLocks,
+  // Recent changes broadcasts (T20.5)
+  broadcastRecentChange,
+  type RecentChangeData,
+  // File conflict broadcasts (T20.9)
+  broadcastFileConflictWarning,
+  getProjectFileConflicts,
+  type FileConflictData,
   acquireTaskLock,
   releaseTaskLock,
   extendTaskLock,

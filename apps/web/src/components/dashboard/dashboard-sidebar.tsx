@@ -23,6 +23,7 @@ import {
   Moon,
   Sun,
   Monitor,
+  LogOut,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
@@ -723,6 +724,52 @@ function SidebarCollapseToggle() {
 }
 
 // ============================================================================
+// Sidebar Logout
+// ============================================================================
+
+function SidebarLogout() {
+  const { isCollapsed } = useSidebar()
+  const { logout } = useAuthStore()
+
+  if (isCollapsed) {
+    return (
+      <div className="px-3 py-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 text-red-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                onClick={logout}
+                aria-label="Log out"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Log out</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-3 py-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start text-red-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+        onClick={logout}
+      >
+        <LogOut className="h-4 w-4 mr-2" />
+        <span>Log out</span>
+      </Button>
+    </div>
+  )
+}
+
+// ============================================================================
 // Sidebar Theme Toggle
 // ============================================================================
 
@@ -947,6 +994,8 @@ function SidebarContent({ quickStats, teamMembers }: SidebarContentProps) {
         <SidebarThemeToggle />
         <Separator />
         <SidebarCollapseToggle />
+        <Separator />
+        <SidebarLogout />
       </div>
     </div>
   )

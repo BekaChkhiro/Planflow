@@ -53,7 +53,7 @@ const projectId = cloudConfig.projectId
 const apiUrl = cloudConfig.apiUrl || "https://api.planflow.tools"
 
 // Load translations
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ### Step 1: Check Authentication

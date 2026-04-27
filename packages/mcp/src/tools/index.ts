@@ -20,6 +20,13 @@ import { notificationsTool } from './notifications.js'
 import { activityTool } from './activity.js'
 import { commentsTool } from './comments.js'
 import { commentTool } from './comment.js'
+import { searchTool } from './search.js'
+import { contextTool } from './context.js'
+import { indexTool } from './index-project.js'
+import { indexDocsTool } from './index-docs.js'
+import { rememberTool } from './remember.js'
+import { workingOnTool } from './working-on.js'
+import { changesTool } from './changes.js'
 
 /**
  * Registry of all available tools
@@ -38,6 +45,13 @@ import { commentTool } from './comment.js'
  * - planflow_activity (T6.4)
  * - planflow_comments (T6.5)
  * - planflow_comment (T6.5)
+ * - planflow_index (T21.3)
+ * - planflow_index_docs (T21.3)
+ * - planflow_search (T21.3)
+ * - planflow_context (T21.3)
+ * - planflow_remember (T21.3)
+ * - planflow_working_on (T21.3)
+ * - planflow_changes (T21.3)
  */
 export const tools: ToolDefinition[] = [
   loginTool,
@@ -53,6 +67,13 @@ export const tools: ToolDefinition[] = [
   activityTool,
   commentsTool,
   commentTool,
+  searchTool,
+  contextTool,
+  indexTool,
+  indexDocsTool,
+  rememberTool,
+  workingOnTool,
+  changesTool,
 ]
 
 /**

@@ -39,7 +39,7 @@ const cloudConfig = config.cloud || {}
 const isAuthenticated = !!cloudConfig.apiToken
 const apiUrl = cloudConfig.apiUrl || "https://api.planflow.tools"
 
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ## Step 1: Parse Arguments
@@ -88,7 +88,81 @@ If not authenticated, display error card:
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## Step 4: Show Creation Card
+## Step 4: Fetch User's Organizations
+
+**API Call:**
+```bash
+curl -s -X GET \
+  -H "Authorization: Bearer {TOKEN}" \
+  "https://api.planflow.tools/organizations"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "organizations": [
+      {
+        "id": "org-uuid-1",
+        "name": "My Company",
+        "slug": "my-company",
+        "role": "owner"
+      },
+      {
+        "id": "org-uuid-2",
+        "name": "Personal",
+        "slug": "personal",
+        "role": "owner"
+      }
+    ]
+  }
+}
+```
+
+## Step 5: Select or Create Organization
+
+**If user has NO organizations:**
+
+Create a "Personal" organization first:
+
+```bash
+curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {TOKEN}" \
+  -d '{"name": "Personal", "slug": "personal"}' \
+  "https://api.planflow.tools/organizations"
+```
+
+Then use the returned `organization.id` as `organizationId`.
+
+**If user has ONE organization:**
+
+Use that organization's `id` as `organizationId` automatically.
+
+**If user has MULTIPLE organizations:**
+
+Ask user to select which organization to create the project in:
+
+```
+╭──────────────────────────────────────────────────────────────────────────────╮
+│  ☁️  Select Organization                                                     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  Which organization should this project belong to?                           │
+│                                                                              │
+│  1. My Company (owner)                                                       │
+│  2. Personal (owner)                                                         │
+│  3. Team Alpha (editor)                                                      │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+Use the `AskUserQuestion` tool to let the user choose.
+
+**NOTE:** Only organizations where user has `owner`, `admin`, or `editor` role can be used to create projects. Filter out organizations where user has `viewer` role.
+
+## Step 6: Show Creation Card
 
 ```
 ╭──────────────────────────────────────────────────────────────────────────────╮
@@ -98,6 +172,7 @@ If not authenticated, display error card:
 │  ⠹ Creating project on cloud...                                              │
 │                                                                              │
 │  Project name: {projectName}                                                 │
+│  Organization: {organizationName}                                            │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -107,11 +182,11 @@ If not authenticated, display error card:
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer {TOKEN}" \
-  -d '{"name": "Project Name"}' \
+  -d '{"name": "Project Name", "organizationId": "org-uuid"}' \
   "https://api.planflow.tools/projects"
 ```
 
-## Step 5: Link and Push
+## Step 7: Link and Push
 
 1. Link to new project (save projectId to config)
 2. Push current plan
@@ -132,7 +207,7 @@ curl -s -X POST \
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## Step 6: Show Success Card
+## Step 8: Show Success Card
 
 ```
 ╭──────────────────────────────────────────────────────────────────────────────╮

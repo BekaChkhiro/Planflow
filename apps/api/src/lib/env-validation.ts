@@ -22,6 +22,7 @@ export interface EnvValidationResult {
     paymentsConfigured: boolean
     pushConfigured: boolean
     sentryConfigured: boolean
+    voyageConfigured: boolean
   }
 }
 
@@ -133,6 +134,12 @@ export function validateEnvironment(): EnvValidationResult {
   // Google integration status (optional - for OAuth login)
   const googleConfigured = !!(process.env['GOOGLE_CLIENT_ID'] && process.env['GOOGLE_CLIENT_SECRET'])
 
+  // Voyage AI - Required for embedding proxy (T19.10)
+  const voyageConfigured = !!process.env['VOYAGE_API_KEY']
+  if (!voyageConfigured) {
+    warnings.push('VOYAGE_API_KEY is not set. Embedding proxy endpoint will be unavailable.')
+  }
+
   // Redis status (optional - falls back to in-memory)
   const redisConfigured = !!(process.env['REDIS_URL'] || process.env['UPSTASH_REDIS_REST_URL'])
 
@@ -149,6 +156,7 @@ export function validateEnvironment(): EnvValidationResult {
       paymentsConfigured: !!(lsApiKey && lsStoreId),
       pushConfigured: !!(vapidPublic && vapidPrivate),
       sentryConfigured: !!sentryDsn,
+      voyageConfigured,
     }
   }
 }
@@ -188,6 +196,7 @@ export function validateAndExit(): EnvValidationResult {
     redis: result.info.redisConfigured,
     push: result.info.pushConfigured,
     sentry: result.info.sentryConfigured,
+    voyage: result.info.voyageConfigured,
   }, 'Environment configuration loaded')
 
   return result

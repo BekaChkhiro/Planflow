@@ -81,3 +81,14 @@ export {
   type NotificationStats,
   type NotificationType,
 } from './notification.repository.js'
+
+// Knowledge repository
+export {
+  KnowledgeRepository,
+  knowledgeRepository,
+  type KnowledgeEntry,
+  type KnowledgeEntryWithAuthor,
+  type CreateKnowledgeInput,
+  type UpdateKnowledgeInput,
+  type KnowledgeListOptions,
+} from './knowledge.repository.js'

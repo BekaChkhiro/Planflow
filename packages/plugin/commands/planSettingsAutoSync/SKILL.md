@@ -40,7 +40,7 @@ const cloudConfig = config.cloud || {}
 const isAuthenticated = !!cloudConfig.apiToken
 const autoSync = cloudConfig.autoSync || false
 
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ## Step 1: Parse Arguments

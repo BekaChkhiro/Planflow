@@ -15,6 +15,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const COMMANDS_SOURCE = join(__dirname, '..', 'commands')
+const LOCALES_SOURCE = join(__dirname, '..', 'locales')
 const CLAUDE_COMMANDS_DIR = join(homedir(), '.claude', 'commands')
 
 function setup() {
@@ -67,6 +68,25 @@ function setup() {
     } catch (error) {
       console.error(`❌ Failed to create symlink for ${cmd}: ${error.message}`)
     }
+  }
+
+  // Symlink locales folder
+  const localesTarget = join(CLAUDE_COMMANDS_DIR, 'locales')
+  try {
+    if (existsSync(LOCALES_SOURCE)) {
+      if (existsSync(localesTarget)) {
+        const stats = lstatSync(localesTarget)
+        if (stats.isSymbolicLink()) {
+          unlinkSync(localesTarget)
+        }
+      }
+      if (!existsSync(localesTarget)) {
+        symlinkSync(LOCALES_SOURCE, localesTarget)
+        console.log(`📁 Locales folder linked`)
+      }
+    }
+  } catch (error) {
+    console.error(`⚠️  Could not link locales: ${error.message}`)
   }
 
   console.log(`✅ Setup complete!`)

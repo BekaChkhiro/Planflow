@@ -24,6 +24,7 @@ import {
   releaseTaskLock,
   extendTaskLock,
   releaseUserLocks,
+  broadcastFileConflictWarning,
 } from './broadcast.js'
 
 // Ping interval (25 seconds - below typical 30s timeout)
@@ -203,15 +204,16 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
           return
         }
 
-        // Handle working_on_start from client (T6.1)
+        // Handle working_on_start from client (T6.1 + T20.4 Redis persistence)
         if (message.type === 'working_on_start') {
-          const { taskId, taskUuid, taskName } = message
+          const { taskId, taskUuid, taskName, filePaths } = message
           if (taskId && taskUuid && taskName) {
-            const startedAt = connectionManager.setWorkingOn(auth.projectId, auth.userId, {
-              taskId,
-              taskUuid,
-              taskName,
-            })
+            const startedAt = await connectionManager.setWorkingOn(
+              auth.projectId,
+              auth.userId,
+              { taskId, taskUuid, taskName },
+              { email: auth.email, name: auth.name }
+            )
             broadcastWorkingOnChanged(
               auth.projectId,
               auth.userId,
@@ -223,19 +225,83 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
               }
             )
             log.debug({ userId: auth.userId, taskId }, 'User started working on task')
+
+            // If filePaths provided, update and check for conflicts (T20.9)
+            if (Array.isArray(filePaths) && filePaths.length > 0) {
+              const { conflicts } = await connectionManager.conflictDetection
+                .updateFilesAndDetectConflicts(auth.projectId, auth.userId, filePaths)
+              if (conflicts.length > 0) {
+                broadcastFileConflictWarning(auth.projectId, conflicts, auth.userId)
+              }
+            }
           }
           return
         }
 
-        // Handle working_on_stop from client (T6.1)
+        // Handle working_on_stop from client (T6.1 + T20.4 Redis persistence)
         if (message.type === 'working_on_stop') {
-          connectionManager.clearWorkingOn(auth.projectId, auth.userId)
+          await connectionManager.clearWorkingOn(auth.projectId, auth.userId)
           broadcastWorkingOnChanged(
             auth.projectId,
             auth.userId,
             null
           )
           log.debug({ userId: auth.userId }, 'User stopped working')
+          return
+        }
+
+        // Handle working_on_heartbeat from client (T20.4)
+        if (message.type === 'working_on_heartbeat') {
+          const alive = await connectionManager.heartbeatActiveWork(auth.projectId, auth.userId)
+          if (!alive) {
+            // Active work expired — clear client state and notify
+            connectionManager.getWorkingOn(auth.projectId, auth.userId) &&
+              await connectionManager.clearWorkingOn(auth.projectId, auth.userId)
+            broadcastWorkingOnChanged(auth.projectId, auth.userId, null)
+            ws.send(JSON.stringify({
+              type: 'working_on_expired',
+              projectId: auth.projectId,
+              timestamp: new Date().toISOString(),
+            }))
+          }
+          return
+        }
+
+        // Handle working_on_files from client (T20.9 - Conflict Detection)
+        if (message.type === 'working_on_files') {
+          const { filePaths } = message
+          if (Array.isArray(filePaths)) {
+            const { conflicts } = await connectionManager.conflictDetection
+              .updateFilesAndDetectConflicts(auth.projectId, auth.userId, filePaths)
+
+            if (conflicts.length > 0) {
+              broadcastFileConflictWarning(auth.projectId, conflicts, auth.userId)
+              log.info(
+                { userId: auth.userId, conflictCount: conflicts.length },
+                'File conflicts detected and warnings sent'
+              )
+            }
+
+            // Acknowledge to sender
+            ws.send(JSON.stringify({
+              type: 'working_on_files_ack',
+              projectId: auth.projectId,
+              timestamp: new Date().toISOString(),
+              data: {
+                fileCount: filePaths.length,
+                conflictCount: conflicts.length,
+                conflicts: conflicts.map(c => ({
+                  filePath: c.filePath,
+                  otherUsers: c.users.filter(u => u.userId !== auth.userId).map(u => ({
+                    userEmail: u.userEmail,
+                    userName: u.userName,
+                    taskId: u.taskId,
+                    taskName: u.taskName,
+                  })),
+                })),
+              },
+            }))
+          }
           return
         }
 
@@ -409,8 +475,11 @@ export function setupWebSocketServer(server: ServerType): WebSocketServer {
         // Broadcast presence_left to others (T5.9)
         broadcastPresenceLeft(auth.projectId, auth.userId)
 
-        // If they were working on something, broadcast that they stopped (T6.1)
+        // If they were working on something, clear from store and broadcast (T6.1 + T20.4)
         if (hadWorkingOn) {
+          connectionManager.clearWorkingOn(auth.projectId, auth.userId).catch(err => {
+            log.error({ err, userId: auth.userId }, 'Error clearing active work on disconnect')
+          })
           broadcastWorkingOnChanged(auth.projectId, auth.userId, null)
         }
 

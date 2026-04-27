@@ -12,16 +12,17 @@ Change the role of an existing team member in the linked cloud project with role
 ```bash
 /pfTeamRole <email> <role>           # Change member's role
 /pfTeamRole bob@company.com viewer
-/pfTeamRole alice@company.com admin
+/pfTeamRole alice@company.com editor
 ```
 
 ## Available Roles
 
 | Role | Permissions |
 |------|-------------|
-| `admin` | Full access, can manage team members |
 | `editor` | Can edit tasks and plan |
 | `viewer` | Read-only access |
+
+**Note:** The `owner` role cannot be changed via this command. For organization-level roles (including `admin`), use `/team` command.
 
 ## Step 0: Load Configuration
 
@@ -42,14 +43,13 @@ Change the role of an existing team member in the linked cloud project with role
 │                                                                              │
 │  ── Available Roles ─────────────────────────────────────────────────────    │
 │                                                                              │
-│  admin   - Full access, can manage team members                              │
 │  editor  - Can edit tasks and plan                                           │
 │  viewer  - Read-only access                                                  │
 │                                                                              │
 │  ── Examples ────────────────────────────────────────────────────────────    │
 │                                                                              │
 │  /pfTeamRole bob@company.com viewer                                          │
-│  /pfTeamRole alice@company.com admin                                         │
+│  /pfTeamRole alice@company.com editor                                        │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -95,7 +95,7 @@ Change the role of an existing team member in the linked cloud project with role
 │                                                                              │
 │  You cannot change your own role.                                            │
 │                                                                              │
-│  Ask another admin or the project owner to change your role.                 │
+│  Ask the project owner to change your role.                                  │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -139,7 +139,7 @@ Change the role of an existing team member in the linked cloud project with role
 │                                                                              │
 │  Invalid role: superadmin                                                    │
 │                                                                              │
-│  Valid roles: admin, editor, viewer                                          │
+│  Valid roles: editor, viewer                                                 │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

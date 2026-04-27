@@ -18,9 +18,10 @@ Send an invitation to add a new team member to the linked cloud project with inv
 
 | Role | Permissions |
 |------|-------------|
-| `admin` | Full access, can manage team members |
 | `editor` | Can edit tasks and plan (default) |
 | `viewer` | Read-only access |
+
+**Note:** Project-level invitations support `editor` and `viewer` roles. The `owner` role is automatically assigned to the project creator. For organization-level team management with `admin` role, use `/team` command.
 
 ## Step 0: Load Configuration
 
@@ -36,7 +37,7 @@ const isAuthenticated = !!cloudConfig.apiToken
 const projectId = cloudConfig.projectId
 const apiUrl = cloudConfig.apiUrl || "https://api.planflow.tools"
 
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 ```
 
 ## Step 1: Show Usage Card (if no arguments)
@@ -53,14 +54,13 @@ const t = JSON.parse(readFile(`locales/${language}.json`))
 │                                                                              │
 │  ── Available Roles ─────────────────────────────────────────────────────    │
 │                                                                              │
-│  admin   - Full access, can manage team members                              │
 │  editor  - Can edit tasks and plan (default)                                 │
 │  viewer  - Read-only access                                                  │
 │                                                                              │
 │  ── Examples ────────────────────────────────────────────────────────────    │
 │                                                                              │
 │  /pfTeamInvite alice@company.com                                             │
-│  /pfTeamInvite bob@company.com admin                                         │
+│  /pfTeamInvite bob@company.com viewer                                        │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -141,7 +141,7 @@ const t = JSON.parse(readFile(`locales/${language}.json`))
 │  alice@company.com is already part of this project.                          │
 │                                                                              │
 │  💡 To change their role:                                                    │
-│     • /pfTeamRole alice@company.com admin                                    │
+│     • /pfTeamRole alice@company.com editor                                   │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -155,7 +155,7 @@ const t = JSON.parse(readFile(`locales/${language}.json`))
 │                                                                              │
 │  You don't have permission to invite team members.                           │
 │                                                                              │
-│  Only project owners and admins can send invitations.                        │
+│  Only project owners can send invitations.                                   │
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

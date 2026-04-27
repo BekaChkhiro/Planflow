@@ -29,6 +29,8 @@ import {
   closeRedis,
   initRateLimitStore,
   initTaskLockStore,
+  initActiveWorkStore,
+  initRecentChangesStore,
   isRedisAvailable,
 } from './lib/redis.js'
 import { configurePush } from './lib/push.js'
@@ -51,6 +53,10 @@ import {
   notificationsRoutes,
   integrationsRoutes,
   oauthRoutes,
+  knowledgeRoutes,
+  changesRoutes,
+  knowledgeAggregatorRoutes,
+  ragRoutes,
 } from './routes/index.js'
 
 // Initialize push notifications
@@ -120,6 +126,18 @@ app.route('/project-invitations', projectInvitationsRoutes)
 // Notification routes
 app.route('/notifications', notificationsRoutes)
 
+// Knowledge routes (project knowledge CRUD)
+app.route('/projects', knowledgeRoutes)
+
+// Recent changes routes (T20.5 - changes stream)
+app.route('/projects', changesRoutes)
+
+// Knowledge Aggregator routes (T20.8 - unified context)
+app.route('/projects', knowledgeAggregatorRoutes)
+
+// RAG routes (T21.2 - vector search + indexing)
+app.route('/projects', ragRoutes)
+
 // Integration routes (Slack, Discord, GitHub)
 // Note: This file also contains /organizations/:id/integrations routes
 app.route('/', integrationsRoutes)
@@ -139,8 +157,10 @@ const envConfig = validateAndExit()
   await initRedis()
   initRateLimitStore()
   initTaskLockStore()
+  initActiveWorkStore()
+  initRecentChangesStore()
   if (isRedisAvailable()) {
-    serverLog.info('Redis connected - rate limiting and task locks will persist across restarts')
+    serverLog.info('Redis connected - rate limiting, task locks, active work, and recent changes will persist across restarts')
   }
 })()
 

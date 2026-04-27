@@ -102,8 +102,10 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockProject = fixtures.project({ name: 'New Project' })
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockResolvedValue(mockProject),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)
@@ -116,9 +118,11 @@ describe('planflow_create', () => {
       expect(text).toContain('New Project')
       expect(text).toContain(mockProject.id)
 
+      expect(mockClient.getDefaultOrganization).toHaveBeenCalled()
       expect(mockClient.createProject).toHaveBeenCalledWith({
         name: 'New Project',
         description: undefined,
+        organizationId: 'org-123',
       })
     })
 
@@ -128,11 +132,13 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockProject = fixtures.project({
         name: 'New Project',
         description: 'A great project',
       })
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockResolvedValue(mockProject),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)
@@ -149,6 +155,7 @@ describe('planflow_create', () => {
       expect(mockClient.createProject).toHaveBeenCalledWith({
         name: 'New Project',
         description: 'A great project',
+        organizationId: 'org-123',
       })
     })
 
@@ -158,8 +165,10 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockProject = fixtures.project({ description: null })
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockResolvedValue(mockProject),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)
@@ -169,6 +178,24 @@ describe('planflow_create', () => {
       expect(text).toContain('(none)')
     })
 
+    it('should error when no organization found', async () => {
+      const { isAuthenticated } = await import('../config.js')
+      const { getApiClient } = await import('../api-client.js')
+
+      vi.mocked(isAuthenticated).mockReturnValue(true)
+
+      const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(null),
+      }
+      vi.mocked(getApiClient).mockReturnValue(mockClient as any)
+
+      const result = await createTool.execute({ name: 'Test' })
+
+      expect(isErrorResult(result)).toBe(true)
+      const text = getResultText(result)
+      expect(text).toContain('No organization found')
+    })
+
     it('should handle validation errors', async () => {
       const { isAuthenticated } = await import('../config.js')
       const { getApiClient } = await import('../api-client.js')
@@ -176,7 +203,9 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockRejectedValue(new ApiError('Name already exists', 400)),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)
@@ -195,7 +224,9 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockRejectedValue(new AuthError('Expired')),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)
@@ -214,7 +245,9 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockRejectedValue(new ApiError('Server error', 500)),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)
@@ -234,8 +267,10 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockProject = fixtures.project()
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockResolvedValue(mockProject),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)
@@ -255,8 +290,10 @@ describe('planflow_create', () => {
 
       vi.mocked(isAuthenticated).mockReturnValue(true)
 
+      const mockOrg = { id: 'org-123', name: 'My Org', slug: 'my-org', role: 'owner' }
       const mockProject = fixtures.project()
       const mockClient = {
+        getDefaultOrganization: vi.fn().mockResolvedValue(mockOrg),
         createProject: vi.fn().mockResolvedValue(mockProject),
       }
       vi.mocked(getApiClient).mockReturnValue(mockClient as any)

@@ -15,6 +15,7 @@ import { sendProjectInvitationEmail } from '../lib/email.js'
 import { getDbClient, schema, withTransaction } from '../db/index.js'
 import { auth, getAuth, largeBodyLimit, jwtAuth } from '../middleware/index.js'
 import { canCreateProject, getProjectLimits } from '../utils/helpers.js'
+import { rateLimit } from '../middleware/index.js'
 import { parsePlanTasks } from '../lib/task-parser.js'
 import {
   broadcastTaskUpdated,
@@ -23,6 +24,7 @@ import {
   broadcastTasksReordered,
   getTaskLock,
 } from '../websocket/index.js'
+import { recordChange } from '../lib/record-change.js'
 import {
   fetchGitHubIssue,
   createGitHubIssue,
@@ -794,6 +796,19 @@ projectRoutes.put('/:id/plan', largeBodyLimit, auth, async (c) => {
       })
     }
 
+    // Record plan sync to recent changes stream (T20.5)
+    recordChange({
+      projectId,
+      userId: user.id,
+      userEmail: user.email,
+      userName: null,
+      entityType: 'project',
+      entityId: projectId,
+      action: 'updated',
+      summary: `Plan synced (${completedCount}/${tasksCount} tasks done, ${progress}%)`,
+      metadata: { tasksCount, completedCount, progress },
+    })
+
     return c.json({
       success: true,
       data: {
@@ -1293,6 +1308,23 @@ projectRoutes.patch('/:id/tasks/:taskId', auth, async (c) => {
       }
     )
 
+    // Record to recent changes stream (T20.5)
+    const action = body.status ? 'status_changed' as const : 'updated' as const
+    const summary = body.status
+      ? `${updated.taskId} status changed to ${updated.status}`
+      : `${updated.taskId}: ${updated.name} updated`
+    recordChange({
+      projectId,
+      userId: user.id,
+      userEmail: updaterUser?.email || user.email,
+      userName: updaterUser?.name || null,
+      entityType: 'task',
+      entityId: updated.taskId,
+      action,
+      summary,
+      metadata: body.status ? { oldStatus: body._oldStatus, newStatus: updated.status } : undefined,
+    })
+
     // Get assignee info if task is assigned
     let assignee = null
     if (updated.assigneeId) {
@@ -1642,6 +1674,23 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
         assigneeId: assigneeId || null,
         assigneeName: assigneeName,
       },
+    })
+
+    // Record to recent changes stream (T20.5)
+    const assignAction = assigneeId ? 'assigned' as const : 'unassigned' as const
+    const assignSummary = assigneeId
+      ? `${task.taskId} assigned to ${assigneeName}`
+      : `${task.taskId} unassigned`
+    recordChange({
+      projectId,
+      userId: user.id,
+      userEmail: user.email,
+      userName: null,
+      entityType: 'task',
+      entityId: task.taskId,
+      action: assignAction,
+      summary: assignSummary,
+      metadata: { assigneeId: assigneeId || null, assigneeName },
     })
 
     // Get assignee info for response
@@ -3558,6 +3607,115 @@ projectRoutes.get('/:id/tasks/:taskId/activity', auth, async (c) => {
 })
 
 // ============================================
+// Active Work (T20.4)
+// ============================================
+
+// GET /:id/active-work - Get all active work for a project
+projectRoutes.get('/:id/active-work', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    // Verify project access
+    const db = getDbClient()
+    const project = await db.query.projects.findFirst({
+      where: eq(schema.projects.id, projectId),
+    })
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check membership
+    const member = await db.query.projectMembers.findFirst({
+      where: and(
+        eq(schema.projectMembers.projectId, projectId),
+        eq(schema.projectMembers.userId, user.id)
+      ),
+    })
+
+    if (!member && project.ownerId !== user.id) {
+      return c.json({ success: false, error: 'Not a member of this project' }, 403)
+    }
+
+    // Get active work from store
+    const { connectionManager } = await import('../websocket/connection-manager.js')
+    const activeWork = await connectionManager.getProjectActiveWork(projectId)
+
+    return c.json({
+      success: true,
+      data: {
+        projectId,
+        activeWork: activeWork.map(aw => ({
+          taskId: aw.taskId,
+          taskUuid: aw.taskUuid,
+          taskName: aw.taskName,
+          userId: aw.userId,
+          userEmail: aw.userEmail,
+          userName: aw.userName,
+          startedAt: aw.startedAt,
+          lastHeartbeat: aw.lastHeartbeat,
+        })),
+        count: activeWork.length,
+      },
+    })
+  } catch (error) {
+    console.error('Get active work error:', error)
+    return c.json({ success: false, error: 'Failed to get active work' }, 500)
+  }
+})
+
+// ============================================
+// File Conflict Detection (T20.9)
+// ============================================
+
+// GET /:id/file-conflicts - Get all current file conflicts in a project
+projectRoutes.get('/:id/file-conflicts', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    // Verify project access
+    const db = getDbClient()
+    const project = await db.query.projects.findFirst({
+      where: eq(schema.projects.id, projectId),
+    })
+
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Check membership
+    const member = await db.query.projectMembers.findFirst({
+      where: and(
+        eq(schema.projectMembers.projectId, projectId),
+        eq(schema.projectMembers.userId, user.id)
+      ),
+    })
+
+    if (!member && project.ownerId !== user.id) {
+      return c.json({ success: false, error: 'Not a member of this project' }, 403)
+    }
+
+    // Get file conflicts
+    const { getProjectFileConflicts } = await import('../websocket/broadcast.js')
+    const conflicts = await getProjectFileConflicts(projectId)
+
+    return c.json({
+      success: true,
+      data: {
+        projectId,
+        conflicts,
+        count: conflicts.length,
+      },
+    })
+  } catch (error) {
+    console.error('Get file conflicts error:', error)
+    return c.json({ success: false, error: 'Failed to get file conflicts' }, 500)
+  }
+})
+
+// ============================================
 // Task Comments
 // ============================================
 
@@ -5015,6 +5173,140 @@ projectRoutes.delete('/:id/members/invitations/:invId', auth, async (c) => {
     return c.json({ success: true, data: { message: 'Invitation revoked successfully' } })
   } catch (error) {
     console.error('Revoke project invitation error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ============================================
+// Embedding Proxy Route (T19.10)
+// ============================================
+
+// Rate limiter for embedding endpoint — Voyage API is expensive
+// 20 requests per minute per user (keyed by userId, not IP)
+const embedRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+  keyGenerator: (c) => {
+    try {
+      const { user } = getAuth(c)
+      return `embed:${user.id}`
+    } catch {
+      return `embed:${c.req.header('x-forwarded-for') || 'unknown'}`
+    }
+  },
+  message: 'Embedding rate limit exceeded. Please wait before sending more requests.',
+})
+
+// POST /projects/:id/embed - Server-side embedding proxy
+// Proxies embedding requests to Voyage-code-3 API.
+// PlanFlow manages the API key — users don't need their own.
+projectRoutes.post('/:id/embed', auth, embedRateLimit, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    // Check Voyage API key is configured
+    const voyageApiKey = process.env['VOYAGE_API_KEY']
+    if (!voyageApiKey) {
+      return c.json({ success: false, error: 'Embedding service is not configured' }, 503)
+    }
+
+    const db = getDbClient()
+
+    // Verify project access
+    const project = await getProjectWithAccess(db, projectId, user.id)
+    if (!project) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Parse and validate request body
+    const body = await c.req.json()
+
+    if (!body.input || !Array.isArray(body.input) || body.input.length === 0) {
+      return c.json({ success: false, error: 'Request body must include a non-empty "input" array of strings' }, 400)
+    }
+
+    // Enforce limits
+    const MAX_TEXTS = 128
+    const MAX_TEXT_LENGTH = 32_000 // ~8k tokens approx
+
+    if (body.input.length > MAX_TEXTS) {
+      return c.json({ success: false, error: `Maximum ${MAX_TEXTS} texts per request` }, 400)
+    }
+
+    for (let i = 0; i < body.input.length; i++) {
+      if (typeof body.input[i] !== 'string') {
+        return c.json({ success: false, error: `input[${i}] must be a string` }, 400)
+      }
+      if (body.input[i].length === 0) {
+        return c.json({ success: false, error: `input[${i}] must not be empty` }, 400)
+      }
+      if (body.input[i].length > MAX_TEXT_LENGTH) {
+        return c.json({ success: false, error: `input[${i}] exceeds maximum length of ${MAX_TEXT_LENGTH} characters` }, 400)
+      }
+    }
+
+    const model = body.model || 'voyage-code-3'
+    const allowedModels = ['voyage-code-3', 'voyage-3', 'voyage-3-lite']
+    if (!allowedModels.includes(model)) {
+      return c.json({ success: false, error: `Invalid model. Allowed: ${allowedModels.join(', ')}` }, 400)
+    }
+
+    // Proxy to Voyage API
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+
+    try {
+      const voyageResponse = await fetch('https://api.voyageai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${voyageApiKey}`,
+        },
+        body: JSON.stringify({
+          input: body.input,
+          model,
+        }),
+        signal: controller.signal,
+      })
+
+      if (!voyageResponse.ok) {
+        const errorBody = await voyageResponse.text().catch(() => '')
+
+        // Map Voyage errors to appropriate responses
+        if (voyageResponse.status === 429) {
+          return c.json({ success: false, error: 'Embedding service is temporarily overloaded. Please retry shortly.' }, 429)
+        }
+        if (voyageResponse.status >= 500) {
+          return c.json({ success: false, error: 'Embedding service is temporarily unavailable' }, 502)
+        }
+
+        console.error(`[Embed] Voyage API error ${voyageResponse.status}: ${errorBody}`)
+        return c.json({ success: false, error: 'Embedding request failed' }, 502)
+      }
+
+      const result = await voyageResponse.json()
+
+      return c.json({
+        success: true,
+        data: result.data,
+        model,
+        usage: result.usage || null,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      return c.json({ success: false, error: 'Embedding request timed out' }, 504)
+    }
+    console.error('Embed proxy error:', error)
     return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
   }
 })

@@ -52,7 +52,7 @@ const localConfig = fileExists("./.plan-config.json")
 const globalConfig = fileExists(expandPath("~/.config/claude/plan-plugin-config.json"))
   ? JSON.parse(readFile(expandPath("~/.config/claude/plan-plugin-config.json"))) : null
 
-const t = JSON.parse(readFile(`locales/${language}.json`))
+const t = JSON.parse(readFile(`../locales/${language}.json`))
 
 // Parse arguments
 const args = commandArgs ? commandArgs.trim().toLowerCase() : ""

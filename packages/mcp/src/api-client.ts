@@ -70,7 +70,7 @@ interface Organization {
   name: string
   slug: string
   description: string | null
-  role: 'owner' | 'admin' | 'member'
+  role: 'owner' | 'admin' | 'editor' | 'viewer'
 }
 
 interface OrganizationsListResponse {
@@ -828,6 +828,61 @@ export class ApiClient {
     }
   }
 
+  // ============================================================
+  // Knowledge / Auto-Detection (T20.6)
+  // ============================================================
+
+  /**
+   * Auto-detect tech stack from project files
+   * Sends file contents to the API for analysis and creates knowledge entries.
+   */
+  async autoDetectTechStack(
+    projectId: string,
+    files: Record<string, string>
+  ): Promise<{
+    entries: Array<{ id: string; title: string; type: string; tags: string[] | null }>
+    summary: {
+      filesAnalyzed: string[]
+      totalDetections: number
+      created: number
+      updated: number
+      categories: Record<string, number>
+    }
+  }> {
+    return this.request('POST', `/projects/${projectId}/knowledge/auto-detect`, {
+      body: { files },
+    })
+  }
+
+  /**
+   * List knowledge entries for a project
+   */
+  async listKnowledge(
+    projectId: string,
+    options?: { type?: string; source?: string; search?: string; page?: number; limit?: number }
+  ): Promise<{
+    knowledge: Array<{
+      id: string
+      title: string
+      content: string
+      type: string
+      source: string
+      tags: string[] | null
+      metadata: Record<string, unknown> | null
+    }>
+    pagination: { total: number; page: number; limit: number; hasMore: boolean }
+  }> {
+    const params = new URLSearchParams()
+    if (options?.type) params.set('type', options.type)
+    if (options?.source) params.set('source', options.source)
+    if (options?.search) params.set('search', options.search)
+    if (options?.page) params.set('page', String(options.page))
+    if (options?.limit) params.set('limit', String(options.limit))
+
+    const qs = params.toString()
+    return this.request('GET', `/projects/${projectId}/knowledge${qs ? `?${qs}` : ''}`)
+  }
+
   /**
    * Get API information
    */
@@ -842,6 +897,177 @@ export class ApiClient {
     }
 
     return response.json() as Promise<{ name: string; version: string; status: string }>
+  }
+
+  // ============================================================
+  // RAG / Vector Search Endpoints (T21.2)
+  // ============================================================
+
+  /**
+   * Index file contents into the project's vector database (LanceDB)
+   */
+  async indexProject(
+    projectId: string,
+    files: Array<{ path: string; content: string; language?: string }>
+  ): Promise<{ filesIndexed: number; chunksIndexed: number; durationMs: number }> {
+    return this.request('POST', `/projects/${projectId}/index`, { body: { files } })
+  }
+
+  /**
+   * Search the project's vector index using hybrid search (vector + keyword)
+   */
+  async searchProject(
+    projectId: string,
+    query: string,
+    options?: { limit?: number; language?: string; kind?: string; source?: string }
+  ): Promise<{
+    query: string
+    results: Array<{
+      chunk: {
+        id: string
+        filePath: string
+        language: string
+        kind: string
+        name: string
+        content: string
+        startLine: number
+        endLine: number
+      }
+      score: number
+      source: 'vector' | 'keyword' | 'hybrid'
+    }>
+    total: number
+  }> {
+    return this.request('POST', `/projects/${projectId}/search`, {
+      body: { query, limit: options?.limit, language: options?.language, kind: options?.kind, source: options?.source },
+    })
+  }
+
+  /**
+   * Get the project's index status (is it indexed, how many chunks)
+   */
+  async getIndexStatus(projectId: string): Promise<{ indexed: boolean; chunks: number }> {
+    return this.request('GET', `/projects/${projectId}/index-status`)
+  }
+
+  /**
+   * Get aggregated project context (knowledge + vector + realtime + activity)
+   */
+  async getProjectContext(
+    projectId: string,
+    options?: {
+      query?: string
+      layers?: string[]
+      knowledgeLimit?: number
+      changesLimit?: number
+      activityLimit?: number
+      knowledgeType?: string
+    }
+  ): Promise<{
+    projectId: string
+    timestamp: string
+    layers: {
+      knowledge: { entries: Array<{ id: string; title: string; content: string; type: string }>; total: number } | null
+      vector: { results: Array<{ chunk: { filePath: string; name: string; content: string }; score: number }>; total: number; query: string | null } | null
+      realtime: { activeWork: Array<{ taskId: string; taskName: string; userEmail: string }>; recentChanges: Array<{ description: string; timestamp: string }>; changesTotal: number } | null
+      activity: { entries: Array<{ action: string; description: string | null; actorName: string | null; createdAt: Date }>; total: number } | null
+    }
+    summary: {
+      knowledgeCount: number
+      vectorResultsCount: number
+      activeWorkers: number
+      recentChangesCount: number
+      activityCount: number
+      layersLoaded: string[]
+      layerErrors: string[]
+    }
+  }> {
+    const params = new URLSearchParams()
+    if (options?.query) params.set('query', options.query)
+    if (options?.layers) params.set('layers', options.layers.join(','))
+    if (options?.knowledgeLimit) params.set('knowledgeLimit', String(options.knowledgeLimit))
+    if (options?.changesLimit) params.set('changesLimit', String(options.changesLimit))
+    if (options?.activityLimit) params.set('activityLimit', String(options.activityLimit))
+    if (options?.knowledgeType) params.set('knowledgeType', options.knowledgeType)
+
+    const qs = params.toString()
+    return this.request('GET', `/projects/${projectId}/context${qs ? `?${qs}` : ''}`)
+  }
+
+  // ============================================================
+  // Knowledge CRUD (T21.3 — planflow_remember)
+  // ============================================================
+
+  /**
+   * Create a knowledge entry for a project
+   */
+  async createKnowledge(
+    projectId: string,
+    data: {
+      title: string
+      content: string
+      type?: string
+      source?: string
+      tags?: string[]
+      metadata?: Record<string, unknown>
+    }
+  ): Promise<{
+    knowledge: {
+      id: string
+      title: string
+      content: string
+      type: string
+      source: string
+      tags: string[] | null
+      metadata: Record<string, unknown> | null
+      createdAt: string
+      updatedAt: string
+    }
+  }> {
+    return this.request('POST', `/projects/${projectId}/knowledge`, { body: data })
+  }
+
+  // ============================================================
+  // Changes Stream (T21.3 — planflow_changes)
+  // ============================================================
+
+  /**
+   * Get recent changes for a project
+   */
+  async getChanges(
+    projectId: string,
+    options?: {
+      entityType?: 'task' | 'knowledge' | 'comment' | 'project'
+      userId?: string
+      since?: string
+      limit?: number
+      offset?: number
+    }
+  ): Promise<{
+    changes: Array<{
+      id: string
+      action: string
+      entityType: string
+      entityId: string | null
+      description: string | null
+      userId: string
+      userEmail: string
+      timestamp: string
+      metadata: Record<string, unknown> | null
+    }>
+    total: number
+    limit: number
+    offset: number
+  }> {
+    const params = new URLSearchParams()
+    if (options?.entityType) params.set('entityType', options.entityType)
+    if (options?.userId) params.set('userId', options.userId)
+    if (options?.since) params.set('since', options.since)
+    if (options?.limit) params.set('limit', String(options.limit))
+    if (options?.offset) params.set('offset', String(options.offset))
+
+    const qs = params.toString()
+    return this.request('GET', `/projects/${projectId}/changes${qs ? `?${qs}` : ''}`)
   }
 }
 

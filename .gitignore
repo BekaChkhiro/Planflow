@@ -46,3 +46,8 @@ playwright/.cache/
 # Misc
 *.tsbuildinfo
 .plan-config.json
+.planflow-index-state.json
+.plan-pending-sync.json
+
+# RAG / Vector databases
+data/rag/

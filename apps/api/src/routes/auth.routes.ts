@@ -588,7 +588,7 @@ authRoutes.delete('/sessions/:sessionId', jwtAuth, async (c) => {
 })
 
 // Get current authenticated user (supports both JWT and API tokens)
-authRoutes.get('/me', async (c) => {
+authRoutes.get('/me', auth, async (c) => {
   // Note: This route uses dynamic auth - handled in main app mounting
   try {
     const authContext = getAuth(c)

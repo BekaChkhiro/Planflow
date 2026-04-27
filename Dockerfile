@@ -1,12 +1,14 @@
 FROM node:20-slim AS base
 
+# Cache-bust: force Railway to invalidate stale cache when this changes
+ARG RAILWAY_CACHE_BUST=rag-integration-v1
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
 WORKDIR /app
 
-# Cache-bust: include a hash that changes when deps change
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY turbo.json tsconfig.json ./
 COPY apps/api/package.json ./apps/api/
@@ -25,13 +27,15 @@ RUN pnpm --filter=@planflow/api build
 
 FROM node:20-slim AS production
 
+# Cache-bust: force Railway to invalidate stale cache when this changes
+ARG RAILWAY_CACHE_BUST=rag-integration-v1
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
 WORKDIR /app
 
-# Create directories before COPY to avoid cache key issues
 RUN mkdir -p apps/api packages/shared packages/rag
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./

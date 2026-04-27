@@ -28,6 +28,7 @@ import { rememberTool } from './remember.js'
 import { workingOnTool } from './working-on.js'
 import { changesTool } from './changes.js'
 import { useTool } from './use.js'
+import { indexDirectoryTool } from './index-directory.js'
 
 /**
  * Registry of all available tools
@@ -77,6 +78,7 @@ export const tools: ToolDefinition[] = [
   workingOnTool,
   changesTool,
   useTool,
+  indexDirectoryTool,
 ]
 
 /**

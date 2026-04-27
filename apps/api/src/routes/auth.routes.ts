@@ -9,6 +9,7 @@ import {
 } from '@planflow/shared'
 import { getDbClient, schema } from '../db/index.js'
 import {
+  auth,
   jwtAuth,
   getAuth,
   authRateLimit,

@@ -18,12 +18,14 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { getCurrentProjectId } from './use.js'
 
 const IndexInputSchema = z.object({
   projectId: z
     .string()
     .uuid('Project ID must be a valid UUID')
-    .describe('Project ID to index files for'),
+    .optional()
+    .describe('Project ID to index files for. Uses current project from planflow_use() if omitted.'),
   files: z
     .array(
       z.object({
@@ -74,8 +76,19 @@ Prerequisites:
   inputSchema: IndexInputSchema,
 
   async execute(input: IndexInput): Promise<ReturnType<typeof createSuccessResult>> {
+    const projectId = input.projectId || getCurrentProjectId()
+
+    if (!projectId) {
+      return createErrorResult(
+        '❌ No project ID provided and no current project set.\n\n' +
+          'Either:\n' +
+          '  1. Pass projectId: planflow_index(projectId: "uuid", files: [...])\n' +
+          '  2. Set current project: planflow_use(projectId: "uuid")'
+      )
+    }
+
     logger.info('Index tool called', {
-      projectId: input.projectId,
+      projectId,
       fileCount: input.files.length,
     })
 
@@ -129,7 +142,7 @@ Prerequisites:
       if (error instanceof ApiError) {
         if (error.statusCode === 404) {
           return createErrorResult(
-            `❌ Project not found: ${input.projectId}\n\n` +
+            `❌ Project not found: ${projectId}\n\n` +
               'Use planflow_projects() to list your available projects.'
           )
         }

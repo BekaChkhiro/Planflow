@@ -17,12 +17,14 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { getCurrentProjectId } from './use.js'
 
 const ChangesInputSchema = z.object({
   projectId: z
     .string()
     .uuid('Project ID must be a valid UUID')
-    .describe('Project ID to get changes for'),
+    .optional()
+    .describe('Project ID to get changes for. Uses current project from planflow_use() if omitted.'),
   entityType: z
     .enum(['task', 'knowledge', 'comment', 'project'])
     .optional()
@@ -83,8 +85,19 @@ Prerequisites:
   inputSchema: ChangesInputSchema,
 
   async execute(input: ChangesInput): Promise<ReturnType<typeof createSuccessResult>> {
+    const projectId = input.projectId || getCurrentProjectId()
+
+    if (!projectId) {
+      return createErrorResult(
+        '❌ No project ID provided and no current project set.\n\n' +
+          'Either:\n' +
+          '  1. Pass projectId: planflow_changes(projectId: "uuid")\n' +
+          '  2. Set current project: planflow_use(projectId: "uuid")'
+      )
+    }
+
     logger.info('Changes tool called', {
-      projectId: input.projectId,
+      projectId,
       entityType: input.entityType,
       limit: input.limit,
     })
@@ -101,7 +114,7 @@ Prerequisites:
     try {
       const client = getApiClient()
 
-      const response = await client.getChanges(input.projectId, {
+      const response = await client.getChanges(projectId, {
         entityType: input.entityType,
         limit: input.limit,
       })
@@ -158,7 +171,7 @@ Prerequisites:
       if (error instanceof ApiError) {
         if (error.statusCode === 404) {
           return createErrorResult(
-            `❌ Project not found: ${input.projectId}\n\n` +
+            `❌ Project not found: ${projectId}\n\n` +
               'Use planflow_projects() to list your available projects.'
           )
         }

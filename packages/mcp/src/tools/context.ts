@@ -17,12 +17,14 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { getCurrentProjectId } from './use.js'
 
 const ContextInputSchema = z.object({
   projectId: z
     .string()
     .uuid('Project ID must be a valid UUID')
-    .describe('Project ID to get context for'),
+    .optional()
+    .describe('Project ID to get context for. Uses current project from planflow_use() if omitted.'),
   query: z
     .string()
     .optional()
@@ -99,7 +101,18 @@ Prerequisites:
   inputSchema: ContextInputSchema,
 
   async execute(input: ContextInput): Promise<ReturnType<typeof createSuccessResult>> {
-    logger.info('Context tool called', { projectId: input.projectId, query: input.query })
+    const projectId = input.projectId || getCurrentProjectId()
+
+    if (!projectId) {
+      return createErrorResult(
+        '❌ No project ID provided and no current project set.\n\n' +
+          'Either:\n' +
+          '  1. Pass projectId: planflow_context(projectId: "uuid")\n' +
+          '  2. Set current project: planflow_use(projectId: "uuid")'
+      )
+    }
+
+    logger.info('Context tool called', { projectId, query: input.query })
 
     if (!isAuthenticated()) {
       return createErrorResult(
@@ -119,7 +132,7 @@ Prerequisites:
         layers: input.layers,
       })
 
-      const ctx = await client.getProjectContext(input.projectId, {
+      const ctx = await client.getProjectContext(projectId, {
         query: input.query,
         layers: input.layers,
         knowledgeLimit: input.knowledgeLimit,
@@ -236,7 +249,7 @@ Prerequisites:
       if (error instanceof ApiError) {
         if (error.statusCode === 404) {
           return createErrorResult(
-            `❌ Project not found: ${input.projectId}\n\n` +
+            `❌ Project not found: ${projectId}\n\n` +
               'Use planflow_projects() to list your available projects.'
           )
         }

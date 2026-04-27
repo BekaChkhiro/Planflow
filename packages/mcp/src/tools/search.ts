@@ -17,12 +17,14 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { getCurrentProjectId } from './use.js'
 
 const SearchInputSchema = z.object({
   projectId: z
     .string()
     .uuid('Project ID must be a valid UUID')
-    .describe('Project ID to search within'),
+    .optional()
+    .describe('Project ID to search within. Uses current project from planflow_use() if omitted.'),
   query: z
     .string()
     .min(1, 'Query cannot be empty')
@@ -87,7 +89,18 @@ Prerequisites:
   inputSchema: SearchInputSchema,
 
   async execute(input: SearchInput): Promise<ReturnType<typeof createSuccessResult>> {
-    logger.info('Search tool called', { projectId: input.projectId, query: input.query })
+    const projectId = input.projectId || getCurrentProjectId()
+
+    if (!projectId) {
+      return createErrorResult(
+        '❌ No project ID provided and no current project set.\n\n' +
+          'Either:\n' +
+          '  1. Pass projectId: planflow_search(projectId: "uuid", query: "...")\n' +
+          '  2. Set current project: planflow_use(projectId: "uuid")'
+      )
+    }
+
+    logger.info('Search tool called', { projectId, query: input.query })
 
     if (!isAuthenticated()) {
       return createErrorResult(
@@ -107,16 +120,17 @@ Prerequisites:
         limit: input.limit,
       })
 
-      const response = await client.searchProject(input.projectId, input.query, {
+      const response = await client.searchProject(projectId, input.query, {
         limit: input.limit,
         language: input.language,
         kind: input.kind,
         source: input.source,
       })
 
-      logger.info('Search completed', { total: response.total })
+      const total = response.total ?? response.results.length
+      logger.info('Search completed', { total })
 
-      if (response.total === 0) {
+      if (total === 0) {
         return createSuccessResult(
           `🔍 No results found for "${input.query}"\n\n` +
             '💡 Try:\n' +
@@ -130,7 +144,7 @@ Prerequisites:
       // Format results
       const lines: string[] = [
         `🔍 Search Results for "${input.query}"`,
-        `${response.total} result${response.total === 1 ? '' : 's'} found\n`,
+        `${total} result${total === 1 ? '' : 's'} found\n`,
       ]
 
       for (let i = 0; i < response.results.length; i++) {
@@ -184,7 +198,7 @@ Prerequisites:
       if (error instanceof ApiError) {
         if (error.statusCode === 404) {
           return createErrorResult(
-            `❌ Project not found: ${input.projectId}\n\n` +
+            `❌ Project not found: ${projectId}\n\n` +
               'Use planflow_projects() to list your available projects.'
           )
         }

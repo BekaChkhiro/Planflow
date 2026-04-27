@@ -18,12 +18,14 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { getCurrentProjectId } from './use.js'
 
 const RememberInputSchema = z.object({
   projectId: z
     .string()
     .uuid('Project ID must be a valid UUID')
-    .describe('Project ID to save knowledge for'),
+    .optional()
+    .describe('Project ID to save knowledge for. Uses current project from planflow_use() if omitted.'),
   title: z
     .string()
     .min(1, 'Title is required')
@@ -82,8 +84,19 @@ Prerequisites:
   inputSchema: RememberInputSchema,
 
   async execute(input: RememberInput): Promise<ReturnType<typeof createSuccessResult>> {
+    const projectId = input.projectId || getCurrentProjectId()
+
+    if (!projectId) {
+      return createErrorResult(
+        '❌ No project ID provided and no current project set.\n\n' +
+          'Either:\n' +
+          '  1. Pass projectId: planflow_remember(projectId: "uuid", title: "...")\n' +
+          '  2. Set current project: planflow_use(projectId: "uuid")'
+      )
+    }
+
     logger.info('Remember tool called', {
-      projectId: input.projectId,
+      projectId,
       title: input.title,
       type: input.type,
     })
@@ -100,7 +113,7 @@ Prerequisites:
     try {
       const client = getApiClient()
 
-      const result = await client.createKnowledge(input.projectId, {
+      const result = await client.createKnowledge(projectId, {
         title: input.title,
         content: input.content,
         type: input.type,
@@ -116,7 +129,7 @@ Prerequisites:
           `   Type: ${result.knowledge.type}\n` +
           `   ID: ${result.knowledge.id}\n\n` +
           `💡 This entry will now appear in:\n` +
-          `  • planflow_context(projectId: "${input.projectId}") — aggregated context\n` +
+          `  • planflow_context(projectId: "${projectId}") — aggregated context\n` +
           `  • planflow_search results when relevant`
       )
     } catch (error) {
@@ -139,7 +152,7 @@ Prerequisites:
         }
         if (error.statusCode === 404) {
           return createErrorResult(
-            `❌ Project not found: ${input.projectId}\n\n` +
+            `❌ Project not found: ${projectId}\n\n` +
               'Use planflow_projects() to list your available projects.'
           )
         }

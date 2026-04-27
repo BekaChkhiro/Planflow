@@ -17,12 +17,14 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { getCurrentProjectId } from './use.js'
 
 const WorkingOnInputSchema = z.object({
   projectId: z
     .string()
     .uuid('Project ID must be a valid UUID')
-    .describe('Project ID'),
+    .optional()
+    .describe('Project ID. Uses current project from planflow_use() if omitted.'),
   action: z
     .enum(['start', 'stop'])
     .describe('Whether to start or stop working on a task'),
@@ -60,8 +62,19 @@ Prerequisites:
   inputSchema: WorkingOnInputSchema,
 
   async execute(input: WorkingOnInput): Promise<ReturnType<typeof createSuccessResult>> {
+    const projectId = input.projectId || getCurrentProjectId()
+
+    if (!projectId) {
+      return createErrorResult(
+        '❌ No project ID provided and no current project set.\n\n' +
+          'Either:\n' +
+          '  1. Pass projectId: planflow_working_on(projectId: "uuid", action: "start", taskId: "T1.1")\n' +
+          '  2. Set current project: planflow_use(projectId: "uuid")'
+      )
+    }
+
     logger.info('Working on tool called', {
-      projectId: input.projectId,
+      projectId,
       action: input.action,
       taskId: input.taskId,
     })
@@ -92,18 +105,18 @@ Prerequisites:
         return createSuccessResult(
           `✅ Now working on ${result.workingOn.taskId}: ${result.workingOn.taskName}\n\n` +
             `💡 Teammates can see your focus in real-time.\n` +
-            `   Stop with: planflow_working_on(projectId: "${input.projectId}", action: "stop")`
+            `   Stop with: planflow_working_on(projectId: "${projectId}", action: "stop")`
         )
       }
 
       // action === 'stop'
-      const result = await client.stopWorkingOn(input.projectId)
+      const result = await client.stopWorkingOn(projectId)
       logger.info('Stopped working')
 
       return createSuccessResult(
         `✅ Stopped working on current task.\n\n` +
           `💡 Start a new task with:\n` +
-          `   planflow_working_on(projectId: "${input.projectId}", action: "start", taskId: "T1.1")`
+          `   planflow_working_on(projectId: "${projectId}", action: "start", taskId: "T1.1")`
       )
     } catch (error) {
       logger.error('Working on update failed', { error: String(error) })
@@ -119,7 +132,7 @@ Prerequisites:
       if (error instanceof ApiError) {
         if (error.statusCode === 404) {
           return createErrorResult(
-            `❌ Project or task not found.\n\n` +
+            `❌ Project or task not found: ${projectId}\n\n` +
               'Use planflow_projects() and planflow_task_list() to verify IDs.'
           )
         }

@@ -27,6 +27,7 @@ import { indexDocsTool } from './index-docs.js'
 import { rememberTool } from './remember.js'
 import { workingOnTool } from './working-on.js'
 import { changesTool } from './changes.js'
+import { useTool } from './use.js'
 
 /**
  * Registry of all available tools
@@ -52,6 +53,7 @@ import { changesTool } from './changes.js'
  * - planflow_remember (T21.3)
  * - planflow_working_on (T21.3)
  * - planflow_changes (T21.3)
+ * - planflow_use (T21.3)
  */
 export const tools: ToolDefinition[] = [
   loginTool,
@@ -74,6 +76,7 @@ export const tools: ToolDefinition[] = [
   rememberTool,
   workingOnTool,
   changesTool,
+  useTool,
 ]
 
 /**

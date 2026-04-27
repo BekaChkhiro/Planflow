@@ -17,12 +17,14 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { getCurrentProjectId } from './use.js'
 
 const IndexDocsInputSchema = z.object({
   projectId: z
     .string()
     .uuid('Project ID must be a valid UUID')
-    .describe('Project ID to index docs for'),
+    .optional()
+    .describe('Project ID to index docs for. Uses current project from planflow_use() if omitted.'),
   files: z
     .array(
       z.object({
@@ -70,8 +72,19 @@ Prerequisites:
   inputSchema: IndexDocsInputSchema,
 
   async execute(input: IndexDocsInput): Promise<ReturnType<typeof createSuccessResult>> {
+    const projectId = input.projectId || getCurrentProjectId()
+
+    if (!projectId) {
+      return createErrorResult(
+        '❌ No project ID provided and no current project set.\n\n' +
+          'Either:\n' +
+          '  1. Pass projectId: planflow_index_docs(projectId: "uuid", files: [...])\n' +
+          '  2. Set current project: planflow_use(projectId: "uuid")'
+      )
+    }
+
     logger.info('Index docs tool called', {
-      projectId: input.projectId,
+      projectId,
       fileCount: input.files.length,
     })
 
@@ -96,7 +109,7 @@ Prerequisites:
           : 'text',
       }))
 
-      const result = await client.indexProject(input.projectId, filesWithLang)
+      const result = await client.indexProject(projectId, filesWithLang)
 
       logger.info('Docs indexing completed', {
         filesIndexed: result.filesIndexed,
@@ -124,7 +137,7 @@ Prerequisites:
       if (error instanceof ApiError) {
         if (error.statusCode === 404) {
           return createErrorResult(
-            `❌ Project not found: ${input.projectId}\n\n` +
+            `❌ Project not found: ${projectId}\n\n` +
               'Use planflow_projects() to list your available projects.'
           )
         }

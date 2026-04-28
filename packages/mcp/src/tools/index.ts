@@ -36,6 +36,7 @@ import { indexTool } from './index-project.js'
 import { indexStatusTool } from './index-status.js'
 import { searchTool } from './search.js'
 import { contextTool } from './context.js'
+import { exploreTool } from './explore.js'
 import { recallTool } from './recall.js'
 import { chunkTool } from './chunk.js'
 import { rememberTool } from './remember.js'
@@ -69,6 +70,7 @@ export const tools: ToolDefinition[] = [
   // Intelligence layer
   indexTool,
   indexStatusTool,
+  exploreTool,
   searchTool,
   contextTool,
   recallTool,

@@ -15,7 +15,7 @@
  * stays out of the way.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, extname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { getApiClient } from './api-client.js'
@@ -25,6 +25,7 @@ import {
   getStoredCurrentProjectId,
 } from './config.js'
 import { logger } from './logger.js'
+import { CLAUDE_MD_SECTION, CLAUDE_MD_VERSION, spliceSection } from './cli-init-template.js'
 
 // ---------------------------------------------------------------------------
 // Shared scanning logic — kept aligned with planflow_index defaults.
@@ -304,6 +305,65 @@ export async function runStatusCommand(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: init
+//
+// Drops a CLAUDE.md template (or merges into an existing one) so Claude
+// Code reads the project's PlanFlow workflow on every session. Idempotent
+// — re-running upgrades the section in place rather than duplicating.
+// ---------------------------------------------------------------------------
+
+export function runInitCommand(): number {
+  const cwd = process.cwd()
+  const claudeMdPath = join(cwd, 'CLAUDE.md')
+
+  let existing = ''
+  if (existsSync(claudeMdPath)) {
+    try {
+      existing = readFileSync(claudeMdPath, 'utf-8')
+    } catch (err) {
+      process.stderr.write(`planflow-mcp: failed to read existing CLAUDE.md: ${String(err)}\n`)
+      return 1
+    }
+  }
+
+  const next = existing ? spliceSection(existing) : CLAUDE_MD_SECTION + '\n'
+
+  if (next === existing) {
+    process.stdout.write(
+      `planflow-mcp: CLAUDE.md already up to date (planflow section v${CLAUDE_MD_VERSION}).\n`
+    )
+    return 0
+  }
+
+  try {
+    writeFileSync(claudeMdPath, next, 'utf-8')
+  } catch (err) {
+    process.stderr.write(`planflow-mcp: failed to write CLAUDE.md: ${String(err)}\n`)
+    return 1
+  }
+
+  const action = existing ? 'updated' : 'created'
+  process.stdout.write(
+    [
+      `✅ ${action} ${claudeMdPath}`,
+      '',
+      'Claude will now read this on every session in this directory and',
+      'reach for planflow tools by default. Re-run `planflow-mcp init` to',
+      'pick up future template updates (idempotent).',
+      '',
+      'Next steps:',
+      '  1. Open Claude in this directory',
+      '  2. Run: planflow_use(projectId: "your-uuid")',
+      '     (one-time link — future sessions auto-resolve from cwd)',
+      '  3. Run: planflow_index',
+      '     (initial index of the codebase, ~5-10 min for a typical repo)',
+      '',
+    ].join('\n')
+  )
+  return 0
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: help
 // ---------------------------------------------------------------------------
 
@@ -314,13 +374,19 @@ export function runHelpCommand(): number {
       '',
       'Usage:',
       '  planflow-mcp                Start the MCP server (default, used by Claude / IDEs)',
+      '  planflow-mcp init           Drop a CLAUDE.md template into the current directory',
+      '                              (so Claude uses planflow tools by default in this project)',
       '  planflow-mcp index          Incremental index of the current directory',
       '  planflow-mcp status         Print index status for the linked project',
       '  planflow-mcp help           Show this message',
       '',
-      'Auth and project linking are managed via the MCP tools',
-      '(planflow_login, planflow_use). Run those once from Claude;',
-      'the CLI subcommands then read the same config.',
+      'Typical first-time setup in a new project:',
+      '  1. cd your-repo',
+      '  2. planflow-mcp init           (writes CLAUDE.md)',
+      '  3. open Claude → planflow_use(projectId: "...")  (links cwd → project)',
+      '  4. planflow_index              (initial index)',
+      '',
+      'After that, just `planflow-mcp index` after edits — incremental and fast.',
       '',
     ].join('\n')
   )
@@ -350,6 +416,9 @@ export async function dispatchCli(args: string[]): Promise<boolean> {
       break
     case 'status':
       exitCode = await runStatusCommand()
+      break
+    case 'init':
+      exitCode = runInitCommand()
       break
     case 'help':
     case '-h':

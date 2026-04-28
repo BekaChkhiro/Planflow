@@ -175,6 +175,9 @@ Use this when:
 
 Do NOT use when:
   • You are still discovering — use planflow_search() first to find the file
+    (or planflow_explore() for change-oriented exploration)
+  • The user described a code change in plain language — that's the
+    planflow_explore() use case, not recall
   • You only need the high-level project summary — use planflow_context()
   • You already have the file path AND just need the source — use Read directly
     (Read is faster and free; recall is for surrounding context like

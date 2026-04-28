@@ -164,6 +164,9 @@ Use this when:
   ✅ Cross-source: ranking code AND docs together
 
 Do NOT use this when:
+  ❌ The user described a CHANGE they want to make ("add X", "fix Y") →
+     planflow_explore is the right entry point — it bundles search +
+     knowledge + activity + likely-tasks + suggested files in one call
   ❌ You already know the file path → use Read directly (faster, cheaper)
   ❌ You're matching an exact string → use grep / Grep tool
   ❌ You only want the project's index health → planflow_index_status()

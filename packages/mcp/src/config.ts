@@ -20,6 +20,9 @@ const ConfigSchema = z.object({
   apiUrl: z.string().url().default('https://api.planflow.tools'),
   userId: z.string().uuid().optional(),
   userEmail: z.string().email().optional(),
+  // Persisted across MCP server restarts so `planflow_use` survives
+  // session boundaries the way `planflow_login` does.
+  currentProjectId: z.string().uuid().optional(),
 })
 
 export type Config = z.infer<typeof ConfigSchema>
@@ -104,7 +107,10 @@ export function saveConfig(config: Partial<Config>): Config {
 }
 
 /**
- * Clear stored credentials (logout)
+ * Clear stored credentials (logout).
+ * Also clears the current-project selection — once you've logged out,
+ * the project context is no longer meaningful and will only confuse
+ * the next session if left behind.
  */
 export function clearCredentials(): void {
   const config = loadConfig()
@@ -113,6 +119,7 @@ export function clearCredentials(): void {
     apiToken: undefined,
     userId: undefined,
     userEmail: undefined,
+    currentProjectId: undefined,
   })
   logger.info('Cleared stored credentials')
 }
@@ -142,4 +149,28 @@ export function getApiToken(): string {
 export function getApiUrl(): string {
   const config = loadConfig()
   return config.apiUrl
+}
+
+/**
+ * Get the persisted "current project" ID, if any.
+ *
+ * Returns null when no project has been selected — callers should treat
+ * this as "no current project" and ask the user (or accept an explicit
+ * projectId on the tool call).
+ */
+export function getStoredCurrentProjectId(): string | null {
+  const config = loadConfig()
+  return config.currentProjectId ?? null
+}
+
+/**
+ * Persist the "current project" ID to disk so it survives MCP server
+ * restarts. Pass `null` to clear.
+ */
+export function setStoredCurrentProjectId(projectId: string | null): void {
+  const config = loadConfig()
+  saveConfig({
+    ...config,
+    currentProjectId: projectId ?? undefined,
+  })
 }

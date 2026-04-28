@@ -12,7 +12,11 @@
 
 import { z } from 'zod'
 import { getApiClient } from '../api-client.js'
-import { isAuthenticated } from '../config.js'
+import {
+  isAuthenticated,
+  getStoredCurrentProjectId,
+  setStoredCurrentProjectId,
+} from '../config.js'
 import { AuthError, ApiError } from '../errors.js'
 import { logger } from '../logger.js'
 import {
@@ -22,23 +26,42 @@ import {
 } from './types.js'
 
 // ---------------------------------------------------------------------------
-// In-memory current project (per MCP server session)
+// Current project state (persisted)
+//
+// Source of truth is the on-disk config file (~/.config/planflow/config.json),
+// so the selection survives MCP server restarts (every new Claude session
+// spawns a fresh server). We keep an in-memory mirror to avoid re-reading
+// the file on every getCurrentProjectId() call — write-through caching:
+// reads use cache (hydrating from disk on first call), writes update both.
 // ---------------------------------------------------------------------------
 
-let currentProjectId: string | null = null
+let currentProjectId: string | null | undefined = undefined
 let currentProjectName: string | null = null
 
+/**
+ * Hydrate the in-memory cache from disk on first access.
+ * Subsequent calls hit the cache.
+ */
+function hydrateFromDisk(): void {
+  if (currentProjectId === undefined) {
+    currentProjectId = getStoredCurrentProjectId()
+  }
+}
+
 export function getCurrentProjectId(): string | null {
-  return currentProjectId
+  hydrateFromDisk()
+  return currentProjectId ?? null
 }
 
 export function getCurrentProjectName(): string | null {
+  hydrateFromDisk()
   return currentProjectName
 }
 
 export function clearCurrentProject(): void {
   currentProjectId = null
   currentProjectName = null
+  setStoredCurrentProjectId(null)
 }
 
 const UseInputSchema = z.object({
@@ -79,6 +102,7 @@ specify projectId for every single tool call.`,
 
     // Show current project
     if (!input.projectId && !input.clear) {
+      hydrateFromDisk()
       if (!currentProjectId) {
         return createSuccessResult(
           `ℹ️ No current project set.\n\n` +
@@ -118,6 +142,9 @@ specify projectId for every single tool call.`,
 
       currentProjectId = input.projectId!
       currentProjectName = project.name
+      // Persist so a fresh MCP session (new terminal / Claude restart)
+      // still knows which project is current.
+      setStoredCurrentProjectId(currentProjectId)
 
       logger.info('Current project set', { projectId: currentProjectId, name: currentProjectName })
 
@@ -125,10 +152,10 @@ specify projectId for every single tool call.`,
         `✅ Current project set:\n` +
           `   ${project.name}\n` +
           `   ID: ${input.projectId}\n\n` +
-          `Now you can use tools without projectId:\n` +
+          `Persisted across sessions. Now you can use tools without projectId:\n` +
           `  planflow_search(query: "auth middleware")\n` +
           `  planflow_context(query: "how does routing work")\n` +
-          `  planflow_index(files: [...])`
+          `  planflow_index(directory: ".")`
       )
     } catch (error) {
       logger.error('Failed to set current project', { error: String(error) })

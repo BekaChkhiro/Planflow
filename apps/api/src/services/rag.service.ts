@@ -106,10 +106,23 @@ export interface IndexFile {
   language?: string
 }
 
+/**
+ * A file that was sent to the indexer but not stored — annotated with the
+ * reason so an LLM caller can decide whether the skip is benign (no chunks
+ * extractable, e.g. an empty / type-only file) or worth reporting back to
+ * the user (chunker crash, oversize, unknown language).
+ */
+export interface SkippedFile {
+  path: string
+  reason: 'unsupported_language' | 'chunker_failed' | 'no_chunks' | 'embed_failed'
+  detail?: string
+}
+
 export interface IndexResult {
   filesIndexed: number
   chunksIndexed: number
   durationMs: number
+  skippedFiles: SkippedFile[]
 }
 
 export interface RagSearchOptions {
@@ -137,7 +150,7 @@ export class RagService {
     }
 
     if (files.length === 0) {
-      return { filesIndexed: 0, chunksIndexed: 0, durationMs: 0 }
+      return { filesIndexed: 0, chunksIndexed: 0, durationMs: 0, skippedFiles: [] }
     }
 
     const start = Date.now()
@@ -166,6 +179,7 @@ export class RagService {
 
       // Chunk and embed each file
       const records: EmbeddingRecord[] = []
+      const skippedFiles: SkippedFile[] = []
       let filesIndexed = 0
 
       for (const file of files) {
@@ -174,6 +188,7 @@ export class RagService {
 
         if (!language) {
           log.debug({ path: file.path }, 'Skipping file with unsupported language')
+          skippedFiles.push({ path: file.path, reason: 'unsupported_language' })
           continue
         }
 
@@ -190,10 +205,21 @@ export class RagService {
             chunks.push(...docChunks)
           }
 
-          if (chunks.length === 0) continue
+          if (chunks.length === 0) {
+            skippedFiles.push({ path: file.path, reason: 'no_chunks' })
+            continue
+          }
 
-          const texts = chunks.map((c) => c.content)
-          const vectors = await embedder.embed(texts)
+          let vectors: Float32Array[]
+          try {
+            const texts = chunks.map((c) => c.content)
+            vectors = await embedder.embed(texts)
+          } catch (embedErr) {
+            const detail = embedErr instanceof Error ? embedErr.message : String(embedErr)
+            log.warn({ error: embedErr, path: file.path }, 'Failed to embed file')
+            skippedFiles.push({ path: file.path, reason: 'embed_failed', detail })
+            continue
+          }
 
           const now = new Date().toISOString()
           const isDocFile =
@@ -222,7 +248,9 @@ export class RagService {
           }
           filesIndexed++
         } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err)
           log.warn({ error: err, path: file.path }, 'Failed to chunk/embed file')
+          skippedFiles.push({ path: file.path, reason: 'chunker_failed', detail })
         }
       }
 
@@ -234,7 +262,13 @@ export class RagService {
 
       const durationMs = Date.now() - start
       log.info(
-        { projectId, filesIndexed, chunksIndexed: records.length, durationMs },
+        {
+          projectId,
+          filesIndexed,
+          chunksIndexed: records.length,
+          skippedCount: skippedFiles.length,
+          durationMs,
+        },
         'RAG index completed'
       )
 
@@ -242,6 +276,7 @@ export class RagService {
         filesIndexed,
         chunksIndexed: records.length,
         durationMs,
+        skippedFiles,
       }
     } finally {
       // Always clean up the temp directory

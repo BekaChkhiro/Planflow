@@ -58,12 +58,20 @@ const DEFAULT_INCLUDE = [
 ]
 
 const DEFAULT_EXCLUDE = [
+  // Dependencies & VCS
   '**/node_modules/**',
   '**/.git/**',
+  // Framework / build outputs
   '**/.next/**',
+  '**/.svelte-kit/**',
+  '**/.nuxt/**',
+  '**/.vercel/**',
+  '**/.cache/**',
   '**/dist/**',
   '**/build/**',
+  '**/out/**',
   '**/.turbo/**',
+  // Test artifacts
   '**/coverage/**',
   '**/test-results/**',
   '**/playwright-report/**',
@@ -72,6 +80,18 @@ const DEFAULT_EXCLUDE = [
   '**/*.spec.ts',
   '**/*.spec.tsx',
   '**/__tests__/**',
+  // Auto-generated code (Prisma client, GraphQL codegen, etc.) —
+  // these are huge type-only files that exhaust embedding budget
+  // without adding signal.
+  '**/generated/**',
+  '**/.prisma/**',
+  '**/*.generated.ts',
+  '**/*.generated.tsx',
+  '**/*.gen.ts',
+  // Lockfiles (huge, deterministic, no semantic value for code search)
+  '**/pnpm-lock.yaml',
+  '**/package-lock.json',
+  '**/yarn.lock',
 ]
 
 // ---------------------------------------------------------------------------
@@ -131,6 +151,14 @@ const IndexInputSchema = z
       .optional()
       .describe(
         'Array of files to index directly. Use when you already have content in memory. Max 500 files.'
+      ),
+
+    // ── Modifiers ────────────────────────────────────────────────────────
+    dryRun: z
+      .boolean()
+      .default(false)
+      .describe(
+        'When true, scan and report what WOULD be indexed (file count, languages, sizes) without sending anything to the backend. No Voyage tokens spent. Useful before a big directory ingest.'
       ),
   })
   .refine((d) => Boolean(d.directory) !== Boolean(d.files), {
@@ -323,6 +351,16 @@ Use this when:
   • Adding docs (READMEs, ADRs, architecture notes — pass them in files mode
     or include "**/*.md" in the directory mode globs)
 
+Tip — dry-run before a big ingest:
+  planflow_index(directory: ".", dryRun: true)
+  Reports file count, language breakdown, size, and an estimated wall-time
+  WITHOUT calling the backend. Recommended for large repos so you can
+  adjust include/exclude before committing to a multi-minute call.
+
+Response includes a \`skippedFiles\` block when the backend couldn't store
+some files (unsupported language, chunker failure, oversize, embed
+failure) — so you don't have to detective-work which files didn't make it.
+
 Prerequisites:
   • Logged in via planflow_login()
   • Project selected via planflow_use() OR pass projectId explicitly`,
@@ -351,11 +389,17 @@ Prerequisites:
 
     // Dispatch on mode. The Zod refine() ensures exactly one is set.
     if (input.directory) {
-      return executeDirectoryMode(projectId, input.directory, input.include, input.exclude)
+      return executeDirectoryMode(
+        projectId,
+        input.directory,
+        input.include,
+        input.exclude,
+        input.dryRun
+      )
     }
 
     if (input.files) {
-      return executeFilesMode(projectId, input.files)
+      return executeFilesMode(projectId, input.files, input.dryRun)
     }
 
     // Should be unreachable thanks to .refine()
@@ -371,14 +415,15 @@ async function executeDirectoryMode(
   projectId: string,
   rawDirectory: string,
   include: string[],
-  exclude: string[]
+  exclude: string[],
+  dryRun: boolean
 ) {
   // Resolve directory path (expand ~)
   const dirPath = rawDirectory.startsWith('~')
     ? rawDirectory.replace(/^~/, process.env['HOME'] || '')
     : rawDirectory
 
-  logger.info('Scanning directory', { path: dirPath, projectId })
+  logger.info('Scanning directory', { path: dirPath, projectId, dryRun })
 
   try {
     const files = scanDirectory(dirPath, dirPath, include, exclude)
@@ -391,6 +436,10 @@ async function executeDirectoryMode(
       )
     }
 
+    if (dryRun) {
+      return createSuccessResult(formatDryRunPreview(dirPath, files, include, exclude))
+    }
+
     logger.info(`Found ${files.length} files to index`, { count: files.length })
 
     const client = getApiClient()
@@ -398,6 +447,7 @@ async function executeDirectoryMode(
     let totalChunksIndexed = 0
     const batchCount = Math.ceil(files.length / BATCH_SIZE)
     const failedBatches: Array<{ batchNum: number; error: string; fileCount: number }> = []
+    const allSkipped: SkippedFileSummary[] = []
 
     for (let i = 0; i < files.length; i += BATCH_SIZE) {
       const batch = files.slice(i, i + BATCH_SIZE)
@@ -409,9 +459,13 @@ async function executeDirectoryMode(
         const result = await client.indexProject(projectId, batch)
         totalFilesIndexed += result.filesIndexed
         totalChunksIndexed += result.chunksIndexed
+        if (result.skippedFiles && result.skippedFiles.length > 0) {
+          allSkipped.push(...result.skippedFiles)
+        }
         logger.info(`Batch ${batchNum} complete`, {
           filesIndexed: result.filesIndexed,
           chunksIndexed: result.chunksIndexed,
+          skipped: result.skippedFiles?.length ?? 0,
         })
       } catch (err) {
         const errMessage = err instanceof Error ? err.message : String(err)
@@ -448,6 +502,8 @@ async function executeDirectoryMode(
           )} files skipped).\n   First error: ${failedBatches[0]?.error}\n`
         : ''
 
+    const skippedBlock = formatSkippedFilesBlock(allSkipped)
+
     return createSuccessResult(
       `✅ Indexing complete!\n\n` +
         `📁 Directory: ${dirPath}\n` +
@@ -455,6 +511,7 @@ async function executeDirectoryMode(
         `📦 Files indexed: ${totalFilesIndexed}\n` +
         `🧩 Chunks indexed: ${totalChunksIndexed}\n` +
         warningBlock +
+        skippedBlock +
         `\n💡 Next steps:\n` +
         `  • planflow_index_status() — verify staleness / breakdown\n` +
         `  • planflow_search(query: "...") — semantic search\n` +
@@ -472,21 +529,28 @@ async function executeDirectoryMode(
 
 async function executeFilesMode(
   projectId: string,
-  files: Array<z.infer<typeof FileInputSchema>>
+  files: Array<z.infer<typeof FileInputSchema>>,
+  dryRun: boolean
 ) {
-  logger.info('Indexing files (explicit mode)', { projectId, fileCount: files.length })
+  logger.info('Indexing files (explicit mode)', { projectId, fileCount: files.length, dryRun })
+
+  if (dryRun) {
+    return createSuccessResult(formatDryRunPreview(null, files, [], []))
+  }
 
   try {
     const client = getApiClient()
     const result = await client.indexProject(projectId, files)
     const durationSec = (result.durationMs / 1000).toFixed(1)
+    const skippedBlock = formatSkippedFilesBlock(result.skippedFiles ?? [])
 
     return createSuccessResult(
       `✅ Indexing complete\n\n` +
         `📁 Files indexed: ${result.filesIndexed}\n` +
         `🧩 Chunks created: ${result.chunksIndexed}\n` +
-        `⏱️  Duration: ${durationSec}s\n\n` +
-        `💡 Next steps:\n` +
+        `⏱️  Duration: ${durationSec}s\n` +
+        skippedBlock +
+        `\n💡 Next steps:\n` +
         `  • planflow_index_status() — verify breakdown\n` +
         `  • planflow_search(query: "...")\n` +
         `  • planflow_context(query: "...")`
@@ -495,6 +559,144 @@ async function executeFilesMode(
     logger.error('Indexing failed', { error: String(error) })
     return mapIndexError(error, projectId)
   }
+}
+
+// ---------------------------------------------------------------------------
+// Skipped-files formatter
+//
+// Backend returns one entry per skipped file with a short reason code; we
+// roll them up by reason and surface a concise block so an LLM caller knows
+// exactly what didn't make it in (instead of having to infer from the
+// indexed/scanned diff). Examples are capped to keep the response small.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Dry-run preview
+//
+// Shows the user / LLM exactly what would be sent to the backend if dryRun
+// were dropped — file count, language breakdown, total size, and an
+// estimate of how long the directory mode will block (driven by the
+// rate-limit delay between batches). Lets the caller bail out early
+// instead of committing to a multi-minute call they don't want.
+// ---------------------------------------------------------------------------
+
+function formatDryRunPreview(
+  dirPath: string | null,
+  files: ScannedFile[],
+  include: string[],
+  exclude: string[]
+): string {
+  // Aggregate by language and total size
+  const byLanguage = new Map<string, { count: number; bytes: number }>()
+  let totalBytes = 0
+  for (const f of files) {
+    const lang = f.language ?? 'unknown'
+    const bytes = Buffer.byteLength(f.content, 'utf-8')
+    const cur = byLanguage.get(lang) ?? { count: 0, bytes: 0 }
+    cur.count += 1
+    cur.bytes += bytes
+    byLanguage.set(lang, cur)
+    totalBytes += bytes
+  }
+
+  // For directory mode, estimate blocking time based on batch delay schedule.
+  // Files mode is a single round-trip so we just say "~one round-trip".
+  const isDirectoryMode = dirPath !== null
+  const batchCount = Math.ceil(files.length / BATCH_SIZE)
+  const interBatchDelaySec = isDirectoryMode ? ((batchCount - 1) * DELAY_MS) / 1000 : 0
+  // Assume ~10s per batch for embedding + storage as a baseline.
+  const apiTimeSec = isDirectoryMode ? batchCount * 10 : 10
+  const estimatedSec = interBatchDelaySec + apiTimeSec
+
+  const formatMB = (bytes: number) => (bytes / 1024 / 1024).toFixed(2)
+  const formatTime = (sec: number) => {
+    if (sec < 60) return `${Math.round(sec)}s`
+    const m = Math.floor(sec / 60)
+    const s = Math.round(sec % 60)
+    return `${m}m ${s}s`
+  }
+
+  const lines: string[] = [
+    `🔍 Dry run — nothing was sent to the backend.`,
+    ``,
+  ]
+
+  if (isDirectoryMode) {
+    lines.push(`📁 Directory: ${dirPath}`)
+  } else {
+    lines.push(`📁 Mode: explicit files`)
+  }
+  lines.push(`📄 Files: ${files.length}`)
+  lines.push(`📦 Total size: ${formatMB(totalBytes)} MB`)
+  if (isDirectoryMode) {
+    lines.push(`🔢 Batches: ${batchCount} (${BATCH_SIZE} files each)`)
+    lines.push(`⏱️  Estimated wall time: ~${formatTime(estimatedSec)} (blocking)`)
+  }
+  lines.push(``)
+
+  if (byLanguage.size > 0) {
+    lines.push(`Languages:`)
+    const sorted = [...byLanguage.entries()].sort((a, b) => b[1].count - a[1].count)
+    for (const [lang, stats] of sorted) {
+      lines.push(`  ${lang.padEnd(14)} ${String(stats.count).padStart(4)} files (${formatMB(stats.bytes)} MB)`)
+    }
+    lines.push(``)
+  }
+
+  if (isDirectoryMode && (include.length > 0 || exclude.length > 0)) {
+    lines.push(`Filters in effect:`)
+    if (include.length > 0) lines.push(`  include: ${include.slice(0, 5).join(', ')}${include.length > 5 ? '...' : ''}`)
+    if (exclude.length > 0) lines.push(`  exclude: ${exclude.slice(0, 5).join(', ')}${exclude.length > 5 ? '...' : ''}`)
+    lines.push(``)
+  }
+
+  lines.push(`💡 To actually index, drop dryRun:`)
+  if (isDirectoryMode) {
+    lines.push(`  planflow_index(directory: "${dirPath}")`)
+  } else {
+    lines.push(`  planflow_index(files: [...])`)
+  }
+
+  return lines.join('\n')
+}
+
+type SkippedFileSummary = {
+  path: string
+  reason: 'unsupported_language' | 'chunker_failed' | 'no_chunks' | 'embed_failed'
+  detail?: string
+}
+
+const REASON_LABELS: Record<SkippedFileSummary['reason'], string> = {
+  unsupported_language: 'unsupported language',
+  chunker_failed: 'chunker / parser failed',
+  no_chunks: 'no extractable chunks',
+  embed_failed: 'embedding API failed',
+}
+
+function formatSkippedFilesBlock(skipped: SkippedFileSummary[]): string {
+  if (skipped.length === 0) return ''
+
+  // Group by reason
+  const byReason = new Map<SkippedFileSummary['reason'], SkippedFileSummary[]>()
+  for (const s of skipped) {
+    const arr = byReason.get(s.reason) ?? []
+    arr.push(s)
+    byReason.set(s.reason, arr)
+  }
+
+  const lines: string[] = ['', `⚠️  ${skipped.length} file(s) skipped:`]
+  for (const [reason, items] of byReason) {
+    lines.push(`   ${REASON_LABELS[reason]} (${items.length}):`)
+    // Show up to 5 example paths per reason to keep the response small.
+    const examples = items.slice(0, 5)
+    for (const item of examples) {
+      lines.push(`     • ${item.path}${item.detail ? ` — ${item.detail.slice(0, 80)}` : ''}`)
+    }
+    if (items.length > 5) {
+      lines.push(`     ... and ${items.length - 5} more`)
+    }
+  }
+  return lines.join('\n') + '\n'
 }
 
 // ---------------------------------------------------------------------------

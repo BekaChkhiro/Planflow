@@ -909,7 +909,16 @@ export class ApiClient {
   async indexProject(
     projectId: string,
     files: Array<{ path: string; content: string; language?: string }>
-  ): Promise<{ filesIndexed: number; chunksIndexed: number; durationMs: number }> {
+  ): Promise<{
+    filesIndexed: number
+    chunksIndexed: number
+    durationMs: number
+    skippedFiles?: Array<{
+      path: string
+      reason: 'unsupported_language' | 'chunker_failed' | 'no_chunks' | 'embed_failed'
+      detail?: string
+    }>
+  }> {
     return this.request('POST', `/projects/${projectId}/index`, { body: { files } })
   }
 

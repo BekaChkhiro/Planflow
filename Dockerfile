@@ -15,14 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pnpm-workspace.yaml package.json turbo.json tsconfig.json ./
 COPY pnpm-lock.yaml ./
 COPY apps/api/package.json ./apps/api/
-COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/rag/package.json ./packages/rag/
-COPY packages/mcp/package.json ./packages/mcp/
-COPY packages/plugin/package.json ./packages/plugin/
-
-# Copy plugin source before install because it has a postinstall script
-COPY packages/plugin ./packages/plugin
 
 RUN pnpm install --frozen-lockfile
 

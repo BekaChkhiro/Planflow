@@ -15,8 +15,9 @@
  * stays out of the way.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
-import { join, relative, extname } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { join, relative, extname, dirname } from 'node:path'
+import { homedir } from 'node:os'
 import { createHash } from 'node:crypto'
 import { getApiClient } from './api-client.js'
 import {
@@ -308,13 +309,30 @@ export async function runStatusCommand(): Promise<number> {
 // Subcommand: init
 //
 // Drops a CLAUDE.md template (or merges into an existing one) so Claude
-// Code reads the project's PlanFlow workflow on every session. Idempotent
-// — re-running upgrades the section in place rather than duplicating.
+// Code reads the planflow workflow on every session. Idempotent —
+// re-running upgrades the section in place rather than duplicating.
+//
+// Two scopes:
+//   default            → cwd / CLAUDE.md (project-local)
+//   --global / --user  → ~/.claude/CLAUDE.md (every Claude Code session)
+//
+// Note: as of v0.2.8 the MCP server itself returns these instructions
+// in the initialize handshake, so the CLAUDE.md write is mostly a
+// belt-and-suspenders safety net for clients that don't surface
+// server-level instructions yet, and for Claude Code sessions that
+// happen outside an MCP-aware context.
 // ---------------------------------------------------------------------------
 
-export function runInitCommand(): number {
-  const cwd = process.cwd()
-  const claudeMdPath = join(cwd, 'CLAUDE.md')
+function getClaudeMdPath(scope: 'local' | 'global'): string {
+  if (scope === 'global') {
+    return join(homedir(), '.claude', 'CLAUDE.md')
+  }
+  return join(process.cwd(), 'CLAUDE.md')
+}
+
+export function runInitCommand(args: string[]): number {
+  const scope: 'local' | 'global' = args.includes('--global') || args.includes('--user') ? 'global' : 'local'
+  const claudeMdPath = getClaudeMdPath(scope)
 
   let existing = ''
   if (existsSync(claudeMdPath)) {
@@ -324,13 +342,23 @@ export function runInitCommand(): number {
       process.stderr.write(`planflow-mcp: failed to read existing CLAUDE.md: ${String(err)}\n`)
       return 1
     }
+  } else {
+    // For global mode the parent directory may not exist yet.
+    try {
+      mkdirSync(dirname(claudeMdPath), { recursive: true })
+    } catch (err) {
+      process.stderr.write(
+        `planflow-mcp: failed to create ${dirname(claudeMdPath)}: ${String(err)}\n`
+      )
+      return 1
+    }
   }
 
   const next = existing ? spliceSection(existing) : CLAUDE_MD_SECTION + '\n'
 
   if (next === existing) {
     process.stdout.write(
-      `planflow-mcp: CLAUDE.md already up to date (planflow section v${CLAUDE_MD_VERSION}).\n`
+      `planflow-mcp: ${scope === 'global' ? 'global' : 'project'} CLAUDE.md already up to date (planflow section v${CLAUDE_MD_VERSION}).\n`
     )
     return 0
   }
@@ -343,20 +371,29 @@ export function runInitCommand(): number {
   }
 
   const action = existing ? 'updated' : 'created'
+  const scopeLabel =
+    scope === 'global'
+      ? 'every future Claude Code session on this machine'
+      : 'this directory'
+
   process.stdout.write(
     [
       `✅ ${action} ${claudeMdPath}`,
       '',
-      'Claude will now read this on every session in this directory and',
-      'reach for planflow tools by default. Re-run `planflow-mcp init` to',
-      'pick up future template updates (idempotent).',
+      `Claude will now read this on ${scopeLabel} and reach for planflow`,
+      `tools by default. Re-run \`planflow-mcp init${scope === 'global' ? ' --global' : ''}\` to`,
+      `pick up future template updates (idempotent).`,
       '',
-      'Next steps:',
-      '  1. Open Claude in this directory',
+      'Next steps (per project):',
+      '  1. Open Claude in your project directory',
       '  2. Run: planflow_use(projectId: "your-uuid")',
       '     (one-time link — future sessions auto-resolve from cwd)',
       '  3. Run: planflow_index',
       '     (initial index of the codebase, ~5-10 min for a typical repo)',
+      '',
+      scope === 'global'
+        ? `Tip: the MCP server also returns these instructions in its\ninitialize handshake (v0.2.8+), so MCP-aware clients pick up the\nworkflow even without CLAUDE.md. The global file is a safety net.`
+        : 'Tip: planflow-mcp init --global writes to ~/.claude/CLAUDE.md\nso every Claude session uses the workflow, not just this project.',
       '',
     ].join('\n')
   )
@@ -373,20 +410,28 @@ export function runHelpCommand(): number {
       'planflow-mcp — PlanFlow MCP server and CLI',
       '',
       'Usage:',
-      '  planflow-mcp                Start the MCP server (default, used by Claude / IDEs)',
-      '  planflow-mcp init           Drop a CLAUDE.md template into the current directory',
-      '                              (so Claude uses planflow tools by default in this project)',
-      '  planflow-mcp index          Incremental index of the current directory',
-      '  planflow-mcp status         Print index status for the linked project',
-      '  planflow-mcp help           Show this message',
+      '  planflow-mcp                  Start the MCP server (default, used by Claude / IDEs)',
+      '  planflow-mcp init             Drop a CLAUDE.md template into the current directory',
+      '                                (project-local — Claude uses planflow tools in this repo)',
+      '  planflow-mcp init --global    Write the template to ~/.claude/CLAUDE.md',
+      '                                (every future Claude Code session uses planflow tools)',
+      '  planflow-mcp index            Incremental index of the current directory',
+      '  planflow-mcp status           Print index status for the linked project',
+      '  planflow-mcp help             Show this message',
       '',
-      'Typical first-time setup in a new project:',
-      '  1. cd your-repo',
-      '  2. planflow-mcp init           (writes CLAUDE.md)',
-      '  3. open Claude → planflow_use(projectId: "...")  (links cwd → project)',
-      '  4. planflow_index              (initial index)',
+      'Recommended first-time setup (one machine):',
+      '  planflow-mcp init --global    (one-time global activation)',
+      '',
+      'Then per project:',
+      '  cd your-repo',
+      '  open Claude → planflow_use(projectId: "...")    (links cwd to a project)',
+      '  open Claude → planflow_index                    (initial index)',
       '',
       'After that, just `planflow-mcp index` after edits — incremental and fast.',
+      '',
+      'Note: as of v0.2.8 the MCP server itself returns workflow guidance in its',
+      'initialize handshake, so MCP-aware clients pick up the workflow without any',
+      'CLAUDE.md. The init command is a safety net for completeness.',
       '',
     ].join('\n')
   )
@@ -418,7 +463,7 @@ export async function dispatchCli(args: string[]): Promise<boolean> {
       exitCode = await runStatusCommand()
       break
     case 'init':
-      exitCode = runInitCommand()
+      exitCode = runInitCommand(args.slice(1))
       break
     case 'help':
     case '-h':

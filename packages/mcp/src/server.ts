@@ -16,6 +16,7 @@ import { PlanFlowError, ToolError } from './errors.js'
 import { logger } from './logger.js'
 import { tools } from './tools/index.js'
 import type { ToolDefinition } from './tools/types.js'
+import { SERVER_INSTRUCTIONS } from './server-instructions.js'
 
 /**
  * Format error for MCP tool response
@@ -96,6 +97,11 @@ export function createServer(): Server {
       capabilities: {
         tools: {},
       },
+      // Returned in the initialize handshake; MCP-aware clients (Claude
+      // Code, Cursor, etc.) surface this as system-level guidance to the
+      // LLM. Activates the tool-first workflow without requiring a
+      // per-project CLAUDE.md.
+      instructions: SERVER_INSTRUCTIONS,
     }
   )
 

@@ -13,6 +13,26 @@ import type { z } from 'zod'
 export type ToolResult = CallToolResult
 
 /**
+ * Per-call context handed to a tool's `execute()`.
+ *
+ * Most tools ignore this; long-running ones (planflow_index, explore,
+ * recall) call `sendProgress(...)` so Claude can render a live status
+ * line during the call instead of just a spinner.
+ */
+export interface ToolExecutionContext {
+  /**
+   * Push a `notifications/progress` message to the MCP client. Always
+   * defined — when no progressToken was supplied with the request, the
+   * function is a cheap no-op so callers don't have to null-check.
+   *
+   * @param progress  monotonically increasing counter (e.g. files done)
+   * @param total     final value, when known
+   * @param message   short human-readable label
+   */
+  sendProgress: (progress: number, total?: number, message?: string) => Promise<void>
+}
+
+/**
  * MCP Tool definition interface.
  *
  * `inputSchema` is typed as `z.ZodTypeAny` so that schemas built with
@@ -30,8 +50,13 @@ export interface ToolDefinition<TInput = unknown> {
   /** Zod schema for input validation */
   inputSchema: z.ZodTypeAny
 
-  /** Tool implementation function */
-  execute: (input: TInput) => Promise<ToolResult>
+  /**
+   * Tool implementation. The optional second argument carries per-call
+   * helpers (right now: a progress notifier). Existing tools that don't
+   * declare it stay backwards compatible — TS structural typing makes
+   * a 1-arg function assignable here.
+   */
+  execute: (input: TInput, ctx?: ToolExecutionContext) => Promise<ToolResult>
 }
 
 /**

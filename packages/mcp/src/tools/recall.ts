@@ -193,7 +193,10 @@ Prerequisites:
 
   inputSchema: RecallInputSchema,
 
-  async execute(input: RecallInput): Promise<ReturnType<typeof createSuccessResult>> {
+  async execute(
+    input: RecallInput,
+    ctx?: import('./types.js').ToolExecutionContext
+  ): Promise<ReturnType<typeof createSuccessResult>> {
     const projectId = input.projectId || getCurrentProjectId()
 
     if (!projectId) {
@@ -222,10 +225,16 @@ Prerequisites:
     })
 
     // Recall fans out to several API calls (and an extra search call in
-    // deep mode). Surface a progress marker so the user can verify the
-    // call is alive from another terminal.
+    // deep mode). The progress marker doubles as both a CLI inspectable
+    // file and a stream of MCP notifications (when Claude attached a
+    // progressToken) so the user sees live status during the call.
     const anchor = input.filePath ?? input.taskId ?? input.chunkId ?? 'unknown'
-    progress.start('planflow_recall', `Recalling ${anchor} (${input.depth})`)
+    progress.start(
+      'planflow_recall',
+      `Recalling ${anchor} (${input.depth})`,
+      undefined,
+      ctx?.sendProgress
+    )
 
     try {
       if (input.taskId) {

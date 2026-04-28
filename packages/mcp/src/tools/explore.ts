@@ -144,7 +144,10 @@ Prerequisites:
 
   inputSchema: ExploreInputSchema,
 
-  async execute(input: ExploreInput): Promise<ReturnType<typeof createSuccessResult>> {
+  async execute(
+    input: ExploreInput,
+    ctx?: import('./types.js').ToolExecutionContext
+  ): Promise<ReturnType<typeof createSuccessResult>> {
     const projectId = input.projectId || getCurrentProjectId()
 
     if (!projectId) {
@@ -168,9 +171,14 @@ Prerequisites:
 
     // Explore fans out to four parallel API calls; the wall-time is
     // dominated by the slowest one (typically searchProject). Surfacing
-    // a "running" marker lets the user check from another terminal that
-    // the call hasn't hung silently.
-    progress.start('planflow_explore', `Exploring: ${input.intent}`)
+    // a "running" marker lets the user check from another terminal AND
+    // pushes a notification so Claude shows live status.
+    progress.start(
+      'planflow_explore',
+      `Exploring: ${input.intent}`,
+      undefined,
+      ctx?.sendProgress
+    )
 
     try {
       const client = getApiClient()

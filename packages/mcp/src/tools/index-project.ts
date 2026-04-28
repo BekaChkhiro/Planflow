@@ -380,7 +380,10 @@ Prerequisites:
 
   inputSchema: IndexInputSchema,
 
-  async execute(input: IndexInput): Promise<ReturnType<typeof createSuccessResult>> {
+  async execute(
+    input: IndexInput,
+    ctx?: import('./types.js').ToolExecutionContext
+  ): Promise<ReturnType<typeof createSuccessResult>> {
     const projectId = input.projectId || getCurrentProjectId()
 
     if (!projectId) {
@@ -421,7 +424,7 @@ Prerequisites:
     // common workflow is "index this repo I'm in" so making it the no-arg
     // default is a real ergonomic win.
     if (input.files) {
-      return executeFilesMode(projectId, input.files, input.dryRun, purgeNotice)
+      return executeFilesMode(projectId, input.files, input.dryRun, purgeNotice, ctx)
     }
 
     const directory = input.directory ?? process.cwd()
@@ -433,7 +436,8 @@ Prerequisites:
       input.dryRun,
       purgeNotice,
       input.incremental,
-      input.removeMissing
+      input.removeMissing,
+      ctx
     )
   },
 }
@@ -450,7 +454,8 @@ async function executeDirectoryMode(
   dryRun: boolean,
   purgeNotice = '',
   incremental = true,
-  removeMissing = false
+  removeMissing = false,
+  ctx?: import('./types.js').ToolExecutionContext
 ) {
   // Resolve directory path (expand ~)
   const dirPath = rawDirectory.startsWith('~')
@@ -555,10 +560,13 @@ async function executeDirectoryMode(
 
     // Start tracking progress. Total = files we'll actually re-embed, so
     // skip-count from incremental mode doesn't inflate the denominator.
+    // ctx.sendProgress (if present) routes to MCP notifications/progress
+    // so Claude can render a live status line during the call.
     progress.start(
       'planflow_index',
       `Indexing ${workingFiles.length} file(s) in ${batches.length} batch(es)`,
-      workingFiles.length
+      workingFiles.length,
+      ctx?.sendProgress
     )
     const indexStart = Date.now()
 
@@ -713,7 +721,8 @@ async function executeFilesMode(
   projectId: string,
   files: Array<z.infer<typeof FileInputSchema>>,
   dryRun: boolean,
-  purgeNotice = ''
+  purgeNotice = '',
+  ctx?: import('./types.js').ToolExecutionContext
 ) {
   logger.info('Indexing files (explicit mode)', { projectId, fileCount: files.length, dryRun })
 
@@ -735,7 +744,8 @@ async function executeFilesMode(
   progress.start(
     'planflow_index',
     `Indexing ${filesWithLanguage.length} file(s) (explicit files mode)`,
-    filesWithLanguage.length
+    filesWithLanguage.length,
+    ctx?.sendProgress
   )
 
   try {

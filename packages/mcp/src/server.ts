@@ -15,7 +15,7 @@ import { APP_NAME, APP_VERSION } from '@planflow/shared'
 import { PlanFlowError, ToolError } from './errors.js'
 import { logger } from './logger.js'
 import { tools } from './tools/index.js'
-import type { ToolDefinition } from './tools/types.js'
+import type { ToolDefinition, ToolExecutionContext } from './tools/types.js'
 import { SERVER_INSTRUCTIONS } from './server-instructions.js'
 
 /**
@@ -119,7 +119,7 @@ export function createServer(): Server {
   })
 
   // Handle call_tool request
-  server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra): Promise<CallToolResult> => {
     const { name, arguments: args } = request.params
     logger.info('Tool called', { name })
 
@@ -128,6 +128,34 @@ export function createServer(): Server {
     if (!tool) {
       logger.warn('Unknown tool requested', { name })
       return formatErrorResponse(new ToolError(`Unknown tool: ${name}`, name))
+    }
+
+    // The MCP client may attach a progressToken via _meta; if it does,
+    // we wire up a sendProgress helper that pushes notifications/progress
+    // back so Claude can render a live status line. When the token is
+    // missing we still hand the tool a no-op so callers don't have to
+    // null-check on every update.
+    const progressToken =
+      (request.params._meta as { progressToken?: string | number } | undefined)?.progressToken
+    const ctx: ToolExecutionContext = {
+      sendProgress: async (progress, total, message) => {
+        if (progressToken === undefined || progressToken === null) return
+        try {
+          await extra.sendNotification({
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              progress,
+              ...(total !== undefined && { total }),
+              ...(message !== undefined && { message }),
+            },
+          })
+        } catch (err) {
+          // Notification failures are observability — never let them
+          // poison the actual tool call.
+          logger.debug('progress notification failed', { error: String(err) })
+        }
+      },
     }
 
     try {
@@ -149,7 +177,7 @@ export function createServer(): Server {
       }
 
       // Execute the tool
-      const result = await tool.execute(parseResult.data)
+      const result = await tool.execute(parseResult.data, ctx)
       logger.debug('Tool executed successfully', { name })
 
       return result

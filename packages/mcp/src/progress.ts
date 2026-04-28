@@ -72,11 +72,23 @@ export interface ProgressFile {
 // Tools call start() → update() (any number of times) → complete() / fail().
 // The file is rewritten in full on each call; partial writes are safe because
 // JSON.stringify produces a complete document or throws.
+//
+// When the calling tool was given a `sendProgress` callback by the MCP
+// server (i.e. the client included a progressToken in the request), we
+// fan every update through it so Claude can render a live status line.
 // ---------------------------------------------------------------------------
 
-let active: ProgressFile | null = null
+type SendProgress = (progress: number, total?: number, message?: string) => Promise<void>
 
-export function start(tool: string, label: string, total?: number): void {
+let active: ProgressFile | null = null
+let activeNotifier: SendProgress | null = null
+
+export function start(
+  tool: string,
+  label: string,
+  total?: number,
+  sendProgress?: SendProgress
+): void {
   ensureDir()
   const now = new Date().toISOString()
   active = {
@@ -89,8 +101,15 @@ export function start(tool: string, label: string, total?: number): void {
     startedAt: now,
     lastUpdateAt: now,
   }
+  activeNotifier = sendProgress ?? null
   writeFile(active)
-  logger.debug('Progress started', { tool, label, total })
+  // Fire an initial 0% notification so the client gets an immediate
+  // "running" hint instead of staring at a blank spinner until the
+  // first update().
+  if (activeNotifier) {
+    void activeNotifier(0, total, label)
+  }
+  logger.debug('Progress started', { tool, label, total, hasNotifier: !!sendProgress })
 }
 
 export function update(
@@ -100,6 +119,12 @@ export function update(
   Object.assign(active, patch)
   active.lastUpdateAt = new Date().toISOString()
   writeFile(active)
+
+  // Mirror to the MCP client. We swallow errors so a transport blip
+  // doesn't take down the actual indexing run.
+  if (activeNotifier) {
+    void activeNotifier(active.current ?? 0, active.total, active.label)
+  }
 }
 
 export function complete(summary?: string): void {
@@ -109,10 +134,15 @@ export function complete(summary?: string): void {
   active.finishedAt = new Date().toISOString()
   active.lastUpdateAt = active.finishedAt
   writeFile(active)
+  // Final 100% notification — gives Claude a clean "Done" frame.
+  if (activeNotifier && active.total !== undefined) {
+    void activeNotifier(active.total, active.total, summary ?? 'Done')
+  }
   // Clear the in-memory handle but keep the file for a short post-mortem
   // window — `planflow-mcp progress` still surfaces "done" results so the
   // user can verify the run succeeded.
   active = null
+  activeNotifier = null
 }
 
 export function fail(error: string): void {
@@ -122,7 +152,11 @@ export function fail(error: string): void {
   active.finishedAt = new Date().toISOString()
   active.lastUpdateAt = active.finishedAt
   writeFile(active)
+  if (activeNotifier) {
+    void activeNotifier(active.current ?? 0, active.total, `Failed: ${error}`)
+  }
   active = null
+  activeNotifier = null
 }
 
 function writeFile(state: ProgressFile): void {

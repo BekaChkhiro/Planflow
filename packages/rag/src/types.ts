@@ -62,6 +62,15 @@ export interface ChunkMetadata {
   endLine: number;
   source: "code" | "docs";
   indexedAt: string;
+  /**
+   * SHA-256 of the source file's full content at indexing time. Stored
+   * on every chunk (denormalised — every chunk in the same file has the
+   * same value) so we can answer "is this file unchanged since we last
+   * indexed it?" with one row read.
+   *
+   * Optional for backwards compatibility — older indexes won't have it.
+   */
+  contentHash?: string;
 }
 
 /** Search result returned by the hybrid search engine */

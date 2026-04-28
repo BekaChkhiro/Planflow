@@ -918,8 +918,34 @@ export class ApiClient {
       reason: 'unsupported_language' | 'chunker_failed' | 'no_chunks' | 'embed_failed'
       detail?: string
     }>
+    unchangedFiles?: number
   }> {
     return this.request('POST', `/projects/${projectId}/index`, { body: { files } })
+  }
+
+  /**
+   * Map of `filePath → contentHash` for every file in the project's
+   * vector index. Used by `planflow_index` in incremental mode to skip
+   * files whose local content hasn't changed.
+   */
+  async getFileHashes(projectId: string): Promise<{
+    hashes: Record<string, string>
+    fileCount: number
+  }> {
+    return this.request('GET', `/projects/${projectId}/index/file-hashes`)
+  }
+
+  /**
+   * Remove specific files from the project's index (e.g. after they've
+   * been deleted from the working directory). Owner/admin only.
+   */
+  async removeFilesFromIndex(
+    projectId: string,
+    paths: string[]
+  ): Promise<{ removedFiles: number }> {
+    return this.request('POST', `/projects/${projectId}/index/remove-files`, {
+      body: { paths },
+    })
   }
 
   /**

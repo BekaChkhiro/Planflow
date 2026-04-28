@@ -44,6 +44,9 @@ export class VectorStore {
       end_line: r.metadata.endLine,
       source: r.metadata.source,
       indexed_at: r.metadata.indexedAt,
+      // Empty string when the indexer didn't supply a hash; treated by
+      // callers as "needs re-index" so older shards don't get pinned.
+      content_hash: r.metadata.contentHash ?? "",
     }));
 
     if (!this.table) {
@@ -131,6 +134,38 @@ export class VectorStore {
     if (where) query = query.where(where);
     if (limit) query = query.limit(limit);
     return query.toArray();
+  }
+
+  /**
+   * Map of `filePath → contentHash` for every file currently in the index.
+   *
+   * Used by callers (the API service that powers `planflow_index` in
+   * incremental mode) to skip files whose local content hasn't changed
+   * since the last indexing run.
+   *
+   * Files indexed before content_hash was tracked will appear with an
+   * empty-string hash — clients should treat that as "needs re-index"
+   * so older shards don't get pinned to stale chunks.
+   */
+  async getFileHashes(): Promise<Record<string, string>> {
+    this._ensureInit();
+    if (!this.table) return {};
+
+    const rows = await this.table
+      .query()
+      .select(["file_path", "content_hash"])
+      .toArray();
+
+    const map: Record<string, string> = {};
+    for (const row of rows) {
+      const path = row["file_path"] as string | undefined;
+      const hash = row["content_hash"] as string | undefined;
+      if (path && !(path in map)) {
+        // Every chunk in a file has the same hash; record once.
+        map[path] = hash ?? "";
+      }
+    }
+    return map;
   }
 
   /**

@@ -19,6 +19,7 @@
 import { z } from 'zod'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative, extname } from 'node:path'
+import { createHash } from 'node:crypto'
 import { getApiClient } from '../api-client.js'
 import { isAuthenticated } from '../config.js'
 import { AuthError, ApiError } from '../errors.js'
@@ -172,6 +173,16 @@ const IndexInputSchema = z
       .default(false)
       .describe(
         'When true, wipe every existing chunk for the project BEFORE indexing. Use this when an earlier index run included files you have since added to exclude (e.g. Prisma generated client) and you want a clean re-index. Requires owner/admin role on the project. Skipped when dryRun:true.'
+      ),
+    incremental: coerceBoolean()
+      .default(true)
+      .describe(
+        'When true (default), skip files whose content hash already matches what is stored in the index — only changed/new files cost embedding tokens. Set false to force re-embedding everything (e.g. after changing chunking strategy). Ignored in dryRun.'
+      ),
+    removeMissing: coerceBoolean()
+      .default(false)
+      .describe(
+        'When true (directory mode only), remove from the index any files that are present in the index but no longer exist in the scanned directory. Useful after deleting / renaming files. Default false to be safe — explicit opt-in.'
       ),
   })
   .refine((d) => !(d.directory && d.files), {
@@ -343,6 +354,21 @@ Tip — clean re-index after tightening excludes:
   generated client) and you want to drop them from search results.
   Requires owner/admin role on the project.
 
+Incremental mode (DEFAULT — incremental:true):
+  After the initial index, re-running planflow_index only re-embeds
+  files whose content has actually changed. Each file's SHA-256 hash is
+  stored alongside its chunks; the tool fetches that map up front and
+  skips files whose local hash matches. After editing 3 files in a 280-
+  file repo, you re-index 3 files, not 280 — saves Voyage tokens and
+  several minutes of wall time.
+
+  Set incremental:false to force re-embedding everything (e.g. when
+  the chunker / embedder version changed).
+
+  Pair with removeMissing:true to also drop files from the index that
+  no longer exist on disk (e.g. after deleting / git rm):
+    planflow_index(directory: ".", removeMissing: true)
+
 Response includes a \`skippedFiles\` block when the backend couldn't store
 some files (unsupported language, chunker failure, oversize, embed
 failure) — so you don't have to detective-work which files didn't make it.
@@ -404,7 +430,9 @@ Prerequisites:
       input.include,
       input.exclude,
       input.dryRun,
-      purgeNotice
+      purgeNotice,
+      input.incremental,
+      input.removeMissing
     )
   },
 }
@@ -419,14 +447,16 @@ async function executeDirectoryMode(
   include: string[],
   exclude: string[],
   dryRun: boolean,
-  purgeNotice = ''
+  purgeNotice = '',
+  incremental = true,
+  removeMissing = false
 ) {
   // Resolve directory path (expand ~)
   const dirPath = rawDirectory.startsWith('~')
     ? rawDirectory.replace(/^~/, process.env['HOME'] || '')
     : rawDirectory
 
-  logger.info('Scanning directory', { path: dirPath, projectId, dryRun })
+  logger.info('Scanning directory', { path: dirPath, projectId, dryRun, incremental, removeMissing })
 
   try {
     const files = scanDirectory(dirPath, dirPath, include, exclude)
@@ -443,12 +473,84 @@ async function executeDirectoryMode(
       return createSuccessResult(formatDryRunPreview(dirPath, files, include, exclude))
     }
 
-    logger.info(`Found ${files.length} files to index`, { count: files.length })
+    // Incremental mode: ask the backend which files are already indexed
+    // with which content hash. Files whose local hash matches get skipped
+    // entirely — saves the entire chunk → embed → store path. The server
+    // also re-checks (defence in depth) so even if our local skip is
+    // wrong we don't double-store.
+    let unchangedLocally = 0
+    let workingFiles: ScannedFile[] = files
+    let removedMissingFiles: string[] = []
+
+    if (incremental || removeMissing) {
+      const client = getApiClient()
+      let indexedHashes: Record<string, string> = {}
+      try {
+        const result = await client.getFileHashes(projectId)
+        indexedHashes = result.hashes
+      } catch (err) {
+        // First-time index will 404 the file-hashes endpoint or return
+        // empty — both fine. Treat as "nothing indexed yet".
+        logger.warn('Could not fetch file hashes; proceeding without incremental skip', {
+          error: String(err),
+        })
+      }
+
+      if (incremental && Object.keys(indexedHashes).length > 0) {
+        workingFiles = []
+        for (const file of files) {
+          const localHash = createHash('sha256').update(file.content).digest('hex')
+          if (indexedHashes[file.path] && indexedHashes[file.path] === localHash) {
+            unchangedLocally++
+          } else {
+            workingFiles.push(file)
+          }
+        }
+        logger.info('Incremental filter applied', {
+          totalScanned: files.length,
+          unchanged: unchangedLocally,
+          willIndex: workingFiles.length,
+        })
+      }
+
+      if (removeMissing && Object.keys(indexedHashes).length > 0) {
+        const localPaths = new Set(files.map((f) => f.path))
+        const missing = Object.keys(indexedHashes).filter((p) => !localPaths.has(p))
+        if (missing.length > 0) {
+          try {
+            const result = await client.removeFilesFromIndex(projectId, missing)
+            removedMissingFiles = missing
+            logger.info('Removed missing files from index', {
+              requested: missing.length,
+              removed: result.removedFiles,
+            })
+          } catch (err) {
+            logger.warn('Failed to remove missing files', { error: String(err) })
+          }
+        }
+      }
+    }
+
+    if (workingFiles.length === 0) {
+      return createSuccessResult(
+        purgeNotice +
+          `✅ Index already up to date — nothing to re-embed.\n\n` +
+          `📁 Directory: ${dirPath}\n` +
+          `📄 Files scanned: ${files.length}\n` +
+          `⏭️  Unchanged (hash match): ${unchangedLocally}\n` +
+          (removedMissingFiles.length > 0
+            ? `🗑️  Removed (no longer on disk): ${removedMissingFiles.length}\n`
+            : '') +
+          `\n💡 Force re-embed: planflow_index(directory: "${rawDirectory}", incremental: false)`
+      )
+    }
+
+    logger.info(`Found ${workingFiles.length} files to index`, { count: workingFiles.length })
 
     // Group files into batches that respect both the count limit and the
     // payload-size limit. A single oversized file (e.g. an unfiltered
     // generated client) shouldn't drag down its 19 batch-mates.
-    const batches = packBatches(files)
+    const batches = packBatches(workingFiles)
 
     const client = getApiClient()
     let totalFilesIndexed = 0
@@ -531,6 +633,13 @@ async function executeDirectoryMode(
     const failedBlock = formatFailedFilesBlock(failedFiles)
     const skippedBlock = formatSkippedFilesBlock(allSkipped)
 
+    const incrementalBlock =
+      unchangedLocally > 0 ? `⏭️  Unchanged (hash match): ${unchangedLocally}\n` : ''
+    const removedBlock =
+      removedMissingFiles.length > 0
+        ? `🗑️  Removed (no longer on disk): ${removedMissingFiles.length}\n`
+        : ''
+
     return createSuccessResult(
       purgeNotice +
         `✅ Indexing complete!\n\n` +
@@ -538,6 +647,8 @@ async function executeDirectoryMode(
         `📄 Files scanned: ${files.length}\n` +
         `📦 Files indexed: ${totalFilesIndexed}\n` +
         `🧩 Chunks indexed: ${totalChunksIndexed}\n` +
+        incrementalBlock +
+        removedBlock +
         failedBlock +
         skippedBlock +
         `\n💡 Next steps:\n` +

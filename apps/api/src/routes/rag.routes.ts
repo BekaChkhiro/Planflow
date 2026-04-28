@@ -282,6 +282,83 @@ ragRoutes.delete('/:projectId/index', auth, async (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// GET /projects/:projectId/index/file-hashes
+//
+// Returns map of {filePath: contentHash} for every file in the project's
+// vector index. The MCP tool uses this to decide which files actually
+// need re-embedding — saves ~all Voyage tokens on incremental re-indexes.
+// ---------------------------------------------------------------------------
+
+ragRoutes.get('/:projectId/index/file-hashes', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('projectId')
+    const db = getDbClient()
+
+    if (!UUID_REGEX.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const access = await getProjectAccess(db, projectId, user.id)
+    if (!access) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    const hashes = await ragService.getFileHashes(projectId)
+
+    return c.json({
+      success: true,
+      data: { hashes, fileCount: Object.keys(hashes).length },
+    })
+  } catch (error) {
+    log.error({ error, route: 'GET /:projectId/index/file-hashes' }, 'RAG hashes error')
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ---------------------------------------------------------------------------
+// POST /projects/:projectId/index/remove-files
+//
+// Body: { paths: string[] }
+// Deletes every chunk for the given file paths. Used by
+// `planflow_index({ removeMissing: true })` after a re-index to drop
+// files that no longer exist on disk. Owner/admin only — destructive.
+// ---------------------------------------------------------------------------
+
+ragRoutes.post('/:projectId/index/remove-files', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('projectId')
+    const db = getDbClient()
+
+    if (!UUID_REGEX.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const access = await getProjectAccess(db, projectId, user.id)
+    if (!access) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    if (access.role !== 'owner' && access.role !== 'admin') {
+      return c.json({ success: false, error: 'Forbidden — owner/admin only' }, 403)
+    }
+
+    const body = await c.req.json()
+    if (!Array.isArray(body.paths) || body.paths.some((p: unknown) => typeof p !== 'string')) {
+      return c.json({ success: false, error: 'Body must include a paths: string[] field' }, 400)
+    }
+
+    const result = await ragService.removeFiles(projectId, body.paths as string[])
+
+    return c.json({ success: true, data: result })
+  } catch (error) {
+    log.error({ error, route: 'POST /:projectId/index/remove-files' }, 'RAG remove-files error')
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ---------------------------------------------------------------------------
 // GET /projects/:projectId/index/file?path=<relative path>
 //
 // Returns every indexed chunk for a single file, ordered by start line.

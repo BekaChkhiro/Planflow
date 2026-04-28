@@ -13,6 +13,7 @@
 import { mkdir, writeFile, rm, access } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
+import { createHash } from 'node:crypto'
 import {
   Embedder,
   VectorStore,
@@ -123,6 +124,13 @@ export interface IndexResult {
   chunksIndexed: number
   durationMs: number
   skippedFiles: SkippedFile[]
+  /**
+   * Files whose content hash already matched the indexed copy and were
+   * therefore not re-embedded. Counted separately from `skippedFiles`
+   * (which tracks failures) because "unchanged" is the desired path,
+   * not an error.
+   */
+  unchangedFiles: number
 }
 
 export interface RagSearchOptions {
@@ -150,7 +158,7 @@ export class RagService {
     }
 
     if (files.length === 0) {
-      return { filesIndexed: 0, chunksIndexed: 0, durationMs: 0, skippedFiles: [] }
+      return { filesIndexed: 0, chunksIndexed: 0, durationMs: 0, skippedFiles: [], unchangedFiles: 0 }
     }
 
     const start = Date.now()
@@ -177,10 +185,18 @@ export class RagService {
       const chunker = new CodeChunker()
       await chunker.init()
 
+      // Pre-compute the existing file→hash map so we can skip files that
+      // haven't changed since the last index run. One read instead of
+      // querying per-file. Empty hash means "indexed before hashing was
+      // tracked" → we re-index those rather than trusting them.
+      const existingHashes = await store.getFileHashes()
+
       // Chunk and embed each file
       const records: EmbeddingRecord[] = []
       const skippedFiles: SkippedFile[] = []
+      const filesToReplace: string[] = []
       let filesIndexed = 0
+      let unchangedFiles = 0
 
       for (const file of files) {
         const detectedLang = FileScanner.detectLanguage(file.path)
@@ -189,6 +205,16 @@ export class RagService {
         if (!language) {
           log.debug({ path: file.path }, 'Skipping file with unsupported language')
           skippedFiles.push({ path: file.path, reason: 'unsupported_language' })
+          continue
+        }
+
+        // Hash the file content once. We use this both as the
+        // "is this unchanged?" key and as durable chunk metadata.
+        const contentHash = createHash('sha256').update(file.content).digest('hex')
+        if (existingHashes[file.path] && existingHashes[file.path] === contentHash) {
+          // Same content as the index already has → don't burn an
+          // embedding round-trip on it.
+          unchangedFiles++
           continue
         }
 
@@ -243,8 +269,15 @@ export class RagService {
                 endLine: chunk.endLine,
                 source: isDocFile ? 'docs' : 'code',
                 indexedAt: now,
+                contentHash,
               },
             })
+          }
+          // Mark this file's existing chunks for deletion before we
+          // upsert the new ones — without this, line-shifted chunks
+          // create stale duplicates because chunkId encodes startLine.
+          if (existingHashes[file.path] !== undefined) {
+            filesToReplace.push(file.path)
           }
           filesIndexed++
         } catch (err) {
@@ -252,6 +285,13 @@ export class RagService {
           log.warn({ error: err, path: file.path }, 'Failed to chunk/embed file')
           skippedFiles.push({ path: file.path, reason: 'chunker_failed', detail })
         }
+      }
+
+      // Delete old chunks for files we're re-indexing (in batch — single
+      // SQL execution per file). Must happen BEFORE upsert so the new
+      // chunks aren't accidentally swept away.
+      for (const path of filesToReplace) {
+        await store.deleteByFile(path)
       }
 
       if (records.length > 0) {
@@ -267,6 +307,8 @@ export class RagService {
           filesIndexed,
           chunksIndexed: records.length,
           skippedCount: skippedFiles.length,
+          unchangedFiles,
+          replacedFiles: filesToReplace.length,
           durationMs,
         },
         'RAG index completed'
@@ -277,6 +319,7 @@ export class RagService {
         chunksIndexed: records.length,
         durationMs,
         skippedFiles,
+        unchangedFiles,
       }
     } finally {
       // Always clean up the temp directory
@@ -319,6 +362,67 @@ export class RagService {
     } finally {
       await store.close()
     }
+  }
+
+  /**
+   * Map of `filePath → contentHash` for every file in the project's
+   * vector index. Used by clients (the MCP `planflow_index` tool in
+   * incremental mode) to skip files whose local content already matches
+   * what's stored.
+   *
+   * Returns `{}` when the project hasn't been indexed yet.
+   */
+  async getFileHashes(projectId: string): Promise<Record<string, string>> {
+    const dbPath = getProjectDbPath(projectId)
+
+    try {
+      await access(dbPath)
+    } catch {
+      return {}
+    }
+
+    const store = new VectorStore(dbPath)
+    try {
+      await store.init()
+      const map = await store.getFileHashes()
+      await store.close()
+      return map
+    } catch (err) {
+      log.warn({ error: err, projectId }, 'Failed to read file hashes')
+      return {}
+    }
+  }
+
+  /**
+   * Remove every chunk for the given file paths from the project's index.
+   * Used by `planflow_index({ removeMissing: true })` to drop entries
+   * that no longer exist on disk (e.g. after `git rm`).
+   */
+  async removeFiles(projectId: string, paths: string[]): Promise<{ removedFiles: number }> {
+    if (paths.length === 0) return { removedFiles: 0 }
+
+    const dbPath = getProjectDbPath(projectId)
+
+    try {
+      await access(dbPath)
+    } catch {
+      return { removedFiles: 0 }
+    }
+
+    const store = new VectorStore(dbPath)
+    let removed = 0
+    try {
+      await store.init()
+      for (const path of paths) {
+        await store.deleteByFile(path)
+        removed++
+      }
+      await store.close()
+    } catch (err) {
+      log.warn({ error: err, projectId }, 'Failed to remove files from index')
+    }
+
+    return { removedFiles: removed }
   }
 
   /**

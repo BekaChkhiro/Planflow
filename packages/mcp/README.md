@@ -91,18 +91,47 @@ Before using PlanFlow tools, authenticate with your API token:
 
 ## Available Tools
 
+**Auth**
+
 | Tool | Description |
 |------|-------------|
 | `planflow_login` | Authenticate with your PlanFlow API token |
 | `planflow_logout` | Clear stored credentials |
 | `planflow_whoami` | Show current authenticated user |
+
+**Projects & Tasks**
+
+| Tool | Description |
+|------|-------------|
 | `planflow_projects` | List all your projects |
 | `planflow_create` | Create a new project |
-| `planflow_sync` | Sync local PROJECT_PLAN.md to cloud |
+| `planflow_use` | Set the current project (used by other tools when projectId is omitted) |
+| `planflow_sync` | Sync local PROJECT_PLAN.md to cloud (push/pull) |
 | `planflow_task_list` | List tasks for a project |
 | `planflow_task_update` | Update task status |
-| `planflow_task_next` | Get next recommended task |
-| `planflow_notifications` | View your notifications |
+| `planflow_task_next` | Get the next recommended task |
+| `planflow_working_on` | Signal which task you are actively working on |
+
+**Activity & Collaboration**
+
+| Tool | Description |
+|------|-------------|
+| `planflow_activity` | View recent activity (project or task scope) |
+| `planflow_changes` | View recent changes (lighter-weight stream) |
+| `planflow_comments` | View comments on a task |
+| `planflow_comment` | Add a comment / @-mention on a task |
+| `planflow_notifications` | View and manage your notifications |
+
+**Intelligence Layer (RAG)**
+
+| Tool | Description |
+|------|-------------|
+| `planflow_index` | Index code/docs into the project vector DB. Two modes: `directory` (recursive scan) or `files` (explicit list) |
+| `planflow_index_status` | Report index size, file/language breakdown, and staleness |
+| `planflow_search` | Hybrid semantic + keyword search (Voyage-code-3 + BM25) over indexed content |
+| `planflow_context` | Combined context: knowledge + vector + real-time + activity layers |
+| `planflow_recall` | Aggregate everything PlanFlow knows about a single anchor — file, task, or chunk |
+| `planflow_remember` | Save a knowledge entry (architecture decision, pattern, convention, etc.) |
 
 ## Usage Examples
 

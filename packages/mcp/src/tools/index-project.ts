@@ -29,6 +29,7 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
+import { minimatch } from './_glob.js'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -160,54 +161,22 @@ const IndexInputSchema = z
       .describe(
         'When true, scan and report what WOULD be indexed (file count, languages, sizes) without sending anything to the backend. No Voyage tokens spent. Useful before a big directory ingest.'
       ),
+    purge: z
+      .boolean()
+      .default(false)
+      .describe(
+        'When true, wipe every existing chunk for the project BEFORE indexing. Use this when an earlier index run included files you have since added to exclude (e.g. Prisma generated client) and you want a clean re-index. Requires owner/admin role on the project. Skipped when dryRun:true.'
+      ),
   })
-  .refine((d) => Boolean(d.directory) !== Boolean(d.files), {
-    message: 'Provide exactly one of `directory` or `files` (not both, not neither).',
+  .refine((d) => !(d.directory && d.files), {
+    message: 'Provide either `directory` or `files`, not both.',
   })
 
 type IndexInput = z.infer<typeof IndexInputSchema>
 
 // ---------------------------------------------------------------------------
-// Glob matching (minimatch-style — handles **/*.ts, prefix/**, prefix/**/suffix)
+// File include/exclude logic (minimatch helper from _glob.ts)
 // ---------------------------------------------------------------------------
-
-function minimatch(path: string, pattern: string): boolean {
-  if (pattern.startsWith('**/')) {
-    const rest = pattern.slice(3)
-    if (rest === '') return true
-    const parts = path.split('/')
-    for (let i = 0; i < parts.length; i++) {
-      const suffix = parts.slice(i).join('/')
-      if (minimatch(suffix, rest)) return true
-    }
-    return false
-  }
-
-  const globstarIdx = pattern.indexOf('/**/')
-  if (globstarIdx !== -1) {
-    const prefix = pattern.slice(0, globstarIdx)
-    const suffix = pattern.slice(globstarIdx + 4)
-    if (!path.startsWith(prefix)) return false
-    const restPath = path.slice(prefix.length)
-    const parts = restPath.split('/')
-    for (let i = 0; i < parts.length; i++) {
-      const subPath = parts.slice(i).join('/')
-      if (minimatch(subPath, suffix)) return true
-    }
-    return false
-  }
-
-  if (pattern.endsWith('/**')) {
-    const prefix = pattern.slice(0, -3)
-    return path === prefix || path.startsWith(prefix + '/')
-  }
-
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '[^/]*')
-    .replace(/\?/g, '[^/]')
-  return new RegExp(`^${regexPattern}$`).test(path)
-}
 
 function shouldIncludeFile(
   relPath: string,
@@ -319,9 +288,13 @@ export const indexTool: ToolDefinition<IndexInput> = {
 
   description: `Index code and documentation into a PlanFlow project's vector database.
 
-Two ingestion modes (provide exactly one):
+Two ingestion modes (one is auto-selected):
 
-1. Directory scan — recursively walks a directory:
+1. Directory scan — recursively walks a directory.
+   When neither \`directory\` nor \`files\` is provided, this mode is used and
+   the directory defaults to the MCP server's cwd — i.e. "index the repo
+   I'm running in". You can also pass it explicitly:
+   planflow_index()                                   # cwd default
    planflow_index(directory: "/path/to/project")
    planflow_index(directory: ".", include: "src/**/*.ts", exclude: "**/*.test.ts")
 
@@ -357,6 +330,13 @@ Tip — dry-run before a big ingest:
   WITHOUT calling the backend. Recommended for large repos so you can
   adjust include/exclude before committing to a multi-minute call.
 
+Tip — clean re-index after tightening excludes:
+  planflow_index(directory: ".", purge: true)
+  Wipes every existing chunk before re-indexing. Use when the previous
+  index included files you've since added to exclude (e.g. Prisma
+  generated client) and you want to drop them from search results.
+  Requires owner/admin role on the project.
+
 Response includes a \`skippedFiles\` block when the backend couldn't store
 some files (unsupported language, chunker failure, oversize, embed
 failure) — so you don't have to detective-work which files didn't make it.
@@ -387,23 +367,39 @@ Prerequisites:
       )
     }
 
-    // Dispatch on mode. The Zod refine() ensures exactly one is set.
-    if (input.directory) {
-      return executeDirectoryMode(
-        projectId,
-        input.directory,
-        input.include,
-        input.exclude,
-        input.dryRun
-      )
+    // Run purge first if requested (and not a dry run). Doing it here
+    // (rather than per-mode) keeps the behavior identical for both
+    // ingestion modes and avoids accidentally double-purging.
+    let purgeNotice = ''
+    if (input.purge && !input.dryRun) {
+      try {
+        const client = getApiClient()
+        const purgeResult = await client.purgeIndex(projectId)
+        purgeNotice = `🧹 Purged ${purgeResult.purgedChunks} pre-existing chunk(s) before indexing.\n\n`
+        logger.info('Index purged before re-index', { projectId, purgedChunks: purgeResult.purgedChunks })
+      } catch (err) {
+        logger.error('Purge failed', { error: String(err) })
+        return mapIndexError(err, projectId)
+      }
     }
 
+    // Dispatch on mode. Files mode wins if both somehow set (refine prevents it).
+    // If neither is set, default `directory` to the MCP server's cwd — the most
+    // common workflow is "index this repo I'm in" so making it the no-arg
+    // default is a real ergonomic win.
     if (input.files) {
-      return executeFilesMode(projectId, input.files, input.dryRun)
+      return executeFilesMode(projectId, input.files, input.dryRun, purgeNotice)
     }
 
-    // Should be unreachable thanks to .refine()
-    return createErrorResult('❌ Invalid input: provide either `directory` or `files`.')
+    const directory = input.directory ?? process.cwd()
+    return executeDirectoryMode(
+      projectId,
+      directory,
+      input.include,
+      input.exclude,
+      input.dryRun,
+      purgeNotice
+    )
   },
 }
 
@@ -416,7 +412,8 @@ async function executeDirectoryMode(
   rawDirectory: string,
   include: string[],
   exclude: string[],
-  dryRun: boolean
+  dryRun: boolean,
+  purgeNotice = ''
 ) {
   // Resolve directory path (expand ~)
   const dirPath = rawDirectory.startsWith('~')
@@ -505,7 +502,8 @@ async function executeDirectoryMode(
     const skippedBlock = formatSkippedFilesBlock(allSkipped)
 
     return createSuccessResult(
-      `✅ Indexing complete!\n\n` +
+      purgeNotice +
+        `✅ Indexing complete!\n\n` +
         `📁 Directory: ${dirPath}\n` +
         `📄 Files scanned: ${files.length}\n` +
         `📦 Files indexed: ${totalFilesIndexed}\n` +
@@ -530,7 +528,8 @@ async function executeDirectoryMode(
 async function executeFilesMode(
   projectId: string,
   files: Array<z.infer<typeof FileInputSchema>>,
-  dryRun: boolean
+  dryRun: boolean,
+  purgeNotice = ''
 ) {
   logger.info('Indexing files (explicit mode)', { projectId, fileCount: files.length, dryRun })
 
@@ -545,7 +544,8 @@ async function executeFilesMode(
     const skippedBlock = formatSkippedFilesBlock(result.skippedFiles ?? [])
 
     return createSuccessResult(
-      `✅ Indexing complete\n\n` +
+      purgeNotice +
+        `✅ Indexing complete\n\n` +
         `📁 Files indexed: ${result.filesIndexed}\n` +
         `🧩 Chunks created: ${result.chunksIndexed}\n` +
         `⏱️  Duration: ${durationSec}s\n` +

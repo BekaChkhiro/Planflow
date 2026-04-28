@@ -16,6 +16,9 @@ import {
   isAuthenticated,
   getStoredCurrentProjectId,
   setStoredCurrentProjectId,
+  lookupProjectByPath,
+  setProjectLink,
+  removeProjectLink,
 } from '../config.js'
 import { AuthError, ApiError } from '../errors.js'
 import { logger } from '../logger.js'
@@ -26,36 +29,75 @@ import {
 } from './types.js'
 
 // ---------------------------------------------------------------------------
-// Current project state (persisted)
+// Current project resolution
 //
-// Source of truth is the on-disk config file (~/.config/planflow/config.json),
-// so the selection survives MCP server restarts (every new Claude session
-// spawns a fresh server). We keep an in-memory mirror to avoid re-reading
-// the file on every getCurrentProjectId() call — write-through caching:
-// reads use cache (hydrating from disk on first call), writes update both.
+// Three layers, checked in order:
+//   1. In-memory cache for this MCP server process (set by `planflow_use`
+//      during the session).
+//   2. Local project map (~/.config/planflow/project-map.json) — looked up
+//      by current working directory. This is the "magic" path: if the user
+//      ran `planflow_use` in this repo before, every fresh session here
+//      auto-resolves the project without any explicit call.
+//   3. Generic fallback: `currentProjectId` field in config.json — the
+//      last-used project across any cwd. Useful when a user always works
+//      with one project from many directories.
 // ---------------------------------------------------------------------------
+
+type Resolution = {
+  projectId: string
+  source: 'memory' | 'cwd-link' | 'config'
+} | null
 
 let currentProjectId: string | null | undefined = undefined
 let currentProjectName: string | null = null
 
 /**
- * Hydrate the in-memory cache from disk on first access.
- * Subsequent calls hit the cache.
+ * Resolve the active project ID using the three-layer order. Caches the
+ * result in memory so subsequent calls in the same session are cheap.
  */
-function hydrateFromDisk(): void {
-  if (currentProjectId === undefined) {
-    currentProjectId = getStoredCurrentProjectId()
+function resolve(): Resolution {
+  if (currentProjectId !== undefined && currentProjectId !== null) {
+    return { projectId: currentProjectId, source: 'memory' }
   }
+
+  if (currentProjectId === undefined) {
+    // Layer 2: cwd → project map
+    const cwd = process.cwd()
+    const fromMap = lookupProjectByPath(cwd)
+    if (fromMap) {
+      currentProjectId = fromMap
+      logger.debug('Resolved current project from cwd link', { cwd, projectId: fromMap })
+      return { projectId: fromMap, source: 'cwd-link' }
+    }
+
+    // Layer 3: global config.json fallback
+    const fromConfig = getStoredCurrentProjectId()
+    if (fromConfig) {
+      currentProjectId = fromConfig
+      logger.debug('Resolved current project from config', { projectId: fromConfig })
+      return { projectId: fromConfig, source: 'config' }
+    }
+
+    // Nothing found — mark cache as "checked, empty" so we don't redo this
+    // dance on every call.
+    currentProjectId = null
+  }
+
+  return null
 }
 
 export function getCurrentProjectId(): string | null {
-  hydrateFromDisk()
-  return currentProjectId ?? null
+  return resolve()?.projectId ?? null
 }
 
 export function getCurrentProjectName(): string | null {
-  hydrateFromDisk()
+  resolve()
   return currentProjectName
+}
+
+/** Returns where the active project came from — for diagnostic surfaces. */
+export function getCurrentProjectSource(): 'memory' | 'cwd-link' | 'config' | null {
+  return resolve()?.source ?? null
 }
 
 export function clearCurrentProject(): void {
@@ -73,7 +115,19 @@ const UseInputSchema = z.object({
   clear: z
     .boolean()
     .default(false)
-    .describe('Clear the current project setting'),
+    .describe('Clear the current project setting (in-memory + global config; cwd link is left alone unless you also pass unlink:true).'),
+  link: z
+    .boolean()
+    .default(true)
+    .describe(
+      'When true (default), also bind the current working directory to this project. Future MCP sessions started from this directory (or a subdirectory) will auto-resolve the project — no planflow_use needed.'
+    ),
+  unlink: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Remove the cwd → project binding for the current working directory. Used standalone (no projectId) to break a previously-set link.'
+    ),
 })
 
 type UseInput = z.infer<typeof UseInputSchema>
@@ -81,43 +135,77 @@ type UseInput = z.infer<typeof UseInputSchema>
 export const useTool: ToolDefinition<UseInput> = {
   name: 'planflow_use',
 
-  description: `Set the current PlanFlow project for all subsequent tool calls.
+  description: `Set or inspect the current PlanFlow project, with automatic cwd linking.
 
-When you set a current project, other tools like planflow_search,
-planflow_context, planflow_index, etc. will automatically use it
-without requiring projectId on every call.
+When you set a project with link:true (the default), the binding is saved to
+~/.config/planflow/project-map.json. Every future MCP session started from
+this directory — or any subdirectory of it — automatically resolves the
+project. No planflow_use call required after the first time.
 
 Usage:
-  planflow_use(projectId: "uuid")     # Set current project
-  planflow_use()                       # Show current project
-  planflow_use(clear: true)            # Clear current project
+  planflow_use(projectId: "uuid")              # Set + auto-link this cwd
+  planflow_use(projectId: "uuid", link: false) # Set without binding cwd
+  planflow_use()                                # Show current project + source
+  planflow_use(clear: true)                     # Clear in-memory selection
+  planflow_use(unlink: true)                    # Remove cwd binding
 
-This is useful for ad-hoc coding sessions where you don't want to
-specify projectId for every single tool call.`,
+Resolution order (when other tools omit projectId):
+  1. In-memory cache for this MCP server session
+  2. Project map binding for the current working directory
+  3. Last-used project from the global config
+
+Useful when you switch between several PlanFlow projects on the same machine
+— each repo can be linked once and never asked again.`,
 
   inputSchema: UseInputSchema,
 
   async execute(input: UseInput): Promise<ReturnType<typeof createSuccessResult>> {
-    logger.info('Use tool called', { projectId: input.projectId, clear: input.clear })
+    logger.info('Use tool called', {
+      projectId: input.projectId,
+      clear: input.clear,
+      link: input.link,
+      unlink: input.unlink,
+    })
 
-    // Show current project
+    // Standalone unlink: just remove the cwd binding, leave selection alone.
+    if (input.unlink && !input.projectId) {
+      const cwd = process.cwd()
+      const removed = removeProjectLink(cwd)
+      return createSuccessResult(
+        removed
+          ? `🔗 Unlinked: ${cwd}\nFuture sessions in this directory will no longer auto-resolve a project.`
+          : `ℹ️  No link found for ${cwd}. Nothing to unlink.`
+      )
+    }
+
+    // Show current project (with source diagnostic)
     if (!input.projectId && !input.clear) {
-      hydrateFromDisk()
-      if (!currentProjectId) {
+      const resolution = resolve()
+      if (!resolution) {
         return createSuccessResult(
           `ℹ️ No current project set.\n\n` +
             `Set one with:\n` +
             `  planflow_use(projectId: "your-project-uuid")\n\n` +
-            `Or use planflow_projects() to list available projects.`
+            `That will also bind ${process.cwd()}\n` +
+            `to that project for future sessions (pass link:false to opt out).\n\n` +
+            `List projects: planflow_projects()`
         )
+      }
+
+      const sourceLabel: Record<typeof resolution.source, string> = {
+        'memory': 'this session',
+        'cwd-link': `cwd link (${process.cwd()})`,
+        'config': 'global config (last-used fallback)',
       }
 
       return createSuccessResult(
         `📌 Current project:\n` +
-          `   ID: ${currentProjectId}\n` +
-          `   Name: ${currentProjectName || 'unknown'}\n\n` +
-          `Tools will use this project automatically.\n` +
-          `To clear: planflow_use(clear: true)`
+          `   ID:     ${resolution.projectId}\n` +
+          `   Name:   ${currentProjectName || 'unknown'}\n` +
+          `   Source: ${sourceLabel[resolution.source]}\n\n` +
+          `Tools use this project automatically.\n` +
+          `To clear:  planflow_use(clear: true)\n` +
+          `To unlink cwd: planflow_use(unlink: true)`
       )
     }
 
@@ -146,13 +234,29 @@ specify projectId for every single tool call.`,
       // still knows which project is current.
       setStoredCurrentProjectId(currentProjectId)
 
-      logger.info('Current project set', { projectId: currentProjectId, name: currentProjectName })
+      // Bind cwd → project (default magic). User can pass link:false to opt out.
+      let cwdLinked: string | null = null
+      if (input.link) {
+        cwdLinked = process.cwd()
+        setProjectLink(cwdLinked, currentProjectId)
+      }
+
+      logger.info('Current project set', {
+        projectId: currentProjectId,
+        name: currentProjectName,
+        cwdLinked,
+      })
+
+      const linkBlock = cwdLinked
+        ? `\n🔗 Linked: ${cwdLinked}\n   Future MCP sessions started here will auto-resolve this project.\n`
+        : `\n(No cwd binding — link:false was passed.)\n`
 
       return createSuccessResult(
         `✅ Current project set:\n` +
           `   ${project.name}\n` +
-          `   ID: ${input.projectId}\n\n` +
-          `Persisted across sessions. Now you can use tools without projectId:\n` +
+          `   ID: ${input.projectId}\n` +
+          linkBlock +
+          `\nNow you can use tools without projectId:\n` +
           `  planflow_search(query: "auth middleware")\n` +
           `  planflow_context(query: "how does routing work")\n` +
           `  planflow_index(directory: ".")`

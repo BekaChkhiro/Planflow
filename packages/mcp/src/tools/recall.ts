@@ -174,8 +174,11 @@ Use this when:
   • The user says "what do you know about X?" — anchor on X.
 
 Do NOT use when:
-  • You are still discovering — use planflow_search() first.
-  • You only need the high-level project summary — use planflow_context().
+  • You are still discovering — use planflow_search() first to find the file
+  • You only need the high-level project summary — use planflow_context()
+  • You already have the file path AND just need the source — use Read directly
+    (Read is faster and free; recall is for surrounding context like
+    related knowledge entries and recent activity, not just the file body)
 
 Prerequisites:
   • Logged in via planflow_login()

@@ -968,6 +968,14 @@ export class ApiClient {
   }
 
   /**
+   * Wipe every chunk stored for a project. Used for clean re-indexes
+   * after tightening excludes. Requires owner/admin role on the project.
+   */
+  async purgeIndex(projectId: string): Promise<{ purgedChunks: number }> {
+    return this.request('DELETE', `/projects/${projectId}/index`)
+  }
+
+  /**
    * Fetch every indexed chunk for a single file path (ordered by start line).
    * Returns an empty list if the file is not in the index.
    */

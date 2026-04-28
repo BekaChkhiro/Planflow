@@ -244,6 +244,44 @@ ragRoutes.get('/:projectId/index-status', auth, async (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// DELETE /projects/:projectId/index
+//
+// Wipe every chunk stored for a project. Useful for re-indexing from
+// scratch after tightening excludes — running this and then `planflow_index`
+// gives a clean vector store free of stale entries from earlier runs.
+// ---------------------------------------------------------------------------
+
+ragRoutes.delete('/:projectId/index', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('projectId')
+    const db = getDbClient()
+
+    if (!UUID_REGEX.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const access = await getProjectAccess(db, projectId, user.id)
+    if (!access) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    // Only owners and admins can purge — purge is destructive (drops all
+    // embedded chunks) so we treat it as an admin-level operation.
+    if (access.role !== 'owner' && access.role !== 'admin') {
+      return c.json({ success: false, error: 'Forbidden — purge requires owner/admin role' }, 403)
+    }
+
+    const result = await ragService.purgeIndex(projectId)
+
+    return c.json({ success: true, data: result })
+  } catch (error) {
+    log.error({ error, route: 'DELETE /:projectId/index' }, 'RAG purge error')
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ---------------------------------------------------------------------------
 // GET /projects/:projectId/index/file?path=<relative path>
 //
 // Returns every indexed chunk for a single file, ordered by start line.

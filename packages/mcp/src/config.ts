@@ -174,3 +174,84 @@ export function setStoredCurrentProjectId(projectId: string | null): void {
     currentProjectId: projectId ?? undefined,
   })
 }
+
+// ---------------------------------------------------------------------------
+// Local project map (cwd → projectId)
+//
+// A side-channel JSON file that records which absolute path on this machine
+// corresponds to which PlanFlow project UUID. This is the magic that lets
+// `planflow_use`-less workflows work: the MCP server reads its cwd at
+// startup, looks it up in this map, and auto-sets the current project.
+//
+// Stored separately from config.json because:
+//   - It's intrinsically per-machine (paths don't roam)
+//   - It can grow beyond a single project (one entry per linked repo)
+// ---------------------------------------------------------------------------
+
+const ProjectMapSchema = z.record(z.string(), z.string().uuid())
+type ProjectMap = z.infer<typeof ProjectMapSchema>
+
+function getProjectMapPath(): string {
+  return join(getConfigDir(), 'project-map.json')
+}
+
+/** Load the cwd → projectId map. Returns {} if file missing or unreadable. */
+export function getProjectMap(): ProjectMap {
+  const path = getProjectMapPath()
+  if (!existsSync(path)) return {}
+  try {
+    const content = readFileSync(path, 'utf-8')
+    const parsed = JSON.parse(content) as unknown
+    return ProjectMapSchema.parse(parsed)
+  } catch (error) {
+    logger.warn('Invalid project-map.json, treating as empty', { error: String(error) })
+    return {}
+  }
+}
+
+/**
+ * Look up a project ID for a specific path. Tries exact match first; if no
+ * exact match exists, walks parents (so e.g. running from a subdirectory of
+ * a linked repo still resolves correctly).
+ */
+export function lookupProjectByPath(path: string): string | null {
+  const map = getProjectMap()
+  if (map[path]) return map[path]
+
+  // Walk up parents — useful when the user is in src/, packages/foo/, etc.
+  let current = path
+  while (current !== '/' && current !== '.') {
+    if (map[current]) return map[current]
+    const parent = current.substring(0, current.lastIndexOf('/'))
+    if (parent === current) break
+    current = parent || '/'
+  }
+  return null
+}
+
+/** Bind a path to a project ID. Overwrites any existing binding for that path. */
+export function setProjectLink(path: string, projectId: string): void {
+  ensureConfigDir()
+  const map = getProjectMap()
+  map[path] = projectId
+  try {
+    writeFileSync(getProjectMapPath(), JSON.stringify(map, null, 2), 'utf-8')
+    logger.debug('Project link saved', { path, projectId })
+  } catch (error) {
+    throw new ConfigError('Failed to save project map', { error: String(error) })
+  }
+}
+
+/** Remove the binding for a path. No-op if absent. */
+export function removeProjectLink(path: string): boolean {
+  const map = getProjectMap()
+  if (!(path in map)) return false
+  delete map[path]
+  try {
+    writeFileSync(getProjectMapPath(), JSON.stringify(map, null, 2), 'utf-8')
+    logger.debug('Project link removed', { path })
+    return true
+  } catch (error) {
+    throw new ConfigError('Failed to update project map', { error: String(error) })
+  }
+}

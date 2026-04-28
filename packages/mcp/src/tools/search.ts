@@ -1,10 +1,16 @@
 /**
- * PlanFlow MCP Server - Search Tool
+ * PlanFlow MCP Server — planflow_search
  *
- * Hybrid semantic search across a project's indexed codebase.
- * Combines vector similarity (Voyage-code-3 embeddings) with BM25 keyword search.
+ * Hybrid semantic + keyword search across a project's indexed code and docs.
  *
- * T21.3 — planflow_search
+ * Returns full chunk content by default so the LLM can reason without
+ * re-fetching, but auto-caps the response if the total would blow past a
+ * sensible byte budget — large repos otherwise produce 100KB+ blobs that
+ * either spill out of context or have to be saved to disk.
+ *
+ * Also filters out indexed-but-uninteresting paths (e.g. Prisma generated
+ * client) so they don't dominate the top-N. Defaults are tuned for a
+ * typical TypeScript / Node monorepo.
  */
 
 import { z } from 'zod'
@@ -18,6 +24,57 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
+import { matchesAny } from './_glob.js'
+
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
+/**
+ * Auto-cap the total content payload at this many bytes. When exceeded,
+ * the tool falls back to per-chunk previews and tells the LLM why. Tuned
+ * to fit comfortably in a single message without dominating the context
+ * window.
+ */
+const DEFAULT_MAX_RESPONSE_BYTES = 30_000
+/** Per-chunk slice when previewOnly is on (or auto-cap kicks in). */
+const PREVIEW_CHARS = 300
+
+/**
+ * Paths that are indexed but rarely useful in search results — auto-
+ * generated code, build outputs that slipped through, etc. Caller can
+ * override by passing their own `excludePath` array.
+ */
+const DEFAULT_EXCLUDE_PATHS = [
+  '**/generated/**',
+  '**/.prisma/**',
+  '**/*.generated.ts',
+  '**/*.generated.tsx',
+  '**/*.gen.ts',
+  '**/dist/**',
+  '**/build/**',
+  '**/.next/**',
+]
+
+// ---------------------------------------------------------------------------
+// Coercible string-or-array helper (mirrors index tool)
+// ---------------------------------------------------------------------------
+
+function coercibleStringArray(defaultValue: string[]) {
+  return z.preprocess(
+    (val) => {
+      if (val === undefined || val === null) return defaultValue
+      if (typeof val === 'string') return [val]
+      if (Array.isArray(val)) return val
+      return defaultValue
+    },
+    z.array(z.string())
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Schema
+// ---------------------------------------------------------------------------
 
 const SearchInputSchema = z.object({
   projectId: z
@@ -28,76 +85,83 @@ const SearchInputSchema = z.object({
   query: z
     .string()
     .min(1, 'Query cannot be empty')
-    .describe('Search query — natural language or keywords'),
+    .describe('Search query — natural language or keywords.'),
   limit: z
     .number()
     .int()
     .min(1)
     .max(50)
     .default(10)
-    .describe('Maximum results to return (default: 10, max: 50)'),
+    .describe('Maximum results after filters (default 10, max 50).'),
   language: z
     .string()
     .optional()
-    .describe('Optional: filter by programming language (e.g., "typescript", "python")'),
+    .describe('Optional: filter by programming language (e.g. "typescript").'),
   kind: z
     .string()
     .optional()
-    .describe('Optional: filter by code kind (e.g., "function", "class", "interface")'),
+    .describe('Optional: filter by code kind (function, class, method, interface, type).'),
   source: z
     .enum(['code', 'docs', 'all'])
     .default('all')
-    .describe('Source filter: code, docs, or all (default: all)'),
+    .describe('Source filter: code | docs | all (default all).'),
+  excludePath: coercibleStringArray(DEFAULT_EXCLUDE_PATHS).describe(
+    'Glob patterns to drop from results (single string or array). Defaults filter out generated/build paths so they do not dominate top-N. Pass [] to disable defaults.'
+  ),
   previewOnly: z
     .boolean()
     .default(false)
     .describe(
-      'When true, return only short content previews (300 chars). When false (default), return full chunk content — recommended for LLM consumers so they can reason over real code without re-fetching.'
+      'true → 300-char previews per chunk. false (default) → full chunk content. Note: even with false, the tool will auto-switch to previews if the total response would exceed maxResponseBytes.'
+    ),
+  maxResponseBytes: z
+    .number()
+    .int()
+    .min(1_000)
+    .max(500_000)
+    .default(DEFAULT_MAX_RESPONSE_BYTES)
+    .describe(
+      'Soft byte budget for full-content responses. When exceeded, the tool falls back to previews automatically (and notes it in the output). Default 30KB.'
     ),
 })
 
 type SearchInput = z.infer<typeof SearchInputSchema>
 
-/**
- * planflow_search tool implementation
- *
- * Search a project's indexed codebase using hybrid semantic + keyword search.
- */
+// ---------------------------------------------------------------------------
+// Tool
+// ---------------------------------------------------------------------------
+
 export const searchTool: ToolDefinition<SearchInput> = {
   name: 'planflow_search',
 
   description: `Hybrid semantic + keyword search across a PlanFlow project's indexed codebase and documentation.
 
-Combines:
+How it works:
   • Vector similarity (Voyage-code-3 embeddings — semantic meaning)
   • BM25 keyword search (exact term matching)
-Fused with Reciprocal Rank Fusion (RRF) into a single ranked list.
-
-Each result returns the full chunk content (a complete function/class/section)
-unless previewOnly:true is set. The chunk is the unit you should reason over —
-do not assume it is partial.
+  • Fused with Reciprocal Rank Fusion (RRF) into a single ranked list
 
 Output is structured (key:value blocks per result) so you can extract:
   file, lines, kind, name, language, match (vector|keyword|hybrid), score, chunkId
 
-Use when:
-  • Looking up where/how something is implemented
-  • Discovering the right file before editing
-  • Finding examples of a pattern in the codebase
+Use this when:
+  ✅ You don't yet know which file the answer lives in
+  ✅ "Where is X implemented?" / "How is Y handled across the repo?"
+  ✅ Looking for examples of a pattern
+  ✅ Cross-source: ranking code AND docs together
 
-Do NOT use when:
-  • You just want to know if the project is indexed → planflow_index_status()
-  • You want a single file's full surrounding context → planflow_recall()  (coming)
-  • You need recent changes / activity → planflow_changes() / planflow_activity()
+Do NOT use this when:
+  ❌ You already know the file path → use Read directly (faster, cheaper)
+  ❌ You're matching an exact string → use grep / Grep tool
+  ❌ You only want the project's index health → planflow_index_status()
+  ❌ You have a specific anchor (file/task/chunkId) → planflow_recall()
 
-Parameters:
-  - projectId (optional): Project UUID. Uses current project from planflow_use().
-  - query (required): Natural language or keyword query
-  - limit (optional): Max results (default 10, max 50)
-  - language (optional): Filter by programming language
-  - kind (optional): Filter by code kind (function, class, method, interface, type)
-  - source (optional): code | docs | all (default all)
-  - previewOnly (optional): true → 300-char previews. false (default) → full chunks.
+Defaults that prevent common pitfalls:
+  • excludePath drops generated/build paths so Prisma client noise doesn't
+    crowd out real results. Pass [] to disable.
+  • Response is auto-capped (~30KB). If your full chunks would blow past
+    that, the tool switches to 300-char previews automatically and tells
+    you. Override with maxResponseBytes or set previewOnly:true upfront.
 
 Prerequisites:
   • Logged in via planflow_login()
@@ -117,8 +181,6 @@ Prerequisites:
       )
     }
 
-    logger.info('Search tool called', { projectId, query: input.query })
-
     if (!isAuthenticated()) {
       return createErrorResult(
         '❌ Not logged in.\n\n' +
@@ -128,28 +190,54 @@ Prerequisites:
       )
     }
 
+    logger.info('Search tool called', { projectId, query: input.query })
+
     try {
       const client = getApiClient()
 
-      logger.info('Searching project', {
-        projectId: input.projectId,
-        query: input.query,
-        limit: input.limit,
-      })
+      // When excludePath is non-empty we over-fetch so that filtering doesn't
+      // shrink the user-visible result set below `limit`. 3× is a heuristic
+      // that's plenty for typical exclusion ratios; capped at 50 (server max).
+      const overFetchLimit =
+        input.excludePath.length > 0
+          ? Math.min(50, Math.max(input.limit * 3, input.limit + 5))
+          : input.limit
 
       const response = await client.searchProject(projectId, input.query, {
-        limit: input.limit,
+        limit: overFetchLimit,
         language: input.language,
         kind: input.kind,
         source: input.source,
       })
 
-      const total = response.total ?? response.results.length
-      logger.info('Search completed', { total })
+      // Apply MCP-side excludePath filter, then trim to the requested limit.
+      const filtered =
+        input.excludePath.length > 0
+          ? response.results.filter((r) => {
+              const chunk = r.chunk
+              const path = 'filePath' in chunk ? chunk.filePath : (chunk as { source?: string }).source
+              if (!path) return true
+              return !matchesAny(path, input.excludePath)
+            })
+          : response.results
+
+      const droppedCount = response.results.length - filtered.length
+      const trimmed = filtered.slice(0, input.limit)
+      const total = trimmed.length
+
+      logger.info('Search completed', {
+        rawTotal: response.total ?? response.results.length,
+        afterExclude: filtered.length,
+        droppedByExclude: droppedCount,
+        returned: total,
+      })
 
       if (total === 0) {
         return createSuccessResult(
           `No results for "${input.query}"\n\n` +
+            (droppedCount > 0
+              ? `(${droppedCount} hits were dropped by excludePath. Pass excludePath: [] to see them.)\n\n`
+              : '') +
             'Try:\n' +
             '  • Different keywords or phrasing\n' +
             '  • Broader terms\n' +
@@ -158,24 +246,44 @@ Prerequisites:
         )
       }
 
+      // Decide preview vs full content. Even when previewOnly:false, switch
+      // to previews if the total would overflow the byte budget — better UX
+      // than dumping 100KB to the LLM (which then has to dump it to disk
+      // and re-read it, adding latency).
+      const totalContentBytes = trimmed.reduce(
+        (sum, r) => sum + Buffer.byteLength(r.chunk.content, 'utf-8'),
+        0
+      )
+      const autoCapped = !input.previewOnly && totalContentBytes > input.maxResponseBytes
+      const usePreview = input.previewOnly || autoCapped
+
       const lines: string[] = [
         `Search: "${input.query}"`,
-        `${total} result${total === 1 ? '' : 's'}`,
-        '',
+        `${total} result${total === 1 ? '' : 's'}` +
+          (droppedCount > 0 ? ` (${droppedCount} dropped by excludePath)` : ''),
       ]
+      if (autoCapped) {
+        lines.push(
+          `⚠️  Auto-capped: full content would be ${(totalContentBytes / 1024).toFixed(1)} KB — switched to previews.`,
+          `   Override with previewOnly:false + maxResponseBytes: ${totalContentBytes + 1000}`
+        )
+      }
+      lines.push('')
 
-      for (let i = 0; i < response.results.length; i++) {
-        const r = response.results[i]!
+      for (let i = 0; i < trimmed.length; i++) {
+        const r = trimmed[i]!
         const chunk = r.chunk
         const isCode = 'filePath' in chunk
         const rank = i + 1
 
-        // Numeric score is more honest than a percentage — RRF / cosine
-        // distance scores aren't naturally a probability.
+        // RRF fusion scores aren't probabilities — show as raw decimal.
         const scoreFmt = r.score.toFixed(3)
 
-        const content = input.previewOnly && chunk.content.length > 300
-          ? chunk.content.slice(0, 300) + '\n... [truncated, set previewOnly:false for full chunk]'
+        const content = usePreview && chunk.content.length > PREVIEW_CHARS
+          ? chunk.content.slice(0, PREVIEW_CHARS) +
+            (autoCapped
+              ? '\n... [auto-capped — request the chunk by chunkId for full content]'
+              : '\n... [truncated, set previewOnly:false for full chunk]')
           : chunk.content
 
         lines.push(`━━━ #${rank} ━━━━━━━━━━━━━━━━━━━━━━━━━━`)
@@ -187,8 +295,8 @@ Prerequisites:
           lines.push(`name:      ${chunk.name}`)
           lines.push(`language:  ${chunk.language}`)
         } else {
-          lines.push(`source:    ${chunk.source}`)
-          lines.push(`title:     ${chunk.title}`)
+          lines.push(`source:    ${(chunk as { source: string }).source}`)
+          lines.push(`title:     ${(chunk as { title: string }).title}`)
         }
 
         lines.push(`match:     ${r.source}`)
@@ -204,7 +312,11 @@ Prerequisites:
       lines.push('Next steps:')
       lines.push('  • Refine: add language/kind filters or rephrase query')
       lines.push('  • Wider: increase limit (max 50)')
-      lines.push('  • Compact: previewOnly:true for shorter previews')
+      if (autoCapped) {
+        lines.push('  • Larger budget: maxResponseBytes:100000 to fit more full content')
+      } else {
+        lines.push('  • Compact: previewOnly:true for shorter previews')
+      }
 
       return createSuccessResult(lines.join('\n'))
     } catch (error) {

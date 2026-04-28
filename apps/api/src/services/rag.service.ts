@@ -322,6 +322,46 @@ export class RagService {
   }
 
   /**
+   * Purge every chunk stored for a project. Used to clean up indexes that
+   * were built before tighter excludes (e.g. Prisma generated paths) were
+   * in place — running this then re-indexing gives the user a fresh,
+   * minimal vector store without the old noise.
+   *
+   * Safe to call when the project hasn't been indexed yet (returns 0).
+   */
+  async purgeIndex(projectId: string): Promise<{ purgedChunks: number }> {
+    const dbPath = getProjectDbPath(projectId)
+
+    try {
+      await access(dbPath)
+    } catch {
+      return { purgedChunks: 0 }
+    }
+
+    // Easiest reliable purge: blow away the whole per-project DB directory.
+    // LanceDB's `delete()` requires a SQL filter and there's no
+    // "drop everything" shortcut that survives schema-less tables, so a
+    // filesystem-level wipe is both simpler and faster.
+    const store = new VectorStore(dbPath)
+    let count = 0
+    try {
+      await store.init()
+      count = await store.count()
+      await store.close()
+    } catch {
+      // If we can't open the store, treat as already-empty.
+      count = 0
+    }
+
+    await rm(dbPath, { recursive: true, force: true }).catch((err) => {
+      log.warn({ error: err, projectId, dbPath }, 'Failed to remove project index dir')
+    })
+
+    log.info({ projectId, purgedChunks: count }, 'RAG index purged')
+    return { purgedChunks: count }
+  }
+
+  /**
    * Get the index status for a project, including aggregated stats useful
    * for an LLM-facing status report (file/chunk counts, language breakdown,
    * how recently the project was indexed).

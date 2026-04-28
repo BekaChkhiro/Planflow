@@ -33,41 +33,69 @@ export class VectorStore {
   }
 
   /**
-   * Adds `content_hash` to an existing table when missing. No-op when
-   * the column is already present, so this is safe to call on every
-   * init().
+   * Ensures the `content_hash` column exists AND is nullable.
    *
-   * LanceDB's `addColumns` takes a SQL expression that's evaluated for
-   * every existing row — we use the empty string so old chunks read as
-   * "no hash known", which the indexer then treats as "needs re-index"
-   * exactly like it would for a brand-new file.
+   * Two cases this handles, both safe to run on every init():
+   *
+   * 1. Column missing (table predates 0.2.4) → addColumns with `''` so
+   *    old chunks read as "no hash known", which the indexer then treats
+   *    as "needs re-index".
+   *
+   * 2. Column present but `nullable=false` → alterColumns to relax it.
+   *    `addColumns` with a non-null SQL default (`''`) creates the column
+   *    as non-nullable, but mergeInsert later sends Arrow batches that
+   *    infer string fields as nullable=true. Lance refuses the schema
+   *    drift with "Append with different schema". Relaxing the existing
+   *    column to nullable=true is a one-way migration LanceDB allows
+   *    (see ColumnAlteration.nullable docs).
    */
   private async _ensureContentHashColumn(): Promise<void> {
     if (!this.table) return;
+
+    let existingField: { nullable: boolean } | undefined;
     try {
       const schema = await this.table.schema();
-      const hasColumn = schema.fields.some((f) => f.name === "content_hash");
-      if (hasColumn) return;
+      const field = schema.fields.find((f) => f.name === "content_hash");
+      if (field) {
+        existingField = { nullable: field.nullable };
+      }
     } catch {
-      // If we can't read the schema (older LanceDB? corrupt?) we still
-      // attempt the addColumns call; if THAT also fails the catch below
-      // logs and moves on so reads/writes can degrade gracefully.
+      // If we can't read the schema (older LanceDB? corrupt?) fall through
+      // to addColumns; if THAT also fails the catch below logs and moves
+      // on so reads/writes can degrade gracefully.
     }
 
-    try {
-      await this.table.addColumns([
-        { name: "content_hash", valueSql: "''" },
-      ]);
-    } catch (err) {
-      // Don't crash the whole indexing run because of a migration hiccup.
-      // Subsequent getFileHashes() calls will catch the schema error and
-      // return an empty map (treats every file as new), and upserts will
-      // overwrite-create the table on next clean run.
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[VectorStore] Failed to add content_hash column — continuing",
-        err,
-      );
+    if (!existingField) {
+      try {
+        await this.table.addColumns([
+          { name: "content_hash", valueSql: "''" },
+        ]);
+      } catch (err) {
+        // Don't crash the whole indexing run because of a migration hiccup.
+        // Subsequent getFileHashes() calls will catch the schema error and
+        // return an empty map (treats every file as new), and upserts will
+        // overwrite-create the table on next clean run.
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[VectorStore] Failed to add content_hash column — continuing",
+          err,
+        );
+      }
+      return;
+    }
+
+    if (!existingField.nullable) {
+      try {
+        await this.table.alterColumns([
+          { path: "content_hash", nullable: true },
+        ]);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[VectorStore] Failed to relax content_hash nullability — mergeInsert may still fail until the table is rebuilt",
+          err,
+        );
+      }
     }
   }
 

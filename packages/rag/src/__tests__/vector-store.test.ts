@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as lancedb from "@lancedb/lancedb";
 import { VectorStore } from "../store/index.js";
 import type { EmbeddingRecord, ChunkMetadata } from "../types.js";
 import { existsSync } from "node:fs";
@@ -235,6 +236,64 @@ describe("VectorStore", () => {
       await store.close();
       // Should not throw on double close
       await store.close();
+    });
+  });
+
+  describe("schema migration", () => {
+    // Regression: production tables created via addColumns({ valueSql: "''" })
+    // ended up with content_hash as nullable=false, but later mergeInsert
+    // calls infer Arrow batches with nullable=true → Lance refuses the merge
+    // with "Append with different schema". init() should detect and relax
+    // the column to nullable=true so upsert recovers.
+    it("relaxes content_hash to nullable when an existing table has it as non-nullable", async () => {
+      // Build a "legacy" table state: open the raw LanceDB connection,
+      // create a table without content_hash, then use addColumns with a
+      // non-null SQL default — this is the exact path 0.2.4's migration
+      // took, and it produces nullable=false in production.
+      await store.close();
+
+      const conn = await lancedb.connect(dbPath);
+      const seedRows = [
+        {
+          id: "seed-1",
+          vector: [0.1, 0.2, 0.3],
+          content: "seed",
+          file_path: "seed.ts",
+          kind: "function",
+          name: "seed",
+          language: "typescript",
+          start_line: 1,
+          end_line: 1,
+          source: "code",
+          indexed_at: new Date().toISOString(),
+        },
+      ];
+      const legacyTable = await conn.createTable("embeddings", seedRows, {
+        mode: "overwrite",
+      });
+      await legacyTable.addColumns([{ name: "content_hash", valueSql: "''" }]);
+
+      // Sanity: the legacy column really is non-nullable before init() runs.
+      const beforeSchema = await legacyTable.schema();
+      const beforeField = beforeSchema.fields.find(
+        (f) => f.name === "content_hash",
+      );
+      expect(beforeField?.nullable).toBe(false);
+
+      // Reopen via VectorStore — init() should run the migration.
+      const recovered = new VectorStore(dbPath);
+      await recovered.init();
+
+      // mergeInsert path used to throw with the schema-drift error.
+      const record = makeRecord("post-migration", "new.ts", [0.4, 0.5, 0.6]);
+      record.metadata.contentHash = "abc123";
+      await expect(recovered.upsert([record])).resolves.not.toThrow();
+
+      // The migration should have flipped content_hash to nullable=true.
+      const afterRows = await recovered.scan(`id = 'post-migration'`);
+      expect(afterRows).toHaveLength(1);
+
+      await recovered.close();
     });
   });
 });

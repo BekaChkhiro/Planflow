@@ -15,6 +15,7 @@ import {
   createErrorResult,
   formatTable,
 } from './types.js'
+import { coerceNumber, coerceBoolean } from './_coerce.js'
 
 /**
  * Input schema for planflow_notifications tool
@@ -34,12 +35,10 @@ const NotificationsInputSchema = z.object({
     .uuid('Notification ID must be a valid UUID')
     .optional()
     .describe('Notification ID to mark as read (required for "read" action)'),
-  unreadOnly: z
-    .boolean()
+  unreadOnly: coerceBoolean()
     .default(true)
     .describe('Only show unread notifications (default: true)'),
-  limit: z
-    .number()
+  limit: coerceNumber()
     .int()
     .min(1)
     .max(100)

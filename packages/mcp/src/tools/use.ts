@@ -27,6 +27,7 @@ import {
   createSuccessResult,
   createErrorResult,
 } from './types.js'
+import { coerceBoolean } from './_coerce.js'
 
 // ---------------------------------------------------------------------------
 // Current project resolution
@@ -112,18 +113,15 @@ const UseInputSchema = z.object({
     .uuid()
     .optional()
     .describe('Project UUID to set as current. Omit to show current project.'),
-  clear: z
-    .boolean()
+  clear: coerceBoolean()
     .default(false)
     .describe('Clear the current project setting (in-memory + global config; cwd link is left alone unless you also pass unlink:true).'),
-  link: z
-    .boolean()
+  link: coerceBoolean()
     .default(true)
     .describe(
       'When true (default), also bind the current working directory to this project. Future MCP sessions started from this directory (or a subdirectory) will auto-resolve the project — no planflow_use needed.'
     ),
-  unlink: z
-    .boolean()
+  unlink: coerceBoolean()
     .default(false)
     .describe(
       'Remove the cwd → project binding for the current working directory. Used standalone (no projectId) to break a previously-set link.'

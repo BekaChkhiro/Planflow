@@ -31,6 +31,7 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
+import { coerceNumber } from './_coerce.js'
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -75,8 +76,7 @@ const RecallInputSchema = z
       .describe(
         'shallow: primary data only (fast). deep: adds related semantic-search hits (one extra embedding call).'
       ),
-    contentLimit: z
-      .number()
+    contentLimit: coerceNumber()
       .int()
       .min(0)
       .max(8000)

@@ -30,6 +30,7 @@ import {
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
 import { minimatch } from './_glob.js'
+import { coerceBoolean } from './_coerce.js'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -41,6 +42,13 @@ const BATCH_SIZE = 20
 const DELAY_MS = 21_000
 /** Per-file content cap; matches the backend limit. */
 const MAX_FILE_SIZE = 1024 * 1024
+/**
+ * Soft cap on total batch payload bytes. Helps avoid 413 / "request entity
+ * too large" responses when even legitimately-sized files happen to
+ * cluster together in one batch. Empirically ~4MB lands well within
+ * default Hono / Node body limits (we leave headroom for headers).
+ */
+const MAX_BATCH_BYTES = 4 * 1024 * 1024
 
 const DEFAULT_INCLUDE = [
   '**/*.ts',
@@ -155,14 +163,12 @@ const IndexInputSchema = z
       ),
 
     // ── Modifiers ────────────────────────────────────────────────────────
-    dryRun: z
-      .boolean()
+    dryRun: coerceBoolean()
       .default(false)
       .describe(
         'When true, scan and report what WOULD be indexed (file count, languages, sizes) without sending anything to the backend. No Voyage tokens spent. Useful before a big directory ingest.'
       ),
-    purge: z
-      .boolean()
+    purge: coerceBoolean()
       .default(false)
       .describe(
         'When true, wipe every existing chunk for the project BEFORE indexing. Use this when an earlier index run included files you have since added to exclude (e.g. Prisma generated client) and you want a clean re-index. Requires owner/admin role on the project. Skipped when dryRun:true.'
@@ -439,16 +445,21 @@ async function executeDirectoryMode(
 
     logger.info(`Found ${files.length} files to index`, { count: files.length })
 
+    // Group files into batches that respect both the count limit and the
+    // payload-size limit. A single oversized file (e.g. an unfiltered
+    // generated client) shouldn't drag down its 19 batch-mates.
+    const batches = packBatches(files)
+
     const client = getApiClient()
     let totalFilesIndexed = 0
     let totalChunksIndexed = 0
-    const batchCount = Math.ceil(files.length / BATCH_SIZE)
-    const failedBatches: Array<{ batchNum: number; error: string; fileCount: number }> = []
+    const batchCount = batches.length
+    const failedFiles: Array<{ path: string; error: string }> = []
     const allSkipped: SkippedFileSummary[] = []
 
-    for (let i = 0; i < files.length; i += BATCH_SIZE) {
-      const batch = files.slice(i, i + BATCH_SIZE)
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1
+    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+      const batch = batches[batchIdx]!
+      const batchNum = batchIdx + 1
 
       logger.info(`Indexing batch ${batchNum}/${batchCount}`, { batchSize: batch.length })
 
@@ -466,23 +477,46 @@ async function executeDirectoryMode(
         })
       } catch (err) {
         const errMessage = err instanceof Error ? err.message : String(err)
-        logger.error(`Batch ${batchNum} failed`, { error: errMessage })
-        failedBatches.push({ batchNum, error: errMessage, fileCount: batch.length })
+        logger.error(`Batch ${batchNum} failed — retrying per-file`, { error: errMessage })
+
+        // One bad file shouldn't ditch the whole batch. Retry each file on
+        // its own so we surface exactly which paths failed and salvage
+        // every chunk-able neighbor. Voyage rate limit is the main cost
+        // here (one call per file), but failures are rare so this is
+        // acceptable as a recovery path.
+        for (let fIdx = 0; fIdx < batch.length; fIdx++) {
+          const file = batch[fIdx]!
+          try {
+            const result = await client.indexProject(projectId, [file])
+            totalFilesIndexed += result.filesIndexed
+            totalChunksIndexed += result.chunksIndexed
+            if (result.skippedFiles) allSkipped.push(...result.skippedFiles)
+            logger.debug('Per-file retry succeeded', { path: file.path })
+          } catch (retryErr) {
+            const detail = retryErr instanceof Error ? retryErr.message : String(retryErr)
+            logger.error('Per-file retry failed', { path: file.path, error: detail })
+            failedFiles.push({ path: file.path, error: detail })
+          }
+          // Pace the retries — same Voyage rate limit applies whether the
+          // call carries 1 file or 20.
+          if (fIdx < batch.length - 1) await sleep(DELAY_MS)
+        }
       }
 
-      if (i + BATCH_SIZE < files.length) {
+      if (batchIdx < batches.length - 1) {
         logger.info(`Waiting ${DELAY_MS}ms before next batch...`)
         await sleep(DELAY_MS)
       }
     }
 
-    if (totalFilesIndexed === 0 && failedBatches.length > 0) {
-      const firstError = failedBatches[0]?.error ?? 'unknown error'
+    if (totalFilesIndexed === 0 && failedFiles.length > 0) {
+      const firstError = failedFiles[0]?.error ?? 'unknown error'
       return createErrorResult(
-        `❌ Indexing failed — all ${failedBatches.length} batch(es) errored.\n\n` +
+        `❌ Indexing failed — every file errored.\n\n` +
           `📁 Directory: ${dirPath}\n` +
           `📄 Files scanned: ${files.length}\n` +
-          `🚫 Files indexed: 0\n\n` +
+          `🚫 Files indexed: 0\n` +
+          `❗ Files failed: ${failedFiles.length}\n\n` +
           `First error: ${firstError}\n\n` +
           `💡 Common causes:\n` +
           `  • Embedding service unavailable (try again later)\n` +
@@ -491,14 +525,10 @@ async function executeDirectoryMode(
       )
     }
 
-    const warningBlock =
-      failedBatches.length > 0
-        ? `\n⚠️  ${failedBatches.length} of ${batchCount} batch(es) failed (${failedBatches.reduce(
-            (sum, b) => sum + b.fileCount,
-            0
-          )} files skipped).\n   First error: ${failedBatches[0]?.error}\n`
-        : ''
-
+    // Build a per-file failures block (paths, capped to 10 examples). The
+    // user explicitly asked to know WHICH files failed — counts alone
+    // aren't enough to diagnose.
+    const failedBlock = formatFailedFilesBlock(failedFiles)
     const skippedBlock = formatSkippedFilesBlock(allSkipped)
 
     return createSuccessResult(
@@ -508,7 +538,7 @@ async function executeDirectoryMode(
         `📄 Files scanned: ${files.length}\n` +
         `📦 Files indexed: ${totalFilesIndexed}\n` +
         `🧩 Chunks indexed: ${totalChunksIndexed}\n` +
-        warningBlock +
+        failedBlock +
         skippedBlock +
         `\n💡 Next steps:\n` +
         `  • planflow_index_status() — verify staleness / breakdown\n` +
@@ -533,13 +563,24 @@ async function executeFilesMode(
 ) {
   logger.info('Indexing files (explicit mode)', { projectId, fileCount: files.length, dryRun })
 
+  // Auto-detect language for each file when the caller didn't specify one.
+  // Without this, markdown / docs files silently fail backend chunking
+  // because the backend's FileScanner only recognises programming languages
+  // and we'd otherwise pass `language: undefined`. Directory mode already
+  // does this — keeping the two modes symmetric is the whole point of the
+  // unified tool.
+  const filesWithLanguage = files.map((f) => ({
+    ...f,
+    language: f.language ?? detectLanguage(f.path),
+  }))
+
   if (dryRun) {
-    return createSuccessResult(formatDryRunPreview(null, files, [], []))
+    return createSuccessResult(formatDryRunPreview(null, filesWithLanguage, [], []))
   }
 
   try {
     const client = getApiClient()
-    const result = await client.indexProject(projectId, files)
+    const result = await client.indexProject(projectId, filesWithLanguage)
     const durationSec = (result.durationMs / 1000).toFixed(1)
     const skippedBlock = formatSkippedFilesBlock(result.skippedFiles ?? [])
 
@@ -658,6 +699,49 @@ function formatDryRunPreview(
   }
 
   return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Batch packing
+//
+// Greedy first-fit: walk the file list and start a new batch whenever the
+// current one would exceed either the count limit OR the byte limit by
+// adding the next file. This avoids splitting an already-good batch but
+// still ensures no batch ships with a single file > MAX_FILE_SIZE (those
+// were filtered out by scanDirectory anyway) or > MAX_BATCH_BYTES total.
+// ---------------------------------------------------------------------------
+
+function packBatches(files: ScannedFile[]): ScannedFile[][] {
+  const batches: ScannedFile[][] = []
+  let current: ScannedFile[] = []
+  let currentBytes = 0
+
+  for (const file of files) {
+    const size = Buffer.byteLength(file.content, 'utf-8')
+    const wouldOverflow =
+      current.length >= BATCH_SIZE || currentBytes + size > MAX_BATCH_BYTES
+
+    if (wouldOverflow && current.length > 0) {
+      batches.push(current)
+      current = []
+      currentBytes = 0
+    }
+    current.push(file)
+    currentBytes += size
+  }
+  if (current.length > 0) batches.push(current)
+
+  return batches
+}
+
+function formatFailedFilesBlock(failed: Array<{ path: string; error: string }>): string {
+  if (failed.length === 0) return ''
+  const lines: string[] = ['', `❗ ${failed.length} file(s) failed:`]
+  for (const f of failed.slice(0, 10)) {
+    lines.push(`  • ${f.path} — ${f.error.slice(0, 100)}`)
+  }
+  if (failed.length > 10) lines.push(`  ... and ${failed.length - 10} more`)
+  return lines.join('\n') + '\n'
 }
 
 type SkippedFileSummary = {

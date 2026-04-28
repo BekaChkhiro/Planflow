@@ -34,6 +34,7 @@ import { indexStatusTool } from './index-status.js'
 import { searchTool } from './search.js'
 import { contextTool } from './context.js'
 import { recallTool } from './recall.js'
+import { chunkTool } from './chunk.js'
 import { rememberTool } from './remember.js'
 
 export const tools: ToolDefinition[] = [
@@ -65,6 +66,7 @@ export const tools: ToolDefinition[] = [
   searchTool,
   contextTool,
   recallTool,
+  chunkTool,
   rememberTool,
 ]
 

@@ -25,6 +25,7 @@ import {
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
 import { matchesAny } from './_glob.js'
+import { coerceNumber, coerceBoolean } from './_coerce.js'
 
 // ---------------------------------------------------------------------------
 // Defaults
@@ -38,7 +39,22 @@ import { matchesAny } from './_glob.js'
  */
 const DEFAULT_MAX_RESPONSE_BYTES = 30_000
 /** Per-chunk slice when previewOnly is on (or auto-cap kicks in). */
-const PREVIEW_CHARS = 300
+const PREVIEW_CHARS = 600
+
+/**
+ * Multiplier applied to code-chunk scores after the backend returns them.
+ *
+ * Why this exists: BM25 over markdown chunks tends to dominate the top
+ * because docs paragraphs concentrate keyword terms in dense, short
+ * chunks. Code chunks (functions, classes) contain the answer the user
+ * usually wants but score lower in pure keyword space. A modest
+ * multiplier rebalances this without hiding genuinely-useful docs hits.
+ *
+ * Tuning: 1.15 was picked empirically — large enough to swap a code
+ * chunk in front of a docs chunk when their raw scores are within ~13%,
+ * small enough to leave a clearly-better docs chunk on top.
+ */
+const CODE_BOOST = 1.15
 
 /**
  * Paths that are indexed but rarely useful in search results — auto-
@@ -86,8 +102,7 @@ const SearchInputSchema = z.object({
     .string()
     .min(1, 'Query cannot be empty')
     .describe('Search query — natural language or keywords.'),
-  limit: z
-    .number()
+  limit: coerceNumber()
     .int()
     .min(1)
     .max(50)
@@ -108,14 +123,12 @@ const SearchInputSchema = z.object({
   excludePath: coercibleStringArray(DEFAULT_EXCLUDE_PATHS).describe(
     'Glob patterns to drop from results (single string or array). Defaults filter out generated/build paths so they do not dominate top-N. Pass [] to disable defaults.'
   ),
-  previewOnly: z
-    .boolean()
+  previewOnly: coerceBoolean()
     .default(false)
     .describe(
-      'true → 300-char previews per chunk. false (default) → full chunk content. Note: even with false, the tool will auto-switch to previews if the total response would exceed maxResponseBytes.'
+      'true → 600-char previews per chunk. false (default) → full chunk content. Note: even with false, the tool will auto-switch to previews if the total response would exceed maxResponseBytes.'
     ),
-  maxResponseBytes: z
-    .number()
+  maxResponseBytes: coerceNumber()
     .int()
     .min(1_000)
     .max(500_000)
@@ -221,8 +234,25 @@ Prerequisites:
             })
           : response.results
 
+      // Apply code-chunk score boost to rebalance markdown dominance, then
+      // re-sort. The chunk shape exposes `source: 'code' | 'docs'` (set by
+      // the backend); we treat anything with a `filePath` as a code chunk
+      // by default if `source` is missing on the wire.
+      const boosted = filtered
+        .map((r) => {
+          const chunk = r.chunk as { source?: string }
+          const isCode =
+            chunk.source === 'code' ||
+            (chunk.source === undefined && 'filePath' in r.chunk)
+          return {
+            ...r,
+            score: isCode ? r.score * CODE_BOOST : r.score,
+          }
+        })
+        .sort((a, b) => b.score - a.score)
+
       const droppedCount = response.results.length - filtered.length
-      const trimmed = filtered.slice(0, input.limit)
+      const trimmed = boosted.slice(0, input.limit)
       const total = trimmed.length
 
       logger.info('Search completed', {

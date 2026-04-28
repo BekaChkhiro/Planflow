@@ -16,6 +16,7 @@ import {
   createErrorResult,
   formatTable,
 } from './types.js'
+import { coerceNumber } from './_coerce.js'
 
 /**
  * Input schema for planflow_activity tool
@@ -53,8 +54,7 @@ const ActivityInputSchema = z.object({
     .enum(['task', 'comment', 'project', 'member', 'invitation'])
     .optional()
     .describe('Optional: Filter by entity type'),
-  limit: z
-    .number()
+  limit: coerceNumber()
     .int()
     .min(1)
     .max(100)

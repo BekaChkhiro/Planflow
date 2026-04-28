@@ -18,6 +18,7 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
+import { coerceNumber } from './_coerce.js'
 
 const ChangesInputSchema = z.object({
   projectId: z
@@ -29,8 +30,7 @@ const ChangesInputSchema = z.object({
     .enum(['task', 'knowledge', 'comment', 'project'])
     .optional()
     .describe('Optional: filter by entity type'),
-  limit: z
-    .number()
+  limit: coerceNumber()
     .int()
     .min(1)
     .max(200)

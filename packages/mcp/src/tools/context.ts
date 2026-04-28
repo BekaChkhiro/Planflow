@@ -18,6 +18,7 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
+import { coerceNumber } from './_coerce.js'
 
 const ContextInputSchema = z.object({
   projectId: z
@@ -33,22 +34,19 @@ const ContextInputSchema = z.object({
     .array(z.enum(['knowledge', 'vector', 'realtime', 'activity']))
     .optional()
     .describe('Which layers to include (default: all except vector unless query is provided)'),
-  knowledgeLimit: z
-    .number()
+  knowledgeLimit: coerceNumber()
     .int()
     .min(1)
     .max(200)
     .default(50)
     .describe('Max knowledge entries (default: 50)'),
-  changesLimit: z
-    .number()
+  changesLimit: coerceNumber()
     .int()
     .min(1)
     .max(200)
     .default(30)
     .describe('Max recent changes (default: 30)'),
-  activityLimit: z
-    .number()
+  activityLimit: coerceNumber()
     .int()
     .min(1)
     .max(200)

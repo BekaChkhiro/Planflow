@@ -40,8 +40,26 @@ import * as progress from '../progress.js'
 
 /** Files per batch when scanning a directory. Tuned for Voyage AI free tier. */
 const BATCH_SIZE = 20
-/** Delay between batches — safe for Voyage AI free tier (3 RPM). */
-const DELAY_MS = 21_000
+/**
+ * Delay between batches.
+ *
+ * Default 21,000ms = safe for Voyage AI's free tier (3 RPM, leaves margin).
+ * Override via `PLANFLOW_INDEX_DELAY_MS` env var when the user's Voyage
+ * account is on a paid tier:
+ *   • Tier 1 (paid, 2,000 RPM)        → 2000ms or even 1000ms
+ *   • Tier 2 ($100+ spent, 4,000 RPM) → 500ms
+ *   • Enterprise                       → 100ms
+ *
+ * Indexing 2,000 files drops from ~2 hours on free tier to ~10 minutes
+ * on Tier 1. Always-conservative default keeps free-tier users from
+ * accidentally getting rate-limited; opt-in for paid users.
+ */
+const DELAY_MS = (() => {
+  const raw = process.env['PLANFLOW_INDEX_DELAY_MS']
+  const parsed = raw ? parseInt(raw, 10) : NaN
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  return 21_000
+})()
 /** Per-file content cap; matches the backend limit. */
 const MAX_FILE_SIZE = 1024 * 1024
 /**
@@ -354,6 +372,13 @@ Tip — clean re-index after tightening excludes:
   index included files you've since added to exclude (e.g. Prisma
   generated client) and you want to drop them from search results.
   Requires owner/admin role on the project.
+
+Tip — speed up indexing on a paid Voyage account:
+  Default batch delay is 21s (free tier, 3 RPM). On Tier 1+ paid
+  accounts you can drop it dramatically by setting the env var
+  PLANFLOW_INDEX_DELAY_MS before launching the MCP server. 2,000ms is
+  a safe Tier 1 value (300+ RPM headroom); 500ms is fine on Tier 2.
+  A 2,000-file repo goes from ~2 hours → ~10 minutes on Tier 1.
 
 Incremental mode (DEFAULT — incremental:true):
   After the initial index, re-running planflow_index only re-embeds

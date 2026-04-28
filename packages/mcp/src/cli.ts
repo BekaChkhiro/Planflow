@@ -34,7 +34,17 @@ import { read as readProgress } from './progress.js'
 // ---------------------------------------------------------------------------
 
 const BATCH_SIZE = 20
-const DELAY_MS = 21_000
+/**
+ * Same env-var override as the in-session tool — `planflow-mcp index` from
+ * the CLI honours `PLANFLOW_INDEX_DELAY_MS` so paid Voyage tier users see
+ * the same speed-up here.
+ */
+const DELAY_MS = (() => {
+  const raw = process.env['PLANFLOW_INDEX_DELAY_MS']
+  const parsed = raw ? parseInt(raw, 10) : NaN
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  return 21_000
+})()
 const MAX_FILE_SIZE = 1024 * 1024
 const MAX_BATCH_BYTES = 4 * 1024 * 1024
 

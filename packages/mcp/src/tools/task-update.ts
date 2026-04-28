@@ -90,6 +90,15 @@ Status meanings:
   - DONE: Task completed
   - BLOCKED: Task cannot proceed (document blocker reason)
 
+Tip — when starting / finishing a task, prefer the compound tools
+that bundle related operations:
+  • planflow_task_start(taskId) — fetches context, signals working_on,
+    auto-searches code, all in one call.
+  • planflow_task_done(taskId, summary?) — marks DONE, posts a comment,
+    stops working_on, suggests a commit message.
+Use planflow_task_update directly only for BLOCKED transitions or when
+you specifically want to skip the side effects.
+
 You must be logged in first with planflow_login.`,
 
   inputSchema: TaskUpdateInputSchema,

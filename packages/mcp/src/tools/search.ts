@@ -168,6 +168,8 @@ Do NOT use this when:
   ❌ You're matching an exact string → use grep / Grep tool
   ❌ You only want the project's index health → planflow_index_status()
   ❌ You have a specific anchor (file/task/chunkId) → planflow_recall()
+  ❌ You're starting work on a known task → planflow_task_start auto-runs
+     a search for you AND fetches the task / comments / activity in one call
 
 Defaults that prevent common pitfalls:
   • excludePath drops generated/build paths so Prisma client noise doesn't

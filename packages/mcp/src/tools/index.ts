@@ -19,6 +19,9 @@ import { syncTool } from './sync.js'
 import { taskListTool } from './task-list.js'
 import { taskUpdateTool } from './task-update.js'
 import { taskNextTool } from './task-next.js'
+import { taskStartTool } from './task-start.js'
+import { taskDoneTool } from './task-done.js'
+import { taskProgressTool } from './task-progress.js'
 import { workingOnTool } from './working-on.js'
 
 // Activity / collaboration
@@ -51,6 +54,9 @@ export const tools: ToolDefinition[] = [
   taskListTool,
   taskUpdateTool,
   taskNextTool,
+  taskStartTool,
+  taskDoneTool,
+  taskProgressTool,
   workingOnTool,
 
   // Activity / collaboration

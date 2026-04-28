@@ -179,6 +179,9 @@ Do NOT use when:
   • You already have the file path AND just need the source — use Read directly
     (Read is faster and free; recall is for surrounding context like
     related knowledge entries and recent activity, not just the file body)
+  • You are STARTING work on a known task — planflow_task_start does
+    a richer task-anchored bundle (signals working_on + auto-searches
+    code) than recall(taskId) alone
 
 Prerequisites:
   • Logged in via planflow_login()

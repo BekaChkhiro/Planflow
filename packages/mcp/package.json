@@ -1,6 +1,6 @@
 {
   "name": "planflow-mcp",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "PlanFlow MCP Server for Claude Code - AI-native project management from your terminal",
   "author": "PlanFlow <hello@planflow.tools>",
   "license": "MIT",

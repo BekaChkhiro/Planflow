@@ -28,6 +28,7 @@ import {
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
 import { coerceNumber } from './_coerce.js'
+import * as progress from '../progress.js'
 
 const ExploreInputSchema = z.object({
   projectId: z
@@ -164,6 +165,12 @@ Prerequisites:
     }
 
     logger.info('Explore tool called', { projectId, intent: input.intent })
+
+    // Explore fans out to four parallel API calls; the wall-time is
+    // dominated by the slowest one (typically searchProject). Surfacing
+    // a "running" marker lets the user check from another terminal that
+    // the call hasn't hung silently.
+    progress.start('planflow_explore', `Exploring: ${input.intent}`)
 
     try {
       const client = getApiClient()
@@ -303,9 +310,14 @@ Prerequisites:
         `  4. (optional) Save the decision: planflow_remember(...) when the change captures a pattern`
       )
 
+      progress.complete(
+        `Explored "${input.intent}" — ${results.length} hits, ${knowledge.length} knowledge entries`
+      )
+
       return createSuccessResult(lines.join('\n'))
     } catch (error) {
       logger.error('Explore failed', { error: String(error) })
+      progress.fail(error instanceof Error ? error.message : String(error))
 
       if (error instanceof AuthError) {
         return createErrorResult(

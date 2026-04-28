@@ -32,6 +32,7 @@ import {
 import { getCurrentProjectId } from './use.js'
 import { minimatch } from './_glob.js'
 import { coerceBoolean } from './_coerce.js'
+import * as progress from '../progress.js'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -552,6 +553,15 @@ async function executeDirectoryMode(
     // generated client) shouldn't drag down its 19 batch-mates.
     const batches = packBatches(workingFiles)
 
+    // Start tracking progress. Total = files we'll actually re-embed, so
+    // skip-count from incremental mode doesn't inflate the denominator.
+    progress.start(
+      'planflow_index',
+      `Indexing ${workingFiles.length} file(s) in ${batches.length} batch(es)`,
+      workingFiles.length
+    )
+    const indexStart = Date.now()
+
     const client = getApiClient()
     let totalFilesIndexed = 0
     let totalChunksIndexed = 0
@@ -564,6 +574,21 @@ async function executeDirectoryMode(
       const batchNum = batchIdx + 1
 
       logger.info(`Indexing batch ${batchNum}/${batchCount}`, { batchSize: batch.length })
+
+      // ETA: extrapolate from average batch wall-time observed so far.
+      // For batch 1 we don't have data, so omit; the CLI will just hide
+      // the ETA line until we've got enough samples.
+      const elapsedMs = Date.now() - indexStart
+      const avgBatchMs = batchNum > 1 ? elapsedMs / (batchNum - 1) : null
+      const remainingBatches = batchCount - batchNum + 1
+      const etaSeconds =
+        avgBatchMs !== null ? Math.round((avgBatchMs * remainingBatches) / 1000) : undefined
+
+      progress.update({
+        label: `Batch ${batchNum} of ${batchCount} — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
+        current: totalFilesIndexed,
+        etaSeconds,
+      })
 
       try {
         const result = await client.indexProject(projectId, batch)
@@ -594,6 +619,10 @@ async function executeDirectoryMode(
             totalChunksIndexed += result.chunksIndexed
             if (result.skippedFiles) allSkipped.push(...result.skippedFiles)
             logger.debug('Per-file retry succeeded', { path: file.path })
+            progress.update({
+              label: `Batch ${batchNum} (per-file retry) — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
+              current: totalFilesIndexed,
+            })
           } catch (retryErr) {
             const detail = retryErr instanceof Error ? retryErr.message : String(retryErr)
             logger.error('Per-file retry failed', { path: file.path, error: detail })
@@ -605,6 +634,12 @@ async function executeDirectoryMode(
         }
       }
 
+      // Update after the batch settles (batched insert + skip+failed counts).
+      progress.update({
+        label: `Batch ${batchNum} of ${batchCount} done — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
+        current: totalFilesIndexed,
+      })
+
       if (batchIdx < batches.length - 1) {
         logger.info(`Waiting ${DELAY_MS}ms before next batch...`)
         await sleep(DELAY_MS)
@@ -613,6 +648,7 @@ async function executeDirectoryMode(
 
     if (totalFilesIndexed === 0 && failedFiles.length > 0) {
       const firstError = failedFiles[0]?.error ?? 'unknown error'
+      progress.fail(`All batches errored. First error: ${firstError}`)
       return createErrorResult(
         `❌ Indexing failed — every file errored.\n\n` +
           `📁 Directory: ${dirPath}\n` +
@@ -640,6 +676,12 @@ async function executeDirectoryMode(
         ? `🗑️  Removed (no longer on disk): ${removedMissingFiles.length}\n`
         : ''
 
+    progress.complete(
+      `Indexed ${totalFilesIndexed} file(s), ${totalChunksIndexed} chunk(s)` +
+        (unchangedLocally > 0 ? `, ${unchangedLocally} unchanged` : '') +
+        (failedFiles.length > 0 ? `, ${failedFiles.length} failed` : '')
+    )
+
     return createSuccessResult(
       purgeNotice +
         `✅ Indexing complete!\n\n` +
@@ -658,6 +700,7 @@ async function executeDirectoryMode(
     )
   } catch (error) {
     logger.error('Directory indexing failed', { error: String(error) })
+    progress.fail(error instanceof Error ? error.message : String(error))
     return mapIndexError(error, projectId)
   }
 }
@@ -689,11 +732,21 @@ async function executeFilesMode(
     return createSuccessResult(formatDryRunPreview(null, filesWithLanguage, [], []))
   }
 
+  progress.start(
+    'planflow_index',
+    `Indexing ${filesWithLanguage.length} file(s) (explicit files mode)`,
+    filesWithLanguage.length
+  )
+
   try {
     const client = getApiClient()
     const result = await client.indexProject(projectId, filesWithLanguage)
     const durationSec = (result.durationMs / 1000).toFixed(1)
     const skippedBlock = formatSkippedFilesBlock(result.skippedFiles ?? [])
+
+    progress.complete(
+      `Indexed ${result.filesIndexed} file(s), ${result.chunksIndexed} chunk(s) in ${durationSec}s`
+    )
 
     return createSuccessResult(
       purgeNotice +
@@ -709,6 +762,7 @@ async function executeFilesMode(
     )
   } catch (error) {
     logger.error('Indexing failed', { error: String(error) })
+    progress.fail(error instanceof Error ? error.message : String(error))
     return mapIndexError(error, projectId)
   }
 }

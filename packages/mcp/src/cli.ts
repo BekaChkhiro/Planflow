@@ -27,6 +27,7 @@ import {
 } from './config.js'
 import { logger } from './logger.js'
 import { CLAUDE_MD_SECTION, CLAUDE_MD_VERSION, spliceSection } from './cli-init-template.js'
+import { read as readProgress } from './progress.js'
 
 // ---------------------------------------------------------------------------
 // Shared scanning logic — kept aligned with planflow_index defaults.
@@ -401,6 +402,106 @@ export function runInitCommand(args: string[]): number {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: progress
+//
+// Reads ~/.config/planflow/progress.json — written by long-running tools
+// like planflow_index, planflow_explore, planflow_recall — and pretty-prints
+// the current state. With --watch, refreshes every second so the user can
+// keep it up in another terminal during a slow indexing run.
+// ---------------------------------------------------------------------------
+
+function formatDuration(ms: number): string {
+  const totalSec = Math.round(ms / 1000)
+  if (totalSec < 60) return `${totalSec}s`
+  const min = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  return sec > 0 ? `${min}m ${sec}s` : `${min}m`
+}
+
+function renderProgress(): string {
+  const state = readProgress()
+  if (!state) {
+    return 'planflow-mcp: no operation in progress.\n'
+  }
+
+  const lines: string[] = []
+  const elapsedMs = Date.now() - new Date(state.startedAt).getTime()
+  const sinceLastMs = Date.now() - new Date(state.lastUpdateAt).getTime()
+
+  // Status badge
+  const badge = (() => {
+    switch (state.status) {
+      case 'running':
+        return '🔄'
+      case 'done':
+        return '✅'
+      case 'failed':
+        return '❌'
+      case 'stalled':
+        return '⚠️ '
+    }
+  })()
+
+  lines.push(`${badge} ${state.tool} — ${state.status.toUpperCase()}`)
+  lines.push(`   ${state.label}`)
+
+  if (state.current !== undefined && state.total !== undefined && state.total > 0) {
+    const pct = Math.min(100, Math.round((state.current / state.total) * 100))
+    const barLen = 20
+    const filled = Math.round((pct / 100) * barLen)
+    const bar = '█'.repeat(filled) + '░'.repeat(barLen - filled)
+    lines.push(`   [${bar}] ${pct}% (${state.current}/${state.total})`)
+  }
+
+  lines.push(`   ⏱  Started ${formatDuration(elapsedMs)} ago`)
+
+  if (state.status === 'running' && state.etaSeconds !== undefined) {
+    lines.push(`   ⏳ ETA ~${formatDuration(state.etaSeconds * 1000)} remaining`)
+  }
+
+  if (state.status === 'running') {
+    lines.push(`   ✓ Last update ${formatDuration(sinceLastMs)} ago`)
+  }
+
+  if (state.status === 'stalled') {
+    lines.push(
+      `   No update for ${formatDuration(sinceLastMs)} — likely stuck.\n` +
+        `   Common causes: Voyage rate limit, network drop, or process killed.`
+    )
+  }
+
+  if (state.status === 'failed' && state.error) {
+    lines.push(`   Error: ${state.error}`)
+  }
+
+  if (state.status === 'done' && state.summary) {
+    lines.push(`   ${state.summary}`)
+    lines.push(`   Total time: ${formatDuration(elapsedMs)}`)
+  }
+
+  return lines.join('\n') + '\n'
+}
+
+export async function runProgressCommand(args: string[]): Promise<number> {
+  const watch = args.includes('--watch') || args.includes('-w')
+
+  if (!watch) {
+    process.stdout.write(renderProgress())
+    return 0
+  }
+
+  // --watch: redraw every second. Loop until the user kills us; when the
+  // operation finishes (status 'done' / 'failed') we keep refreshing so
+  // the user sees the final summary, but they can Ctrl+C any time.
+  const ANSI_CLEAR = '\x1b[2J\x1b[H'
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    process.stdout.write(ANSI_CLEAR + renderProgress())
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Subcommand: help
 // ---------------------------------------------------------------------------
 
@@ -417,6 +518,8 @@ export function runHelpCommand(): number {
       '                                (every future Claude Code session uses planflow tools)',
       '  planflow-mcp index            Incremental index of the current directory',
       '  planflow-mcp status           Print index status for the linked project',
+      '  planflow-mcp progress         Show current long-running tool progress',
+      '  planflow-mcp progress -w      Watch mode — refresh every second (Ctrl+C to exit)',
       '  planflow-mcp help             Show this message',
       '',
       'Recommended first-time setup (one machine):',
@@ -464,6 +567,9 @@ export async function dispatchCli(args: string[]): Promise<boolean> {
       break
     case 'init':
       exitCode = runInitCommand(args.slice(1))
+      break
+    case 'progress':
+      exitCode = await runProgressCommand(args.slice(1))
       break
     case 'help':
     case '-h':

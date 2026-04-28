@@ -32,6 +32,7 @@ import {
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
 import { coerceNumber } from './_coerce.js'
+import * as progress from '../progress.js'
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -220,9 +221,17 @@ Prerequisites:
       depth: input.depth,
     })
 
+    // Recall fans out to several API calls (and an extra search call in
+    // deep mode). Surface a progress marker so the user can verify the
+    // call is alive from another terminal.
+    const anchor = input.filePath ?? input.taskId ?? input.chunkId ?? 'unknown'
+    progress.start('planflow_recall', `Recalling ${anchor} (${input.depth})`)
+
     try {
       if (input.taskId) {
-        return await recallByTask(projectId, input.taskId, input.depth, input.query)
+        const result = await recallByTask(projectId, input.taskId, input.depth, input.query)
+        progress.complete(`Recalled task ${input.taskId}`)
+        return result
       }
 
       // filePath / chunkId both resolve to a file path
@@ -236,10 +245,11 @@ Prerequisites:
       }
 
       if (!resolvedPath) {
+        progress.fail('Could not resolve an anchor file path')
         return createErrorResult('❌ Could not resolve an anchor file path.')
       }
 
-      return await recallByFile(
+      const result = await recallByFile(
         projectId,
         resolvedPath,
         highlightLine,
@@ -247,8 +257,11 @@ Prerequisites:
         input.query,
         input.contentLimit
       )
+      progress.complete(`Recalled file ${resolvedPath}`)
+      return result
     } catch (error) {
       logger.error('Recall failed', { error: String(error) })
+      progress.fail(error instanceof Error ? error.message : String(error))
 
       if (error instanceof AuthError) {
         return createErrorResult(

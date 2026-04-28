@@ -166,18 +166,6 @@ You must be logged in first with planflow_login.`,
         total: response.totalCount,
       })
 
-      // T6.2: Auto-signal "working on" status when viewing task comments
-      // Viewing comments indicates active engagement with the task
-      try {
-        await client.startWorkingOn(input.projectId, input.taskId)
-        logger.debug('Auto-started working on task from comments view', { taskId: input.taskId })
-      } catch (workingOnError) {
-        // Non-fatal: log but don't fail the comments fetch
-        logger.debug('Failed to update working on status from comments view (non-fatal)', {
-          error: String(workingOnError),
-        })
-      }
-
       // Handle no comments
       if (response.comments.length === 0) {
         return createSuccessResult(

@@ -124,18 +124,6 @@ You must be logged in first with planflow_login.`,
         taskId: input.taskId,
       })
 
-      // T6.2: Auto-signal "working on" status when commenting on a task
-      // Adding a comment is a strong signal that user is actively working on this task
-      try {
-        await client.startWorkingOn(input.projectId, input.taskId)
-        logger.debug('Auto-started working on task from comment', { taskId: input.taskId })
-      } catch (workingOnError) {
-        // Non-fatal: log but don't fail the comment creation
-        logger.debug('Failed to update working on status from comment (non-fatal)', {
-          error: String(workingOnError),
-        })
-      }
-
       // Build success message
       const isReply = !!input.parentId
       const actionWord = isReply ? 'Reply' : 'Comment'

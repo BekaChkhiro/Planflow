@@ -155,44 +155,48 @@ Prerequisites:
       sections.push('')
 
       // ── Knowledge Layer ──
+      // Show every entry the API returned — we already passed knowledgeLimit
+      // through to the server, so there is no need to clip again here.
       if (ctx.layers.knowledge && ctx.layers.knowledge.entries.length > 0) {
         sections.push(`📚 Knowledge (${ctx.layers.knowledge.total} entries)`)
-        for (const entry of ctx.layers.knowledge.entries.slice(0, 10)) {
+        for (const entry of ctx.layers.knowledge.entries) {
           const typeIcon = getTypeIcon(entry.type)
-          const preview = entry.content.length > 200
-            ? entry.content.slice(0, 200) + '...'
-            : entry.content
           sections.push(`  ${typeIcon} ${entry.title}`)
-          sections.push(`     ${preview.replace(/\n/g, '\n     ')}`)
+          sections.push(`     ${entry.content.replace(/\n/g, '\n     ')}`)
         }
-        if (ctx.layers.knowledge.entries.length > 10) {
-          sections.push(`  ... and ${ctx.layers.knowledge.entries.length - 10} more`)
+        if (ctx.layers.knowledge.total > ctx.layers.knowledge.entries.length) {
+          const hidden = ctx.layers.knowledge.total - ctx.layers.knowledge.entries.length
+          sections.push(`  ... ${hidden} more (raise knowledgeLimit to fetch them)`)
         }
         sections.push('')
       }
 
       // ── Vector Layer ──
+      // Match the structured format used by planflow_search so an LLM can
+      // process both responses with the same parsing rules.
       if (ctx.layers.vector && ctx.layers.vector.results.length > 0) {
         sections.push(`🧠 Vector Search: "${ctx.layers.vector.query}" (${ctx.layers.vector.total} results)`)
         for (let i = 0; i < ctx.layers.vector.results.length; i++) {
           const r = ctx.layers.vector.results[i]!
-          const score = Math.round(r.score * 100)
-          const preview = r.chunk.content.length > 250
-            ? r.chunk.content.slice(0, 250) + '...'
-            : r.chunk.content
           const isCode = 'filePath' in r.chunk
+          const scoreFmt = r.score.toFixed(3)
+          sections.push(`  ━━━ #${i + 1} ━━━`)
           if (isCode) {
-            sections.push(`  #${i + 1} ${r.chunk.filePath} — ${r.chunk.name} (${score}%)`)
+            sections.push(`     file:    ${r.chunk.filePath}`)
+            sections.push(`     name:    ${r.chunk.name}`)
           } else {
-            sections.push(`  #${i + 1} 📄 ${r.chunk.source} — ${r.chunk.title} (${score}%)`)
+            sections.push(`     source:  ${(r.chunk as { source: string }).source}`)
+            sections.push(`     title:   ${(r.chunk as { title: string }).title}`)
           }
-          sections.push(`     ${preview.replace(/\n/g, '\n     ')}`)
+          sections.push(`     score:   ${scoreFmt}`)
+          sections.push(`     content:`)
+          sections.push(`     ${r.chunk.content.replace(/\n/g, '\n     ')}`)
         }
         sections.push('')
       } else if (input.query) {
         sections.push(`🧠 Vector Search: "${input.query}"`)
         sections.push(`  No vector results. The project may not be indexed yet.`)
-        sections.push(`  Run planflow_index() first to index the codebase.`)
+        sections.push(`  Check status: planflow_index_status()`)
         sections.push('')
       }
 
@@ -207,7 +211,7 @@ Prerequisites:
         }
         if (ctx.layers.realtime.recentChanges.length > 0) {
           sections.push(`  Recent changes:`)
-          for (const c of ctx.layers.realtime.recentChanges.slice(0, 5)) {
+          for (const c of ctx.layers.realtime.recentChanges) {
             sections.push(`    • ${c.description || '(no description)'}`)
           }
         }
@@ -217,13 +221,14 @@ Prerequisites:
       // ── Activity Layer ──
       if (ctx.layers.activity && ctx.layers.activity.entries.length > 0) {
         sections.push(`📋 Activity (${ctx.layers.activity.total} total)`)
-        for (const a of ctx.layers.activity.entries.slice(0, 5)) {
+        for (const a of ctx.layers.activity.entries) {
           const actor = a.actorName || 'Unknown'
           const desc = a.description || a.action
           sections.push(`  • ${actor}: ${desc}`)
         }
-        if (ctx.layers.activity.entries.length > 5) {
-          sections.push(`  ... and ${ctx.layers.activity.entries.length - 5} more`)
+        if (ctx.layers.activity.total > ctx.layers.activity.entries.length) {
+          const hidden = ctx.layers.activity.total - ctx.layers.activity.entries.length
+          sections.push(`  ... ${hidden} more (raise activityLimit to fetch them)`)
         }
         sections.push('')
       }

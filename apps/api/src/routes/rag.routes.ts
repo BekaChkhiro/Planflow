@@ -243,4 +243,51 @@ ragRoutes.get('/:projectId/index-status', auth, async (c) => {
   }
 })
 
+// ---------------------------------------------------------------------------
+// GET /projects/:projectId/index/file?path=<relative path>
+//
+// Returns every indexed chunk for a single file, ordered by start line.
+// Used by `planflow_recall` to assemble file-anchored context without
+// burning an embedding call.
+// ---------------------------------------------------------------------------
+
+ragRoutes.get('/:projectId/index/file', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('projectId')
+    const db = getDbClient()
+
+    if (!UUID_REGEX.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const access = await getProjectAccess(db, projectId, user.id)
+    if (!access) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    const filePath = c.req.query('path')
+    if (!filePath || filePath.trim().length === 0) {
+      return c.json(
+        { success: false, error: 'Query parameter "path" is required (relative file path)' },
+        400
+      )
+    }
+
+    const chunks = await ragService.getFileChunks(projectId, filePath.trim())
+
+    return c.json({
+      success: true,
+      data: {
+        filePath: filePath.trim(),
+        chunks,
+        total: chunks.length,
+      },
+    })
+  } catch (error) {
+    log.error({ error, route: 'GET /:projectId/index/file' }, 'RAG file chunks error')
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
 export { ragRoutes }

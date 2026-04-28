@@ -133,6 +133,65 @@ export class VectorStore {
     return query.toArray();
   }
 
+  /**
+   * Aggregate index metadata for status reporting.
+   *
+   * Avoids pulling the `vector` and `content` columns to keep the scan cheap
+   * even on large indexes (a 1024-dim float vector per row dominates payload
+   * size). Computes language/source breakdowns and the most recent index
+   * timestamp in JS.
+   */
+  async getStats(): Promise<{
+    totalChunks: number;
+    indexedFiles: number;
+    byLanguage: Record<string, number>;
+    bySource: Record<string, number>;
+    lastIndexedAt: string | null;
+  }> {
+    this._ensureInit();
+    if (!this.table) {
+      return {
+        totalChunks: 0,
+        indexedFiles: 0,
+        byLanguage: {},
+        bySource: {},
+        lastIndexedAt: null,
+      };
+    }
+
+    const rows = await this.table
+      .query()
+      .select(["language", "source", "indexed_at", "file_path"])
+      .toArray();
+
+    const byLanguage: Record<string, number> = {};
+    const bySource: Record<string, number> = {};
+    const files = new Set<string>();
+    let lastIndexedAt: string | null = null;
+
+    for (const row of rows) {
+      const lang = String(row["language"] ?? "unknown");
+      const src = String(row["source"] ?? "unknown");
+      const indexedAt = row["indexed_at"] as string | null | undefined;
+      const filePath = row["file_path"] as string | undefined;
+
+      byLanguage[lang] = (byLanguage[lang] ?? 0) + 1;
+      bySource[src] = (bySource[src] ?? 0) + 1;
+      if (filePath) files.add(filePath);
+      if (indexedAt && (!lastIndexedAt || indexedAt > lastIndexedAt)) {
+        lastIndexedAt = indexedAt;
+      }
+    }
+
+    return {
+      totalChunks: rows.length,
+      indexedFiles: files.size,
+      byLanguage,
+      bySource,
+      lastIndexedAt,
+    };
+  }
+
   /** Close the database connection */
   async close(): Promise<void> {
     if (this.db) {

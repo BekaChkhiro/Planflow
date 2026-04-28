@@ -13,7 +13,12 @@ import type { z } from 'zod'
 export type ToolResult = CallToolResult
 
 /**
- * MCP Tool definition interface
+ * MCP Tool definition interface.
+ *
+ * `inputSchema` is typed as `z.ZodTypeAny` so that schemas built with
+ * `.refine()` / `.transform()` (which return `ZodEffects`) are assignable
+ * here — Zod's variance makes a generic `z.ZodType<TInput>` slot reject
+ * those even though they produce the same parsed type at runtime.
  */
 export interface ToolDefinition<TInput = unknown> {
   /** Unique tool name (e.g., "planflow_login") */
@@ -23,7 +28,7 @@ export interface ToolDefinition<TInput = unknown> {
   description: string
 
   /** Zod schema for input validation */
-  inputSchema: z.ZodType<TInput>
+  inputSchema: z.ZodTypeAny
 
   /** Tool implementation function */
   execute: (input: TInput) => Promise<ToolResult>

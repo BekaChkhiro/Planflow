@@ -99,7 +99,7 @@ Prerequisites:
       const client = getApiClient()
 
       if (input.action === 'start' && input.taskId) {
-        const result = await client.startWorkingOn(input.projectId, input.taskId)
+        const result = await client.startWorkingOn(projectId, input.taskId)
         logger.info('Started working on task', { taskId: input.taskId })
 
         return createSuccessResult(

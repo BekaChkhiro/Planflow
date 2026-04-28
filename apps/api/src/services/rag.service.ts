@@ -287,26 +287,122 @@ export class RagService {
   }
 
   /**
-   * Get the index status for a project: whether it's indexed and how many
-   * chunks are stored.
+   * Get the index status for a project, including aggregated stats useful
+   * for an LLM-facing status report (file/chunk counts, language breakdown,
+   * how recently the project was indexed).
+   *
+   * `lastIndexedAt` is the max `indexed_at` across all stored chunks; clients
+   * can compare it against repo activity to decide whether re-indexing is
+   * needed.
    */
-  async getIndexStatus(projectId: string): Promise<{ indexed: boolean; chunks: number }> {
+  async getIndexStatus(projectId: string): Promise<{
+    indexed: boolean
+    chunks: number
+    indexedFiles: number
+    byLanguage: Record<string, number>
+    bySource: Record<string, number>
+    lastIndexedAt: string | null
+  }> {
+    const empty = {
+      indexed: false,
+      chunks: 0,
+      indexedFiles: 0,
+      byLanguage: {},
+      bySource: {},
+      lastIndexedAt: null,
+    }
+
     const dbPath = getProjectDbPath(projectId)
 
     try {
       await access(dbPath)
     } catch {
-      return { indexed: false, chunks: 0 }
+      return empty
     }
 
     const store = new VectorStore(dbPath)
     try {
       await store.init()
-      const chunks = await store.count()
+      const stats = await store.getStats()
       await store.close()
-      return { indexed: true, chunks }
+      return {
+        indexed: stats.totalChunks > 0,
+        chunks: stats.totalChunks,
+        indexedFiles: stats.indexedFiles,
+        byLanguage: stats.byLanguage,
+        bySource: stats.bySource,
+        lastIndexedAt: stats.lastIndexedAt,
+      }
     } catch {
-      return { indexed: false, chunks: 0 }
+      return empty
+    }
+  }
+
+  /**
+   * Fetch every chunk stored for a single file path, ordered by start line.
+   *
+   * Powers the file-anchored mode of `planflow_recall`: an LLM can ask
+   * "what do you know about src/foo.ts?" and we return the file's full
+   * indexed structure (every function / class / module chunk) without
+   * running an embedding query.
+   *
+   * Returns an empty array if the project isn't indexed or the file
+   * isn't present in the index.
+   */
+  async getFileChunks(
+    projectId: string,
+    filePath: string
+  ): Promise<
+    Array<{
+      id: string
+      filePath: string
+      kind: string
+      name: string
+      language: string
+      source: string
+      startLine: number
+      endLine: number
+      indexedAt: string | null
+      content: string
+    }>
+  > {
+    const dbPath = getProjectDbPath(projectId)
+
+    try {
+      await access(dbPath)
+    } catch {
+      return []
+    }
+
+    const store = new VectorStore(dbPath)
+    try {
+      await store.init()
+      // Escape single quotes for SQL LIKE-style match. LanceDB uses standard
+      // SQL string escaping (double single-quote).
+      const escaped = filePath.replace(/'/g, "''")
+      const rows = await store.scan(`file_path = '${escaped}'`)
+
+      const chunks = rows.map((row) => ({
+        id: String(row['id'] ?? ''),
+        filePath: String(row['file_path'] ?? filePath),
+        kind: String(row['kind'] ?? 'unknown'),
+        name: String(row['name'] ?? ''),
+        language: String(row['language'] ?? 'unknown'),
+        source: String(row['source'] ?? 'code'),
+        startLine: Number(row['start_line'] ?? 0),
+        endLine: Number(row['end_line'] ?? 0),
+        indexedAt: (row['indexed_at'] as string | null) ?? null,
+        content: String(row['content'] ?? ''),
+      }))
+
+      // Order by appearance in the file — matches a reader's mental model.
+      chunks.sort((a, b) => a.startLine - b.startLine)
+      return chunks
+    } catch (err) {
+      log.warn({ error: err, projectId, filePath }, 'Failed to get file chunks')
+      return []
+    } finally {
+      await store.close()
     }
   }
 }

@@ -944,10 +944,45 @@ export class ApiClient {
   }
 
   /**
-   * Get the project's index status (is it indexed, how many chunks)
+   * Get the project's index status (is it indexed, how many chunks, language
+   * breakdown, when last indexed).
    */
-  async getIndexStatus(projectId: string): Promise<{ indexed: boolean; chunks: number }> {
+  async getIndexStatus(projectId: string): Promise<{
+    indexed: boolean
+    chunks: number
+    indexedFiles: number
+    byLanguage: Record<string, number>
+    bySource: Record<string, number>
+    lastIndexedAt: string | null
+  }> {
     return this.request('GET', `/projects/${projectId}/index-status`)
+  }
+
+  /**
+   * Fetch every indexed chunk for a single file path (ordered by start line).
+   * Returns an empty list if the file is not in the index.
+   */
+  async getFileChunks(
+    projectId: string,
+    filePath: string
+  ): Promise<{
+    filePath: string
+    chunks: Array<{
+      id: string
+      filePath: string
+      kind: string
+      name: string
+      language: string
+      source: string
+      startLine: number
+      endLine: number
+      indexedAt: string | null
+      content: string
+    }>
+    total: number
+  }> {
+    const params = new URLSearchParams({ path: filePath })
+    return this.request('GET', `/projects/${projectId}/index/file?${params.toString()}`)
   }
 
   /**

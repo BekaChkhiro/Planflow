@@ -48,6 +48,12 @@ const SearchInputSchema = z.object({
     .enum(['code', 'docs', 'all'])
     .default('all')
     .describe('Source filter: code, docs, or all (default: all)'),
+  previewOnly: z
+    .boolean()
+    .default(false)
+    .describe(
+      'When true, return only short content previews (300 chars). When false (default), return full chunk content — recommended for LLM consumers so they can reason over real code without re-fetching.'
+    ),
 })
 
 type SearchInput = z.infer<typeof SearchInputSchema>
@@ -60,31 +66,42 @@ type SearchInput = z.infer<typeof SearchInputSchema>
 export const searchTool: ToolDefinition<SearchInput> = {
   name: 'planflow_search',
 
-  description: `Search a PlanFlow project's indexed codebase.
+  description: `Hybrid semantic + keyword search across a PlanFlow project's indexed codebase and documentation.
 
-Performs hybrid search combining:
-  • Vector similarity (semantic meaning via Voyage-code-3 embeddings)
+Combines:
+  • Vector similarity (Voyage-code-3 embeddings — semantic meaning)
   • BM25 keyword search (exact term matching)
+Fused with Reciprocal Rank Fusion (RRF) into a single ranked list.
 
-Results are fused with Reciprocal Rank Fusion for optimal ranking.
+Each result returns the full chunk content (a complete function/class/section)
+unless previewOnly:true is set. The chunk is the unit you should reason over —
+do not assume it is partial.
 
-Usage:
-  planflow_search(projectId: "uuid", query: "authentication middleware")
-  planflow_search(projectId: "uuid", query: "user login flow", limit: 5)
-  planflow_search(projectId: "uuid", query: "database connection", language: "typescript")
-  planflow_search(projectId: "uuid", query: "payment handler", kind: "function")
+Output is structured (key:value blocks per result) so you can extract:
+  file, lines, kind, name, language, match (vector|keyword|hybrid), score, chunkId
+
+Use when:
+  • Looking up where/how something is implemented
+  • Discovering the right file before editing
+  • Finding examples of a pattern in the codebase
+
+Do NOT use when:
+  • You just want to know if the project is indexed → planflow_index_status()
+  • You want a single file's full surrounding context → planflow_recall()  (coming)
+  • You need recent changes / activity → planflow_changes() / planflow_activity()
 
 Parameters:
-  - projectId (required): Project UUID
-  - query (required): Natural language or keyword search query
-  - limit (optional): Max results (default: 10, max: 50)
-  - language (optional): Filter by language (typescript, python, go, rust, etc.)
+  - projectId (optional): Project UUID. Uses current project from planflow_use().
+  - query (required): Natural language or keyword query
+  - limit (optional): Max results (default 10, max 50)
+  - language (optional): Filter by programming language
   - kind (optional): Filter by code kind (function, class, method, interface, type)
-  - source (optional): Filter source type — code | docs | all (default: all)
+  - source (optional): code | docs | all (default all)
+  - previewOnly (optional): true → 300-char previews. false (default) → full chunks.
 
 Prerequisites:
-  • The project must be indexed first with planflow_index()
-  • You must be logged in with planflow_login()`,
+  • Logged in via planflow_login()
+  • Project indexed via planflow_index()`,
 
   inputSchema: SearchInputSchema,
 
@@ -132,56 +149,62 @@ Prerequisites:
 
       if (total === 0) {
         return createSuccessResult(
-          `🔍 No results found for "${input.query}"\n\n` +
-            '💡 Try:\n' +
-            '  • Using different keywords or phrasing\n' +
-            '  • Searching with broader terms\n' +
-            '  • Ensuring the project is indexed (planflow_index)\n' +
-            '  • Removing filters (language, kind) if applied'
+          `No results for "${input.query}"\n\n` +
+            'Try:\n' +
+            '  • Different keywords or phrasing\n' +
+            '  • Broader terms\n' +
+            '  • Check index status: planflow_index_status()\n' +
+            '  • Remove filters (language, kind) if applied'
         )
       }
 
-      // Format results
       const lines: string[] = [
-        `🔍 Search Results for "${input.query}"`,
-        `${total} result${total === 1 ? '' : 's'} found\n`,
+        `Search: "${input.query}"`,
+        `${total} result${total === 1 ? '' : 's'}`,
+        '',
       ]
 
       for (let i = 0; i < response.results.length; i++) {
         const r = response.results[i]!
         const chunk = r.chunk
-        const score = Math.round(r.score * 100)
-        const sourceIcon = r.source === 'vector' ? '🧠' : r.source === 'keyword' ? '🔤' : '⚡'
+        const isCode = 'filePath' in chunk
+        const rank = i + 1
 
-        // Truncate content preview
-        const preview = chunk.content.length > 300
-          ? chunk.content.slice(0, 300) + '...'
+        // Numeric score is more honest than a percentage — RRF / cosine
+        // distance scores aren't naturally a probability.
+        const scoreFmt = r.score.toFixed(3)
+
+        const content = input.previewOnly && chunk.content.length > 300
+          ? chunk.content.slice(0, 300) + '\n... [truncated, set previewOnly:false for full chunk]'
           : chunk.content
 
-        // Handle both CodeChunk and DocChunk
-        const isCode = 'filePath' in chunk
+        lines.push(`━━━ #${rank} ━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+
         if (isCode) {
-          lines.push(
-            `${sourceIcon} #${i + 1}  ${chunk.filePath}:${chunk.startLine}-${chunk.endLine}  (score: ${score}%)`,
-            `   kind: ${chunk.kind} | name: ${chunk.name} | lang: ${chunk.language}`,
-            `   ${preview.replace(/\n/g, '\n   ')}`,
-            ''
-          )
+          lines.push(`file:      ${chunk.filePath}`)
+          lines.push(`lines:     ${chunk.startLine}-${chunk.endLine}`)
+          lines.push(`kind:      ${chunk.kind}`)
+          lines.push(`name:      ${chunk.name}`)
+          lines.push(`language:  ${chunk.language}`)
         } else {
-          lines.push(
-            `${sourceIcon} #${i + 1}  📄 ${chunk.source} — ${chunk.title}  (score: ${score}%)`,
-            `   ${preview.replace(/\n/g, '\n   ')}`,
-            ''
-          )
+          lines.push(`source:    ${chunk.source}`)
+          lines.push(`title:     ${chunk.title}`)
         }
+
+        lines.push(`match:     ${r.source}`)
+        lines.push(`score:     ${scoreFmt}`)
+        lines.push(`chunkId:   ${chunk.id}`)
+        lines.push('')
+        lines.push('content:')
+        lines.push(content)
+        lines.push('')
       }
 
-      lines.push(
-        '💡 Tips:',
-        '  • planflow_search(projectId: "...", query: "...", limit: 20) — more results',
-        '  • planflow_search(projectId: "...", query: "...", language: "typescript") — filter by language',
-        '  • planflow_context(projectId: "...", query: "...", layers: ["vector"]) — get context with vector results'
-      )
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      lines.push('Next steps:')
+      lines.push('  • Refine: add language/kind filters or rephrase query')
+      lines.push('  • Wider: increase limit (max 50)')
+      lines.push('  • Compact: previewOnly:true for shorter previews')
 
       return createSuccessResult(lines.join('\n'))
     } catch (error) {

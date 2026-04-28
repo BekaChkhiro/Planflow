@@ -246,20 +246,6 @@ You must be logged in first with planflow_login.`,
         total: response.pagination.total,
       })
 
-      // T6.2: Auto-signal "working on" status when viewing task-specific activity
-      // Viewing a task's activity indicates active engagement with that task
-      if (input.taskId) {
-        try {
-          await client.startWorkingOn(input.projectId, input.taskId)
-          logger.debug('Auto-started working on task from activity view', { taskId: input.taskId })
-        } catch (workingOnError) {
-          // Non-fatal: log but don't fail the activity fetch
-          logger.debug('Failed to update working on status from activity view (non-fatal)', {
-            error: String(workingOnError),
-          })
-        }
-      }
-
       // Handle empty activity
       if (response.activities.length === 0) {
         const filterMessage = input.taskId

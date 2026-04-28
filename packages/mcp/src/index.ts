@@ -1,36 +1,41 @@
 #!/usr/bin/env node
 
 /**
- * PlanFlow MCP Server
+ * PlanFlow MCP entry point.
  *
- * This server provides tools for Claude Code to interact with PlanFlow,
- * enabling project management directly from the terminal.
+ * Default mode (no args): starts the MCP server over stdio for Claude /
+ * IDE clients.
  *
- * Available tools:
- * - planflow_login    - Authenticate with PlanFlow
- * - planflow_logout   - Clear stored credentials
- * - planflow_whoami   - Show current user info
- * - planflow_projects - List all projects
- * - planflow_create   - Create a new project
- * - planflow_sync     - Sync project plan with cloud
- * - planflow_task_list   - List tasks in a project
- * - planflow_task_update - Update task status
- * - planflow_task_next   - Get next recommended task
- * - planflow_notifications - View notifications
+ * CLI mode (with args): dispatches a one-shot subcommand and exits —
+ * see ./cli.ts for the subcommand catalogue. Lets us reuse the same
+ * binary for git hooks ("planflow-mcp index") without forcing a second
+ * package install.
  */
 
 import { startServer } from './server.js'
 import { logger } from './logger.js'
+import { dispatchCli } from './cli.js'
 
 // Set log level based on environment
 if (process.env['PLANFLOW_DEBUG'] === 'true') {
   logger.setLevel('debug')
 }
 
-// Start the MCP server
-startServer().catch((error) => {
-  logger.error('Failed to start server', {
-    error: error instanceof Error ? error.message : String(error),
-  })
-  process.exit(1)
-})
+const args = process.argv.slice(2)
+
+;(async () => {
+  // CLI subcommand path — dispatchCli calls process.exit() itself when
+  // it matches, so anything below this only runs in MCP server mode.
+  const handled = await dispatchCli(args)
+  if (handled) return
+
+  // Default: start the MCP server
+  try {
+    await startServer()
+  } catch (error) {
+    logger.error('Failed to start server', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    process.exit(1)
+  }
+})()

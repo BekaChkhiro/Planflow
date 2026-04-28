@@ -62,13 +62,24 @@ function resolve(): Resolution {
   }
 
   if (currentProjectId === undefined) {
-    // Layer 2: cwd → project map
+    // Layer 2: cwd → project map. lookupProjectByPath now returns
+    // { projectId, projectName? } — the name comes from
+    // .planflow/project.json when present, which is exactly the case
+    // we need to populate currentProjectName here so show-current
+    // doesn't render "Name: unknown" for a perfectly-set-up repo.
     const cwd = process.cwd()
     const fromMap = lookupProjectByPath(cwd)
     if (fromMap) {
-      currentProjectId = fromMap
-      logger.debug('Resolved current project from cwd link', { cwd, projectId: fromMap })
-      return { projectId: fromMap, source: 'cwd-link' }
+      currentProjectId = fromMap.projectId
+      if (fromMap.projectName) {
+        currentProjectName = fromMap.projectName
+      }
+      logger.debug('Resolved current project from cwd link', {
+        cwd,
+        projectId: fromMap.projectId,
+        hasName: !!fromMap.projectName,
+      })
+      return { projectId: fromMap.projectId, source: 'cwd-link' }
     }
 
     // Layer 3: global config.json fallback
@@ -233,10 +244,12 @@ Useful when you switch between several PlanFlow projects on the same machine
       setStoredCurrentProjectId(currentProjectId)
 
       // Bind cwd → project (default magic). User can pass link:false to opt out.
+      // Pass the project name so the .planflow/project.json file caches it
+      // — future "show current" calls then don't render "Name: unknown".
       let cwdLinked: string | null = null
       if (input.link) {
         cwdLinked = process.cwd()
-        setProjectLink(cwdLinked, currentProjectId)
+        setProjectLink(cwdLinked, currentProjectId, project.name)
       }
 
       logger.info('Current project set', {
@@ -246,7 +259,10 @@ Useful when you switch between several PlanFlow projects on the same machine
       })
 
       const linkBlock = cwdLinked
-        ? `\n🔗 Linked: ${cwdLinked}\n   Future MCP sessions started here will auto-resolve this project.\n`
+        ? `\n🔗 Linked: ${cwdLinked}\n` +
+          `   • .planflow/project.json (commit this for team auto-link)\n` +
+          `   • Global map (legacy fallback)\n` +
+          `   Future MCP sessions started here will auto-resolve this project.\n`
         : `\n(No cwd binding — link:false was passed.)\n`
 
       return createSuccessResult(

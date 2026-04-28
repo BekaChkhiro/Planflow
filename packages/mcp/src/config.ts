@@ -5,9 +5,9 @@
  * Configuration is stored in the user's home directory.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { ConfigError } from './errors.js'
 import { logger } from './logger.js'
@@ -210,18 +210,36 @@ export function getProjectMap(): ProjectMap {
 }
 
 /**
- * Look up a project ID for a specific path. Tries exact match first; if no
- * exact match exists, walks parents (so e.g. running from a subdirectory of
- * a linked repo still resolves correctly).
+ * Look up a project for a specific path with the full hybrid resolution
+ * order:
+ *
+ *   1. .planflow/project.json in `path` or any parent (the new primary
+ *      source of truth — also includes the project name)
+ *   2. Legacy global ~/.config/planflow/project-map.json (back-compat for
+ *      users still on v0.2.8 and below)
+ *
+ * Returns the project ID + (when available) the project name. Name is
+ * undefined when only the legacy map matched, since the legacy schema
+ * never stored names.
  */
-export function lookupProjectByPath(path: string): string | null {
-  const map = getProjectMap()
-  if (map[path]) return map[path]
+export function lookupProjectByPath(
+  path: string
+): { projectId: string; projectName?: string } | null {
+  // Layer 1: walk up looking for .planflow/project.json. Walking on every
+  // call is cheap (existsSync + JSON parse on a tiny file) and saves us
+  // from having to track an in-memory cache that goes stale across edits.
+  const local = readLocalProjectLink(path)
+  if (local) {
+    return { projectId: local.projectId, projectName: local.projectName }
+  }
 
-  // Walk up parents — useful when the user is in src/, packages/foo/, etc.
+  // Layer 2: legacy global map.
+  const map = getProjectMap()
+  if (map[path]) return { projectId: map[path] }
+
   let current = path
   while (current !== '/' && current !== '.') {
-    if (map[current]) return map[current]
+    if (map[current]) return { projectId: map[current] }
     const parent = current.substring(0, current.lastIndexOf('/'))
     if (parent === current) break
     current = parent || '/'
@@ -230,28 +248,168 @@ export function lookupProjectByPath(path: string): string | null {
 }
 
 /** Bind a path to a project ID. Overwrites any existing binding for that path. */
-export function setProjectLink(path: string, projectId: string): void {
+export function setProjectLink(path: string, projectId: string, projectName?: string): void {
+  // Always update the legacy global map — keeps older clients in flight
+  // working and gives us a fallback if the local file is later wiped by
+  // a build step or git clean.
   ensureConfigDir()
   const map = getProjectMap()
   map[path] = projectId
   try {
     writeFileSync(getProjectMapPath(), JSON.stringify(map, null, 2), 'utf-8')
-    logger.debug('Project link saved', { path, projectId })
+    logger.debug('Project link saved (global map)', { path, projectId })
   } catch (error) {
     throw new ConfigError('Failed to save project map', { error: String(error) })
+  }
+
+  // Write the per-repo file too — this is the new primary source of truth
+  // and gives us the project name for free (so future "show current"
+  // calls don't render "Name: unknown") plus survives directory renames.
+  try {
+    writeLocalProjectLink(path, projectId, projectName)
+  } catch (error) {
+    // Non-fatal: global map write already succeeded above. Log and move on.
+    logger.warn('Failed to write .planflow/project.json (legacy map still saved)', {
+      path,
+      error: String(error),
+    })
   }
 }
 
 /** Remove the binding for a path. No-op if absent. */
 export function removeProjectLink(path: string): boolean {
+  // Local file first — that's where teammates would pick up changes.
+  const localRemoved = removeLocalProjectLink(path)
+
   const map = getProjectMap()
-  if (!(path in map)) return false
+  const inMap = path in map
+  if (!inMap && !localRemoved) return false
+  if (!inMap) return true
+
   delete map[path]
   try {
     writeFileSync(getProjectMapPath(), JSON.stringify(map, null, 2), 'utf-8')
-    logger.debug('Project link removed', { path })
+    logger.debug('Project link removed (global map)', { path })
     return true
   } catch (error) {
     throw new ConfigError('Failed to update project map', { error: String(error) })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-repo project link  (`.planflow/project.json`)
+//
+// The new primary source of truth for "this directory belongs to this
+// PlanFlow project". Lives inside the repo so it can be committed and
+// shared with teammates — clone the repo, the link is already there.
+//
+// Why a folder + JSON instead of a single `.planflow.json` at the root?
+//   - Mirrors the convention of `.git/`, `.vscode/`, `.cursor/`
+//   - Leaves room to grow (e.g. future `.planflow/cache/` or
+//     `.planflow/project.local.json` for per-user overrides) without
+//     littering the repo root.
+// ---------------------------------------------------------------------------
+
+const LOCAL_LINK_FILENAME = join('.planflow', 'project.json')
+
+const LocalProjectLinkSchema = z.object({
+  /** Schema version so we can migrate later without breaking older readers. */
+  version: z.number().int().default(1),
+  projectId: z.string().uuid(),
+  /** Cached so `planflow_use` show-current doesn't have to hit the API. */
+  projectName: z.string().optional(),
+  /** ISO timestamp of when the link was created. Informational only. */
+  linkedAt: z.string().optional(),
+  /**
+   * The API URL the link was created against. Mostly informational —
+   * runtime still uses the user's global config — but lets you spot
+   * staging-vs-prod mismatches by eye.
+   */
+  apiUrl: z.string().url().optional(),
+})
+
+export type LocalProjectLink = z.infer<typeof LocalProjectLinkSchema>
+
+/**
+ * Walk up from `startPath` looking for `.planflow/project.json`.
+ * Returns the parsed link or `null` if no ancestor has one (which is
+ * the common case — most cwds won't be inside a linked project).
+ */
+export function readLocalProjectLink(startPath: string): LocalProjectLink | null {
+  let current = startPath
+  // Hard cap on iterations so a malformed path can't spin us forever.
+  for (let i = 0; i < 64; i++) {
+    const candidate = join(current, LOCAL_LINK_FILENAME)
+    if (existsSync(candidate)) {
+      try {
+        const content = readFileSync(candidate, 'utf-8')
+        const parsed = JSON.parse(content) as unknown
+        return LocalProjectLinkSchema.parse(parsed)
+      } catch (error) {
+        logger.warn('Invalid .planflow/project.json — falling back to legacy map', {
+          path: candidate,
+          error: String(error),
+        })
+        return null
+      }
+    }
+    const parent = dirname(current)
+    if (parent === current) return null // hit filesystem root
+    current = parent
+  }
+  return null
+}
+
+/**
+ * Write `.planflow/project.json` inside `repoPath`. Creates the
+ * `.planflow` directory if needed. The project name is optional —
+ * passing it avoids the lazy "Name: unknown" lookup later.
+ */
+export function writeLocalProjectLink(
+  repoPath: string,
+  projectId: string,
+  projectName?: string
+): void {
+  const dir = join(repoPath, '.planflow')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+
+  const link: LocalProjectLink = {
+    version: 1,
+    projectId,
+    projectName,
+    linkedAt: new Date().toISOString(),
+    apiUrl: getApiUrl(),
+  }
+
+  writeFileSync(
+    join(repoPath, LOCAL_LINK_FILENAME),
+    JSON.stringify(link, null, 2) + '\n',
+    'utf-8'
+  )
+  logger.debug('Local project link saved', { repoPath, projectId })
+}
+
+/**
+ * Remove `.planflow/project.json` from `repoPath`. Returns `true` when
+ * a file was actually deleted, `false` when none existed.
+ *
+ * Leaves the `.planflow/` directory in place because it may hold other
+ * per-repo files in the future (cache, settings, etc.).
+ */
+export function removeLocalProjectLink(repoPath: string): boolean {
+  const linkPath = join(repoPath, LOCAL_LINK_FILENAME)
+  if (!existsSync(linkPath)) return false
+  try {
+    unlinkSync(linkPath)
+    logger.debug('Local project link removed', { repoPath })
+    return true
+  } catch (error) {
+    logger.warn('Failed to remove .planflow/project.json', {
+      path: linkPath,
+      error: String(error),
+    })
+    return false
   }
 }

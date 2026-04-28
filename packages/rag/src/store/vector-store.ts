@@ -22,8 +22,53 @@ export class VectorStore {
     const tables = await this.db.tableNames();
     if (tables.includes(TABLE_NAME)) {
       this.table = await this.db.openTable(TABLE_NAME);
+      // Forward-migrate the schema if this table predates content_hash
+      // (added in 0.2.4). Without this, every getFileHashes() and
+      // upsert() against an old table 500s with "Column content_hash
+      // does not exist". The migration is a single ALTER — fast and
+      // safe to retry.
+      await this._ensureContentHashColumn();
     }
     // Table will be lazily created on first upsert (needs data to infer schema)
+  }
+
+  /**
+   * Adds `content_hash` to an existing table when missing. No-op when
+   * the column is already present, so this is safe to call on every
+   * init().
+   *
+   * LanceDB's `addColumns` takes a SQL expression that's evaluated for
+   * every existing row — we use the empty string so old chunks read as
+   * "no hash known", which the indexer then treats as "needs re-index"
+   * exactly like it would for a brand-new file.
+   */
+  private async _ensureContentHashColumn(): Promise<void> {
+    if (!this.table) return;
+    try {
+      const schema = await this.table.schema();
+      const hasColumn = schema.fields.some((f) => f.name === "content_hash");
+      if (hasColumn) return;
+    } catch {
+      // If we can't read the schema (older LanceDB? corrupt?) we still
+      // attempt the addColumns call; if THAT also fails the catch below
+      // logs and moves on so reads/writes can degrade gracefully.
+    }
+
+    try {
+      await this.table.addColumns([
+        { name: "content_hash", valueSql: "''" },
+      ]);
+    } catch (err) {
+      // Don't crash the whole indexing run because of a migration hiccup.
+      // Subsequent getFileHashes() calls will catch the schema error and
+      // return an empty map (treats every file as new), and upserts will
+      // overwrite-create the table on next clean run.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[VectorStore] Failed to add content_hash column — continuing",
+        err,
+      );
+    }
   }
 
   /** Upsert embedding records (insert or update by id) */
@@ -151,10 +196,27 @@ export class VectorStore {
     this._ensureInit();
     if (!this.table) return {};
 
-    const rows = await this.table
-      .query()
-      .select(["file_path", "content_hash"])
-      .toArray();
+    // Defensive: if init's auto-migration didn't run (e.g. older code
+    // path created the store directly), the select below would 500 with
+    // "Column content_hash does not exist". Treat that as "no hashes
+    // available" so the indexer can recover by re-indexing everything.
+    let rows: Record<string, unknown>[];
+    try {
+      rows = await this.table
+        .query()
+        .select(["file_path", "content_hash"])
+        .toArray();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("content_hash")) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[VectorStore] content_hash column missing — returning empty hash map (callers will treat every file as new)",
+        );
+        return {};
+      }
+      throw err;
+    }
 
     const map: Record<string, string> = {};
     for (const row of rows) {

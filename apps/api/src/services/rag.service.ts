@@ -189,7 +189,20 @@ export class RagService {
       // haven't changed since the last index run. One read instead of
       // querying per-file. Empty hash means "indexed before hashing was
       // tracked" → we re-index those rather than trusting them.
-      const existingHashes = await store.getFileHashes()
+      //
+      // Wrapped defensively: an old LanceDB shard predating the
+      // content_hash column would otherwise 500 the entire indexing
+      // call. Treating it as "no hashes known" gracefully degrades to
+      // a full re-index, which then writes the new schema.
+      let existingHashes: Record<string, string> = {}
+      try {
+        existingHashes = await store.getFileHashes()
+      } catch (err) {
+        log.warn(
+          { error: err, projectId },
+          'getFileHashes failed (likely old schema) — proceeding with full re-index'
+        )
+      }
 
       // Chunk and embed each file
       const records: EmbeddingRecord[] = []

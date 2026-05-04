@@ -33,6 +33,7 @@ import { notificationsTool } from './notifications.js'
 
 // Intelligence layer (RAG)
 import { indexTool } from './index-project.js'
+import { indexDiffTool } from './index-diff.js'
 import { indexStatusTool } from './index-status.js'
 import { searchTool } from './search.js'
 import { contextTool } from './context.js'
@@ -69,6 +70,7 @@ export const tools: ToolDefinition[] = [
 
   // Intelligence layer
   indexTool,
+  indexDiffTool,
   indexStatusTool,
   exploreTool,
   searchTool,

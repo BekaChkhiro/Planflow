@@ -17,7 +17,6 @@
  */
 
 import { z } from 'zod'
-import { createHash } from 'node:crypto'
 import { getApiClient } from '../api-client.js'
 import { isAuthenticated } from '../config.js'
 import { AuthError, ApiError } from '../errors.js'
@@ -31,6 +30,8 @@ import { getCurrentProjectId } from './use.js'
 import { coerceBoolean } from './_coerce.js'
 import * as progress from '../progress.js'
 import { scanProject, detectLanguage, type ScannedFile } from './_scanner.js'
+import { writeIndexState, clearIndexState } from './_index-state.js'
+import { planIncrementalChanges } from './_incremental.js'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -347,6 +348,16 @@ Prerequisites:
         const purgeResult = await client.purgeIndex(projectId)
         purgeNotice = `🧹 Purged ${purgeResult.purgedChunks} pre-existing chunk(s) before indexing.\n\n`
         logger.info('Index purged before re-index', { projectId, purgedChunks: purgeResult.purgedChunks })
+
+        // Stale state would otherwise trick the next git-diff path into
+        // thinking the (now-empty) index already covers everything up to
+        // the recorded commit. Wipe it so the upcoming pass starts clean.
+        const purgeRoot = input.directory
+          ? input.directory.startsWith('~')
+            ? input.directory.replace(/^~/, process.env['HOME'] || '')
+            : input.directory
+          : process.cwd()
+        clearIndexState(purgeRoot)
       } catch (err) {
         logger.error('Purge failed', { error: String(err) })
         return mapIndexError(err, projectId)
@@ -422,73 +433,70 @@ async function executeDirectoryMode(
       return createSuccessResult(formatDryRunPreview(dirPath, files, include ?? [], exclude))
     }
 
-    // Incremental mode: ask the backend which files are already indexed
-    // with which content hash. Files whose local hash matches get skipped
-    // entirely — saves the entire chunk → embed → store path. The server
-    // also re-checks (defence in depth) so even if our local skip is
-    // wrong we don't double-store.
-    let unchangedLocally = 0
-    let workingFiles: ScannedFile[] = files
-    let removedMissingFiles: string[] = []
+    // Build the incremental plan (read-only). _incremental.ts decides whether
+    // to use git-diff, backend hash compare, or "send everything" — we just
+    // act on the plan it returns.
+    const plan = await planIncrementalChanges({
+      rootDir: dirPath,
+      projectId,
+      scannedFiles: files,
+      incremental,
+      removeMissing,
+    })
 
-    if (incremental || removeMissing) {
-      const client = getApiClient()
-      let indexedHashes: Record<string, string> = {}
+    let workingFiles: ScannedFile[] = plan.workingFiles
+    const removedMissingFiles: string[] = plan.removedFiles
+    const unchangedLocally = plan.unchangedLocally
+    const incrementalMode = plan.mode
+    const headCommit = plan.headCommit
+
+    // Apply the deletion side-effect from the plan. Failures here are
+    // logged but non-fatal: the worst case is stale chunks linger in the
+    // index until the next purge or rename pass catches them.
+    if (removedMissingFiles.length > 0) {
       try {
-        const result = await client.getFileHashes(projectId)
-        indexedHashes = result.hashes
+        const client = getApiClient()
+        const result = await client.removeFilesFromIndex(projectId, removedMissingFiles)
+        logger.info('Removed files from index', {
+          requested: removedMissingFiles.length,
+          removed: result.removedFiles,
+        })
       } catch (err) {
-        // First-time index will 404 the file-hashes endpoint or return
-        // empty — both fine. Treat as "nothing indexed yet".
-        logger.warn('Could not fetch file hashes; proceeding without incremental skip', {
-          error: String(err),
-        })
-      }
-
-      if (incremental && Object.keys(indexedHashes).length > 0) {
-        workingFiles = []
-        for (const file of files) {
-          const localHash = createHash('sha256').update(file.content).digest('hex')
-          if (indexedHashes[file.path] && indexedHashes[file.path] === localHash) {
-            unchangedLocally++
-          } else {
-            workingFiles.push(file)
-          }
-        }
-        logger.info('Incremental filter applied', {
-          totalScanned: files.length,
-          unchanged: unchangedLocally,
-          willIndex: workingFiles.length,
-        })
-      }
-
-      if (removeMissing && Object.keys(indexedHashes).length > 0) {
-        const localPaths = new Set(files.map((f) => f.path))
-        const missing = Object.keys(indexedHashes).filter((p) => !localPaths.has(p))
-        if (missing.length > 0) {
-          try {
-            const result = await client.removeFilesFromIndex(projectId, missing)
-            removedMissingFiles = missing
-            logger.info('Removed missing files from index', {
-              requested: missing.length,
-              removed: result.removedFiles,
-            })
-          } catch (err) {
-            logger.warn('Failed to remove missing files', { error: String(err) })
-          }
-        }
+        logger.warn('Failed to remove files from index', { error: String(err) })
       }
     }
 
     if (workingFiles.length === 0) {
+      // Even when nothing changed, advance the state file's commit hash so
+      // the next pass diffs from HEAD instead of redundantly re-diffing the
+      // same A→C range we just inspected. We only refresh state for the git
+      // path; hash-mode "no changes" doesn't generate a new commit hash to
+      // record.
+      if (incrementalMode === 'git' && headCommit) {
+        writeIndexState(dirPath, {
+          projectId,
+          lastCommitHash: headCommit,
+          lastIndexedAt: new Date().toISOString(),
+          totalFiles: files.length,
+        })
+      }
+
+      const modeLine =
+        incrementalMode === 'git'
+          ? `🔁 Mode: git-diff (commit ${headCommit?.slice(0, 7) ?? '??'})\n`
+          : incrementalMode === 'hash'
+            ? `🔁 Mode: file-hash compare\n`
+            : ''
+
       return createSuccessResult(
         purgeNotice +
           `✅ Index already up to date — nothing to re-embed.\n\n` +
           `📁 Directory: ${dirPath}\n` +
+          modeLine +
           `📄 Files scanned: ${files.length}\n` +
-          `⏭️  Unchanged (hash match): ${unchangedLocally}\n` +
+          `⏭️  Unchanged: ${unchangedLocally}\n` +
           (removedMissingFiles.length > 0
-            ? `🗑️  Removed (no longer on disk): ${removedMissingFiles.length}\n`
+            ? `🗑️  Removed: ${removedMissingFiles.length}\n`
             : '') +
           `\n💡 Force re-embed: planflow_index(directory: "${rawDirectory}", incremental: false)`
       )
@@ -631,17 +639,34 @@ async function executeDirectoryMode(
       )
     }
 
+    // Persist new state. Even when running on a non-git project we record
+    // a state file (with lastCommitHash: null) so the projectId guard catches
+    // `planflow_use` switches consistently and so the response copy can
+    // surface "lastIndexedAt" later.
+    writeIndexState(dirPath, {
+      projectId,
+      lastCommitHash: headCommit,
+      lastIndexedAt: new Date().toISOString(),
+      totalFiles: files.length,
+    })
+
     // Build a per-file failures block (paths, capped to 10 examples). The
     // user explicitly asked to know WHICH files failed — counts alone
     // aren't enough to diagnose.
     const failedBlock = formatFailedFilesBlock(failedFiles)
     const skippedBlock = formatSkippedFilesBlock(allSkipped)
 
+    const modeLine =
+      incrementalMode === 'git'
+        ? `🔁 Mode: git-diff (commit ${headCommit?.slice(0, 7) ?? '??'})\n`
+        : incrementalMode === 'hash'
+          ? `🔁 Mode: file-hash compare\n`
+          : ''
     const incrementalBlock =
-      unchangedLocally > 0 ? `⏭️  Unchanged (hash match): ${unchangedLocally}\n` : ''
+      unchangedLocally > 0 ? `⏭️  Unchanged: ${unchangedLocally}\n` : ''
     const removedBlock =
       removedMissingFiles.length > 0
-        ? `🗑️  Removed (no longer on disk): ${removedMissingFiles.length}\n`
+        ? `🗑️  Removed: ${removedMissingFiles.length}\n`
         : ''
 
     progress.complete(
@@ -654,6 +679,7 @@ async function executeDirectoryMode(
       purgeNotice +
         `✅ Indexing complete!\n\n` +
         `📁 Directory: ${dirPath}\n` +
+        modeLine +
         `📄 Files scanned: ${files.length}\n` +
         `📦 Files indexed: ${totalFilesIndexed}\n` +
         `🧩 Chunks indexed: ${totalChunksIndexed}\n` +

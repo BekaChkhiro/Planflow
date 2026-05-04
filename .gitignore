@@ -49,5 +49,10 @@ playwright/.cache/
 .planflow-index-state.json
 .plan-pending-sync.json
 
+# PlanFlow per-developer index state (shouldn't be shared across the team —
+# each developer indexes from their own working tree). The committed link
+# at .planflow/project.json is fine; the index state file is not.
+.planflow/index-state.json
+
 # RAG / Vector databases
 data/rag/

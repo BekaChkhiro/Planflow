@@ -107,8 +107,10 @@ const ALWAYS_IGNORE = [
   '.nyc_output',
   'test-results',
   'playwright-report',
-  // PlanFlow's own artifacts
-  '.planflow-index-state.json',
+  // PlanFlow's own per-repo artifacts. The whole .planflow/ dir is
+  // treated as internal PlanFlow state — index-state.json,
+  // project.json, future cache files — none of it adds search signal.
+  '.planflow',
 ]
 
 // ---------------------------------------------------------------------------

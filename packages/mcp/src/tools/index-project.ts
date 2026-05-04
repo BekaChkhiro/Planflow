@@ -17,8 +17,6 @@
  */
 
 import { z } from 'zod'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join, relative, extname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { getApiClient } from '../api-client.js'
 import { isAuthenticated } from '../config.js'
@@ -30,35 +28,57 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
-import { minimatch } from './_glob.js'
 import { coerceBoolean } from './_coerce.js'
 import * as progress from '../progress.js'
+import { scanProject, detectLanguage, type ScannedFile } from './_scanner.js'
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-/** Files per batch when scanning a directory. Tuned for Voyage AI free tier. */
+/** Files per batch when scanning a directory. */
 const BATCH_SIZE = 20
 /**
- * Delay between batches.
+ * Pause between batches.
  *
- * Default 21,000ms = safe for Voyage AI's free tier (3 RPM, leaves margin).
- * Override via `PLANFLOW_INDEX_DELAY_MS` env var when the user's Voyage
- * account is on a paid tier:
- *   • Tier 1 (paid, 2,000 RPM)        → 2000ms or even 1000ms
- *   • Tier 2 ($100+ spent, 4,000 RPM) → 500ms
- *   • Enterprise                       → 100ms
+ * Default 2,000ms — tuned for PlanFlow Cloud, which embeds via a Tier 1+
+ * Voyage account on the server side. The previous 21-second default was
+ * sized for someone running the MCP server with their own free-tier Voyage
+ * key (3 RPM), but in practice that's not how Cloud users work — they hit
+ * the PlanFlow API which pays for embeddings centrally and handles rate
+ * limiting via 429 responses (the api-client retries with exponential
+ * backoff automatically).
  *
- * Indexing 2,000 files drops from ~2 hours on free tier to ~10 minutes
- * on Tier 1. Always-conservative default keeps free-tier users from
- * accidentally getting rate-limited; opt-in for paid users.
+ * Self-hosted users running PlanFlow with their own free-tier Voyage key
+ * can restore the conservative default with `PLANFLOW_INDEX_DELAY_MS=21000`.
+ *
+ * Indexing 2,000 files now takes ~5 minutes instead of ~2 hours.
  */
 const DELAY_MS = (() => {
   const raw = process.env['PLANFLOW_INDEX_DELAY_MS']
   const parsed = raw ? parseInt(raw, 10) : NaN
   if (Number.isFinite(parsed) && parsed >= 0) return parsed
-  return 21_000
+  return 2_000
+})()
+/**
+ * Number of batches to send in parallel.
+ *
+ * When the per-batch pause is short (we're on a paid Voyage tier — Cloud's
+ * default) we get a meaningful speedup by dispatching batches concurrently.
+ * The backend handles its own rate limiting; if it pushes back via 429, the
+ * api-client retries with exponential backoff so we don't spiral.
+ *
+ * Cap of 3 keeps us well under any plausible burst limit while still
+ * cutting wall time roughly in half. Override via env var when self-hosting.
+ */
+const CONCURRENCY = (() => {
+  const raw = process.env['PLANFLOW_INDEX_CONCURRENCY']
+  const parsed = raw ? parseInt(raw, 10) : NaN
+  if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, 8)
+  // Auto: parallel only when the configured pause is short enough that
+  // sequential mode would burn obvious time. Free-tier users (DELAY_MS
+  // ≥ 5s) stay sequential — the throttle is the point, not the cost.
+  return DELAY_MS < 5_000 ? 3 : 1
 })()
 /** Per-file content cap; matches the backend limit. */
 const MAX_FILE_SIZE = 1024 * 1024
@@ -70,57 +90,35 @@ const MAX_FILE_SIZE = 1024 * 1024
  */
 const MAX_BATCH_BYTES = 4 * 1024 * 1024
 
-const DEFAULT_INCLUDE = [
-  '**/*.ts',
-  '**/*.tsx',
-  '**/*.js',
-  '**/*.jsx',
-  '**/*.md',
-  '**/*.mdx',
-  '**/*.json',
-  '**/*.prisma',
-  '**/*.sql',
-  '**/*.css',
-  '**/*.html',
-  '**/*.yml',
-  '**/*.yaml',
-]
-
-const DEFAULT_EXCLUDE = [
-  // Dependencies & VCS
-  '**/node_modules/**',
-  '**/.git/**',
-  // Framework / build outputs
-  '**/.next/**',
-  '**/.svelte-kit/**',
-  '**/.nuxt/**',
-  '**/.vercel/**',
-  '**/.cache/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/out/**',
-  '**/.turbo/**',
-  // Test artifacts
-  '**/coverage/**',
-  '**/test-results/**',
-  '**/playwright-report/**',
-  '**/*.test.ts',
-  '**/*.test.tsx',
-  '**/*.spec.ts',
-  '**/*.spec.tsx',
+/**
+ * Default extra ignore patterns applied on top of `.gitignore` /
+ * `.planflowignore` / the scanner's built-in safety net.
+ *
+ * The previous version of this file shipped a long hardcoded `DEFAULT_EXCLUDE`
+ * list because the old scanner didn't read .gitignore — so every project had
+ * to bring its own exclusions. The new scanner handles dependencies, build
+ * outputs, lockfiles and OS noise out of the box. The few patterns left here
+ * are things you typically *do* commit (so .gitignore won't catch them) but
+ * which are pure noise for embeddings:
+ *   • Test files (we want code, not test scaffolding, in semantic search)
+ *   • Generated client code (Prisma, GraphQL codegen) — huge, low signal
+ */
+const DEFAULT_EXTRA_IGNORE = [
   '**/__tests__/**',
-  // Auto-generated code (Prisma client, GraphQL codegen, etc.) —
-  // these are huge type-only files that exhaust embedding budget
-  // without adding signal.
+  '*.test.ts',
+  '*.test.tsx',
+  '*.test.js',
+  '*.test.jsx',
+  '*.spec.ts',
+  '*.spec.tsx',
+  '*.spec.js',
+  '*.spec.jsx',
+  // Auto-generated code
   '**/generated/**',
   '**/.prisma/**',
-  '**/*.generated.ts',
-  '**/*.generated.tsx',
-  '**/*.gen.ts',
-  // Lockfiles (huge, deterministic, no semantic value for code search)
-  '**/pnpm-lock.yaml',
-  '**/package-lock.json',
-  '**/yarn.lock',
+  '*.generated.ts',
+  '*.generated.tsx',
+  '*.gen.ts',
 ]
 
 // ---------------------------------------------------------------------------
@@ -165,11 +163,19 @@ const IndexInputSchema = z
       .describe(
         'Path to a directory to scan recursively. Provide either `directory` OR `files`, not both.'
       ),
-    include: coercibleStringArray(DEFAULT_INCLUDE).describe(
-      'Glob pattern(s) for files to include when scanning a directory. Single string or array.'
-    ),
-    exclude: coercibleStringArray(DEFAULT_EXCLUDE).describe(
-      'Glob pattern(s) to skip when scanning a directory. Single string or array.'
+    include: z
+      .union([z.string(), z.array(z.string())])
+      .optional()
+      .transform((val) => {
+        if (val === undefined) return undefined
+        if (typeof val === 'string') return [val]
+        return val
+      })
+      .describe(
+        'Optional positive filter — limit indexing to files matching at least one of these glob patterns (e.g. ["src/**/*.ts"]). Omit to index every text file the scanner picks up after .gitignore / safety filters apply.'
+      ),
+    exclude: coercibleStringArray(DEFAULT_EXTRA_IGNORE).describe(
+      'Extra .gitignore-style patterns to skip on top of .gitignore / .planflowignore / built-in safety net. Single string or array.'
     ),
 
     // ── Mode 2: explicit files ────────────────────────────────────────────
@@ -213,103 +219,6 @@ type IndexInput = z.infer<typeof IndexInputSchema>
 // ---------------------------------------------------------------------------
 // File include/exclude logic (minimatch helper from _glob.ts)
 // ---------------------------------------------------------------------------
-
-function shouldIncludeFile(
-  relPath: string,
-  include: string[],
-  exclude: string[]
-): boolean {
-  for (const pattern of exclude) {
-    if (minimatch(relPath, pattern)) return false
-  }
-  for (const pattern of include) {
-    if (minimatch(relPath, pattern)) return true
-  }
-  return false
-}
-
-function detectLanguage(filePath: string): string | undefined {
-  const ext = extname(filePath).toLowerCase()
-  const map: Record<string, string> = {
-    '.ts': 'typescript',
-    '.tsx': 'typescript',
-    '.js': 'javascript',
-    '.jsx': 'javascript',
-    '.py': 'python',
-    '.go': 'go',
-    '.rs': 'rust',
-    '.java': 'java',
-    '.md': 'markdown',
-    '.mdx': 'markdown',
-    '.json': 'json',
-    '.prisma': 'prisma',
-    '.sql': 'sql',
-    '.css': 'css',
-    '.html': 'html',
-    '.yml': 'yaml',
-    '.yaml': 'yaml',
-  }
-  return map[ext]
-}
-
-// ---------------------------------------------------------------------------
-// File scanner
-// ---------------------------------------------------------------------------
-
-const SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  '.next',
-  'dist',
-  'build',
-  '.turbo',
-  'coverage',
-  'test-results',
-  'playwright-report',
-  '__tests__',
-  '.svelte-kit',
-  '.vercel',
-  '.cache',
-  'out',
-  '.nuxt',
-])
-
-type ScannedFile = { path: string; content: string; language?: string }
-
-function scanDirectory(
-  dir: string,
-  baseDir: string,
-  include: string[],
-  exclude: string[],
-  files: ScannedFile[] = []
-): ScannedFile[] {
-  const items = readdirSync(dir, { withFileTypes: true })
-
-  for (const item of items) {
-    const fullPath = join(dir, item.name)
-    const relPath = relative(baseDir, fullPath)
-
-    if (item.isDirectory()) {
-      if (SKIP_DIRS.has(item.name)) continue
-      scanDirectory(fullPath, baseDir, include, exclude, files)
-    } else {
-      if (!shouldIncludeFile(relPath, include, exclude)) continue
-      try {
-        const stats = statSync(fullPath)
-        if (stats.size > MAX_FILE_SIZE) {
-          logger.warn('Skipping oversized file', { path: relPath, size: stats.size })
-          continue
-        }
-        const content = readFileSync(fullPath, 'utf-8')
-        files.push({ path: relPath, content, language: detectLanguage(relPath) })
-      } catch (err) {
-        logger.warn('Failed to read file', { path: relPath, error: String(err) })
-      }
-    }
-  }
-
-  return files
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -474,7 +383,7 @@ Prerequisites:
 async function executeDirectoryMode(
   projectId: string,
   rawDirectory: string,
-  include: string[],
+  include: string[] | undefined,
   exclude: string[],
   dryRun: boolean,
   purgeNotice = '',
@@ -490,18 +399,27 @@ async function executeDirectoryMode(
   logger.info('Scanning directory', { path: dirPath, projectId, dryRun, incremental, removeMissing })
 
   try {
-    const files = scanDirectory(dirPath, dirPath, include, exclude)
+    const files = scanProject(dirPath, {
+      include,
+      extraIgnore: exclude,
+      maxFileSize: MAX_FILE_SIZE,
+    })
 
     if (files.length === 0) {
+      const includeNote = include?.length ? `Include: ${include.join(', ')}\n` : ''
+      const excludeNote = exclude.length ? `Extra excludes: ${exclude.join(', ')}\n` : ''
       return createErrorResult(
         `❌ No files matched in ${dirPath}\n\n` +
-          `Include: ${include.join(', ')}\n` +
-          `Exclude: ${exclude.join(', ')}`
+          includeNote +
+          excludeNote +
+          `\n💡 The scanner respects .gitignore and .planflowignore — make sure your\n` +
+          `   target files aren't ignored there. You can also pass an explicit\n` +
+          `   \`include\` glob (e.g. ["src/**/*.ts"]) to narrow the scan.`
       )
     }
 
     if (dryRun) {
-      return createSuccessResult(formatDryRunPreview(dirPath, files, include, exclude))
+      return createSuccessResult(formatDryRunPreview(dirPath, files, include ?? [], exclude))
     }
 
     // Incremental mode: ask the backend which files are already indexed
@@ -601,35 +519,24 @@ async function executeDirectoryMode(
     const batchCount = batches.length
     const failedFiles: Array<{ path: string; error: string }> = []
     const allSkipped: SkippedFileSummary[] = []
+    let batchesCompleted = 0
 
-    for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-      const batch = batches[batchIdx]!
-      const batchNum = batchIdx + 1
-
+    /**
+     * Process a single batch. On total failure, retries per-file so one
+     * unparseable file doesn't lose its 19 batch-mates. Mutates the shared
+     * counters under the assumption the caller serialises waves (we never
+     * race with another batch on the same projectId in the same wave;
+     * within a wave Promise.all guarantees atomic completion before the
+     * next wave starts).
+     */
+    const processBatch = async (batch: ScannedFile[], batchNum: number): Promise<void> => {
       logger.info(`Indexing batch ${batchNum}/${batchCount}`, { batchSize: batch.length })
-
-      // ETA: extrapolate from average batch wall-time observed so far.
-      // For batch 1 we don't have data, so omit; the CLI will just hide
-      // the ETA line until we've got enough samples.
-      const elapsedMs = Date.now() - indexStart
-      const avgBatchMs = batchNum > 1 ? elapsedMs / (batchNum - 1) : null
-      const remainingBatches = batchCount - batchNum + 1
-      const etaSeconds =
-        avgBatchMs !== null ? Math.round((avgBatchMs * remainingBatches) / 1000) : undefined
-
-      progress.update({
-        label: `Batch ${batchNum} of ${batchCount} — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
-        current: totalFilesIndexed,
-        etaSeconds,
-      })
 
       try {
         const result = await client.indexProject(projectId, batch)
         totalFilesIndexed += result.filesIndexed
         totalChunksIndexed += result.chunksIndexed
-        if (result.skippedFiles && result.skippedFiles.length > 0) {
-          allSkipped.push(...result.skippedFiles)
-        }
+        if (result.skippedFiles?.length) allSkipped.push(...result.skippedFiles)
         logger.info(`Batch ${batchNum} complete`, {
           filesIndexed: result.filesIndexed,
           chunksIndexed: result.chunksIndexed,
@@ -641,9 +548,10 @@ async function executeDirectoryMode(
 
         // One bad file shouldn't ditch the whole batch. Retry each file on
         // its own so we surface exactly which paths failed and salvage
-        // every chunk-able neighbor. Voyage rate limit is the main cost
-        // here (one call per file), but failures are rare so this is
-        // acceptable as a recovery path.
+        // every chunk-able neighbor. Per-file retries use exponential
+        // backoff (500ms → 1s → 2s, capped) instead of the full inter-batch
+        // pause — failed batches are already an expensive recovery path,
+        // we don't want to compound the wait.
         for (let fIdx = 0; fIdx < batch.length; fIdx++) {
           const file = batch[fIdx]!
           try {
@@ -652,29 +560,56 @@ async function executeDirectoryMode(
             totalChunksIndexed += result.chunksIndexed
             if (result.skippedFiles) allSkipped.push(...result.skippedFiles)
             logger.debug('Per-file retry succeeded', { path: file.path })
-            progress.update({
-              label: `Batch ${batchNum} (per-file retry) — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
-              current: totalFilesIndexed,
-            })
           } catch (retryErr) {
             const detail = retryErr instanceof Error ? retryErr.message : String(retryErr)
             logger.error('Per-file retry failed', { path: file.path, error: detail })
             failedFiles.push({ path: file.path, error: detail })
           }
-          // Pace the retries — same Voyage rate limit applies whether the
-          // call carries 1 file or 20.
-          if (fIdx < batch.length - 1) await sleep(DELAY_MS)
+          if (fIdx < batch.length - 1) {
+            const retryDelay = Math.min(500 * Math.pow(2, fIdx), 4000)
+            await sleep(retryDelay)
+          }
         }
       }
+    }
 
-      // Update after the batch settles (batched insert + skip+failed counts).
+    // Dispatch batches in waves of CONCURRENCY. Sequential mode (free tier)
+    // sets CONCURRENCY=1, which collapses the wave loop to the previous
+    // one-batch-at-a-time behaviour with no extra overhead.
+    for (let waveStart = 0; waveStart < batches.length; waveStart += CONCURRENCY) {
+      const wave = batches.slice(waveStart, waveStart + CONCURRENCY)
+      const waveNum = Math.floor(waveStart / CONCURRENCY) + 1
+      const totalWaves = Math.ceil(batches.length / CONCURRENCY)
+
+      // ETA: extrapolated from average wave time so far. We update once per
+      // wave rather than per batch so we don't churn the progress line when
+      // multiple parallel batches finish near-simultaneously.
+      const elapsedMs = Date.now() - indexStart
+      const avgWaveMs = waveNum > 1 ? elapsedMs / (waveNum - 1) : null
+      const remainingWaves = totalWaves - waveNum + 1
+      const etaSeconds =
+        avgWaveMs !== null ? Math.round((avgWaveMs * remainingWaves) / 1000) : undefined
+
+      const waveLabel =
+        CONCURRENCY > 1
+          ? `Wave ${waveNum}/${totalWaves} (${wave.length} batches in parallel)`
+          : `Batch ${waveStart + 1}/${batchCount}`
       progress.update({
-        label: `Batch ${batchNum} of ${batchCount} done — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
+        label: `${waveLabel} — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
+        current: totalFilesIndexed,
+        etaSeconds,
+      })
+
+      await Promise.all(wave.map((batch, idx) => processBatch(batch, waveStart + idx + 1)))
+      batchesCompleted += wave.length
+
+      progress.update({
+        label: `${waveLabel} done — ${totalFilesIndexed}/${workingFiles.length} files indexed`,
         current: totalFilesIndexed,
       })
 
-      if (batchIdx < batches.length - 1) {
-        logger.info(`Waiting ${DELAY_MS}ms before next batch...`)
+      if (batchesCompleted < batches.length) {
+        logger.info(`Waiting ${DELAY_MS}ms before next wave...`)
         await sleep(DELAY_MS)
       }
     }
@@ -844,10 +779,25 @@ function formatDryRunPreview(
   // Files mode is a single round-trip so we just say "~one round-trip".
   const isDirectoryMode = dirPath !== null
   const batchCount = Math.ceil(files.length / BATCH_SIZE)
-  const interBatchDelaySec = isDirectoryMode ? ((batchCount - 1) * DELAY_MS) / 1000 : 0
-  // Assume ~10s per batch for embedding + storage as a baseline.
-  const apiTimeSec = isDirectoryMode ? batchCount * 10 : 10
-  const estimatedSec = interBatchDelaySec + apiTimeSec
+  // Wave count = number of CONCURRENCY-sized parallel groups. With CONCURRENCY=1
+  // this collapses back to per-batch behaviour for free-tier users.
+  const waveCount = Math.ceil(batchCount / CONCURRENCY)
+  const interWaveDelaySec = isDirectoryMode ? ((waveCount - 1) * DELAY_MS) / 1000 : 0
+  // Assume ~10s per wave for embedding + storage as a baseline. Concurrent
+  // batches inside a wave overlap, so wave time ≈ batch time, not N × batch.
+  const apiTimeSec = isDirectoryMode ? waveCount * 10 : 10
+  const estimatedSec = interWaveDelaySec + apiTimeSec
+
+  // Cost estimate. Voyage-code-3 pricing: $0.18 per 1M input tokens.
+  // The 4-bytes-per-token ratio is the well-established rule-of-thumb for
+  // mixed code/markdown content (BPE tokenisers chunk identifiers and
+  // operators tightly; comments and strings tokenise close to natural-
+  // language ~4 bytes/token). Slightly pessimistic for English-heavy docs,
+  // slightly optimistic for very symbol-dense code — close enough that the
+  // estimate is a useful "what is this going to cost me" signal.
+  const VOYAGE_USD_PER_M_TOKENS = 0.18
+  const estimatedTokens = Math.ceil(totalBytes / 4)
+  const estimatedCostUsd = (estimatedTokens / 1_000_000) * VOYAGE_USD_PER_M_TOKENS
 
   const formatMB = (bytes: number) => (bytes / 1024 / 1024).toFixed(2)
   const formatTime = (sec: number) => {
@@ -855,6 +805,16 @@ function formatDryRunPreview(
     const m = Math.floor(sec / 60)
     const s = Math.round(sec % 60)
     return `${m}m ${s}s`
+  }
+  const formatTokens = (n: number) => {
+    if (n < 1_000) return String(n)
+    if (n < 1_000_000) return `${(n / 1_000).toFixed(1)}K`
+    return `${(n / 1_000_000).toFixed(2)}M`
+  }
+  const formatCost = (usd: number) => {
+    if (usd < 0.01) return '<$0.01'
+    if (usd < 1) return `$${usd.toFixed(3)}`
+    return `$${usd.toFixed(2)}`
   }
 
   const lines: string[] = [
@@ -869,8 +829,11 @@ function formatDryRunPreview(
   }
   lines.push(`📄 Files: ${files.length}`)
   lines.push(`📦 Total size: ${formatMB(totalBytes)} MB`)
+  lines.push(`🪙 Estimated tokens: ~${formatTokens(estimatedTokens)} (Voyage-code-3)`)
+  lines.push(`💵 Estimated cost: ${formatCost(estimatedCostUsd)} (PlanFlow Cloud absorbs this)`)
   if (isDirectoryMode) {
-    lines.push(`🔢 Batches: ${batchCount} (${BATCH_SIZE} files each)`)
+    const concurrencyNote = CONCURRENCY > 1 ? `, ${CONCURRENCY} in parallel per wave` : ''
+    lines.push(`🔢 Batches: ${batchCount} (${BATCH_SIZE} files each${concurrencyNote})`)
     lines.push(`⏱️  Estimated wall time: ~${formatTime(estimatedSec)} (blocking)`)
   }
   lines.push(``)

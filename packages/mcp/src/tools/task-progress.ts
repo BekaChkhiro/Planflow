@@ -194,6 +194,11 @@ Prerequisites:
       lines.push(`Next steps:`)
       lines.push(`  • Continue work and log again as needed`)
       lines.push(`  • Mark done when finished: planflow_task_done(taskId: "${input.taskId}")`)
+      lines.push('')
+      lines.push(`Reminder — for any new question that opens up while you work,`)
+      lines.push(`use the PlanFlow search tools (planflow_search / planflow_chunk /`)
+      lines.push(`planflow_recall / planflow_explore) BEFORE grep. They return ranked`)
+      lines.push(`semantic context that grep cannot.`)
 
       return createSuccessResult(lines.join('\n'))
     } catch (error) {

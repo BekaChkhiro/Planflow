@@ -23,6 +23,8 @@ import { taskStartTool } from './task-start.js'
 import { taskDoneTool } from './task-done.js'
 import { taskProgressTool } from './task-progress.js'
 import { workingOnTool } from './working-on.js'
+import { worktreeListTool } from './worktree-list.js'
+import { worktreeRemoveTool } from './worktree-remove.js'
 
 // Activity / collaboration
 import { activityTool } from './activity.js'
@@ -60,6 +62,8 @@ export const tools: ToolDefinition[] = [
   taskDoneTool,
   taskProgressTool,
   workingOnTool,
+  worktreeListTool,
+  worktreeRemoveTool,
 
   // Activity / collaboration
   activityTool,

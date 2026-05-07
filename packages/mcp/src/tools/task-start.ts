@@ -29,6 +29,14 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
+import {
+  createWorktree,
+  detectCurrentWorktree,
+  getMainRepoRoot,
+  getRepoRoot,
+  readState,
+  registerMainRepoTask,
+} from '../worktree.js'
 
 const TaskStartInputSchema = z.object({
   projectId: z
@@ -45,6 +53,15 @@ const TaskStartInputSchema = z.object({
     .optional()
     .describe(
       'Override the auto-search query (defaults to the task title). Useful when the title is generic and you have a sharper term in mind.'
+    ),
+  worktreeMode: z
+    .enum(['auto', 'force', 'never'])
+    .default('auto')
+    .describe(
+      'How to handle parallel task work via git worktrees:\n' +
+        '  • auto (default): create a worktree only when ANOTHER task is already active in this checkout — keeps parallel work isolated.\n' +
+        '  • force: always create a fresh worktree for this task.\n' +
+        '  • never: stay in the current folder no matter what.'
     ),
 })
 
@@ -78,6 +95,153 @@ function formatRelativeTime(input: string | Date | null | undefined): string {
   if (hours < 24) return `${hours}h ago`
   if (days < 30) return `${days}d ago`
   return date.toLocaleDateString()
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Worktree decision helpers
+// ────────────────────────────────────────────────────────────────────
+
+type WorktreeOutcome =
+  | { kind: 'in-place'; reason: string; mainRepoRoot: string }
+  | { kind: 'redirect'; path: string; branch: string; port: number | null; reason: string }
+  | { kind: 'created'; path: string; branch: string; port: number | null }
+  | { kind: 'not-a-repo' }
+
+interface ResolveOpts {
+  cwd: string
+  taskId: string
+  taskName: string
+  projectId: string
+  mode: 'auto' | 'force' | 'never'
+}
+
+async function resolveWorktree(opts: ResolveOpts): Promise<WorktreeOutcome> {
+  // Outside a git repo: nothing to do, run in-place. We don't error
+  // here because not every PlanFlow project lives in git (yet).
+  const mainRepoRoot = await getMainRepoRoot(opts.cwd)
+  if (!mainRepoRoot) {
+    return { kind: 'not-a-repo' }
+  }
+
+  const cwdRepoRoot = await getRepoRoot(opts.cwd)
+  const inLinkedWorktree = !!cwdRepoRoot && cwdRepoRoot !== mainRepoRoot
+
+  const state = await readState(mainRepoRoot)
+
+  // Already in a linked worktree → never create another one. We
+  // assume the user opened Claude in this folder for a reason; we
+  // just continue. (Future: warn if the worktree's task != new task.)
+  if (inLinkedWorktree) {
+    const here = detectCurrentWorktree(state, opts.cwd)
+    return {
+      kind: 'in-place',
+      reason: here
+        ? `already inside worktree for ${here.taskId} (${here.path})`
+        : `already inside a linked worktree (${cwdRepoRoot})`,
+      mainRepoRoot,
+    }
+  }
+
+  // Existing worktree for THIS task → redirect.
+  const existingForThisTask = state.entries.find(
+    (e) => e.taskId === opts.taskId && !e.isMainRepo
+  )
+  if (existingForThisTask) {
+    return {
+      kind: 'redirect',
+      path: existingForThisTask.path,
+      branch: existingForThisTask.branch,
+      port: existingForThisTask.port,
+      reason: 'a worktree already exists for this task',
+    }
+  }
+
+  if (opts.mode === 'never') {
+    await registerMainRepoTask(mainRepoRoot, {
+      taskId: opts.taskId,
+      projectId: opts.projectId,
+    }).catch((err) => logger.warn('registerMainRepoTask failed', { error: String(err) }))
+    return { kind: 'in-place', reason: 'worktreeMode=never', mainRepoRoot }
+  }
+
+  // Decide whether to spawn a new worktree.
+  const otherActive = state.entries.filter(
+    (e) => e.taskId !== opts.taskId
+  )
+  const shouldCreate = opts.mode === 'force' || otherActive.length > 0
+
+  if (!shouldCreate) {
+    // Solo task in this checkout — run in-place but record the entry
+    // so future task_starts know we're occupying the main repo.
+    await registerMainRepoTask(mainRepoRoot, {
+      taskId: opts.taskId,
+      projectId: opts.projectId,
+    }).catch((err) => logger.warn('registerMainRepoTask failed', { error: String(err) }))
+    return {
+      kind: 'in-place',
+      reason: 'no other active tasks in this checkout',
+      mainRepoRoot,
+    }
+  }
+
+  // Parallel work — create a worktree.
+  try {
+    const result = await createWorktree(mainRepoRoot, {
+      taskId: opts.taskId,
+      taskName: opts.taskName,
+      projectId: opts.projectId,
+    })
+    return {
+      kind: 'created',
+      path: result.entry.path,
+      branch: result.entry.branch,
+      port: result.entry.port,
+    }
+  } catch (err) {
+    logger.error('createWorktree failed; falling back to in-place', { error: String(err) })
+    // Worktree creation failed — don't block the user. Continue in
+    // the current folder and surface the failure in the response.
+    return {
+      kind: 'in-place',
+      reason: `worktree creation failed: ${(err as Error).message}`,
+      mainRepoRoot,
+    }
+  }
+}
+
+function renderWorktreeRedirect(
+  taskId: string,
+  taskName: string,
+  outcome: Extract<WorktreeOutcome, { kind: 'redirect' | 'created' }>
+): string {
+  const verb = outcome.kind === 'created' ? 'Created' : 'Resuming'
+  const lines: string[] = []
+  lines.push(`🌿 ${verb} worktree for ${taskId} — "${taskName}"`)
+  lines.push('')
+  lines.push(`━━━ Worktree ━━━━━━━━━━━━━━━━━━━━`)
+  lines.push(`path:    ${outcome.path}`)
+  lines.push(`branch:  ${outcome.branch}`)
+  if (outcome.port !== null) lines.push(`port:    ${outcome.port}  (suggested for dev server)`)
+  if (outcome.kind === 'redirect') lines.push(`reason:  ${outcome.reason}`)
+  lines.push('')
+  lines.push(`━━━ Next steps ━━━━━━━━━━━━━━━━━━`)
+  lines.push(`  1. Open a new terminal in that folder:`)
+  lines.push(`     cd ${outcome.path}`)
+  lines.push(`     claude`)
+  lines.push(``)
+  lines.push(`  2. In the new Claude session, full task context loads on first prompt.`)
+  lines.push(`     (PlanFlow detects the worktree from .planflow/worktrees.json.)`)
+  lines.push(``)
+  lines.push(`  3. Install deps if needed (first time only — pnpm uses hardlinks, ~30s):`)
+  lines.push(`     pnpm install`)
+  if (outcome.port !== null) {
+    lines.push(``)
+    lines.push(`  4. Use port ${outcome.port} for any dev server in this worktree to`)
+    lines.push(`     avoid clashing with the main checkout.`)
+  }
+  lines.push('')
+  lines.push(`This Claude session keeps its current task — switch terminals to work on ${taskId}.`)
+  return lines.join('\n')
 }
 
 export const taskStartTool: ToolDefinition<TaskStartInput> = {
@@ -152,17 +316,53 @@ Prerequisites:
 
       const searchQuery = input.searchQuery ?? task.name
 
+      // ── Worktree decision ─────────────────────────────────────────
+      // We resolve the parallel-work story BEFORE any state writes.
+      // Three outcomes feed back into `worktreeNotice` (rendered in
+      // the response) and `bailEarly` (return immediately when the
+      // user must switch folders before context fetch makes sense):
+      //   1. "in-place"   — work continues in the current cwd.
+      //   2. "redirect"   — a worktree for this task already exists;
+      //                     instruct the user to cd into it. Bail.
+      //   3. "created"    — a fresh worktree was created for this
+      //                     task. Instruct the user to cd into it.
+      //                     Bail (they need a Claude session there).
+      //
+      // We don't auto-spawn dev servers or run installs here — those
+      // are project-specific and easy to surprise users with. The
+      // response prints the next commands so the user can run them.
+      const worktreeOutcome = await resolveWorktree({
+        cwd: process.cwd(),
+        taskId: task.taskId,
+        taskName: task.name,
+        projectId,
+        mode: input.worktreeMode ?? 'auto',
+      })
+
+      if (worktreeOutcome.kind === 'redirect' || worktreeOutcome.kind === 'created') {
+        return createSuccessResult(
+          renderWorktreeRedirect(task.taskId, task.name, worktreeOutcome)
+        )
+      }
+
+      // Promote the task into IN_PROGRESS only when it's still TODO.
+      // We don't auto-revive DONE tasks (that's a different intent —
+      // user should explicitly reopen) and we don't trample BLOCKED
+      // (the block flag carries information we shouldn't silently drop).
+      const shouldPromoteStatus = task.status === 'TODO'
+
       // Fan out the rest in parallel — none of them depend on each
-      // other. startWorkingOn is a side-effecting write but the others
-      // are reads, and we want the read results regardless of whether
-      // working_on succeeds (e.g. permission failure shouldn't block
-      // the user seeing their context).
+      // other. startWorkingOn + status promotion are side-effecting
+      // writes but the reads should still surface even if a write
+      // fails (e.g. permission). Order in the destructure mirrors the
+      // Promise.all order.
       const [
         commentsResult,
         activityResult,
         searchResult,
         knowledgeResult,
         workingOnResult,
+        statusPromotionResult,
       ] = await Promise.all([
         client.listComments(projectId, input.taskId).catch((err) => {
           logger.warn('listComments failed in task_start', { error: String(err) })
@@ -184,11 +384,28 @@ Prerequisites:
           logger.warn('startWorkingOn failed in task_start', { error: String(err) })
           return null
         }),
+        shouldPromoteStatus
+          ? client
+              .updateTaskStatus(projectId, input.taskId, 'IN_PROGRESS')
+              .catch((err) => {
+                logger.warn('updateTaskStatus failed in task_start', { error: String(err) })
+                return null
+              })
+          : Promise.resolve(null),
       ])
 
       const lines: string[] = []
       lines.push(`🎯 Starting task ${task.taskId} — "${task.name}"`)
       lines.push('')
+
+      // ── Worktree status ──────────────────────────────────────────
+      if (worktreeOutcome.kind === 'in-place') {
+        lines.push(`🌿 Worktree: in-place (${worktreeOutcome.reason})`)
+        lines.push('')
+      } else if (worktreeOutcome.kind === 'not-a-repo') {
+        lines.push(`🌿 Worktree: skipped (not a git repository)`)
+        lines.push('')
+      }
 
       // ── Task summary ─────────────────────────────────────────────
       lines.push(`━━━ Task ━━━━━━━━━━━━━━━━━━━━━━━━`)
@@ -203,14 +420,24 @@ Prerequisites:
       }
       lines.push('')
 
+      // ── Status promotion ────────────────────────────────────────
+      if (shouldPromoteStatus) {
+        if (statusPromotionResult) {
+          lines.push(`🏷️  Status: TODO → IN_PROGRESS`)
+        } else {
+          lines.push(
+            `⚠️  Status promotion failed (still TODO) — non-fatal, can fix with planflow_task_update`
+          )
+        }
+      }
+
       // ── Working-on signal ────────────────────────────────────────
       if (workingOnResult) {
         lines.push(`🟢 Working signal: active — teammates can see your focus`)
-        lines.push('')
       } else {
         lines.push(`⚠️  Working signal failed (non-fatal — proceeded with context fetch)`)
-        lines.push('')
       }
+      lines.push('')
 
       // ── Comments ─────────────────────────────────────────────────
       const comments = commentsResult?.comments ?? []
@@ -290,6 +517,15 @@ Prerequisites:
       lines.push(`  • Read full chunks:   planflow_chunk(chunkId: "...")`)
       lines.push(`  • Log progress:       planflow_task_progress(taskId: "${task.taskId}", note: "...")`)
       lines.push(`  • Mark done:          planflow_task_done(taskId: "${task.taskId}")`)
+      lines.push('')
+      lines.push(`While implementing — keep using PlanFlow search tools, not grep:`)
+      lines.push(`  • new question opens up    → planflow_search(query: "...")`)
+      lines.push(`  • full body of a hit       → planflow_chunk(chunkId: "...")`)
+      lines.push(`  • everything tied to file  → planflow_recall(filePath: "...")`)
+      lines.push(`  • brand-new area mid-task  → planflow_explore(intent: "...")`)
+      lines.push(`  Falling back to grep mid-task drops the ranked semantic context`)
+      lines.push(`  the Intelligence Layer is built to surface (related knowledge,`)
+      lines.push(`  recent activity, likely files).`)
 
       return createSuccessResult(lines.join('\n'))
     } catch (error) {

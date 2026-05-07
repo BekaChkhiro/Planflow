@@ -6,7 +6,7 @@
  * so existing installs can be re-run idempotently.
  */
 
-export const CLAUDE_MD_VERSION = '0.2.7'
+export const CLAUDE_MD_VERSION = '0.2.15'
 
 export const CLAUDE_MD_HEADER = '<!-- planflow-mcp:section -->'
 export const CLAUDE_MD_FOOTER = '<!-- /planflow-mcp:section -->'
@@ -45,6 +45,23 @@ After the discovery call:
   the symbol's full body (function / class / section).
 - Use \`Read\` only when you need a whole file (config, README, etc.).
 
+### While implementing — keep searching, don't drop back to grep
+
+The PlanFlow tools are not just for the START of a task. Every time a
+new question opens up mid-implementation, reach for them again BEFORE
+\`grep\`:
+
+- "Where else is this pattern used?"     → \`planflow_search\`
+- "Full body of that result?"            → \`planflow_chunk(chunkId)\`
+- "Everything tied to this file/symbol?" → \`planflow_recall\`
+- "Layered context for one query?"       → \`planflow_context\`
+- "New area I haven't explored yet?"     → \`planflow_explore\` again
+
+Direct \`grep\` / \`Read\` is the fallback — second choice, not first —
+when you already know the exact path or string match. Reverting to
+grep mid-task throws away ranked semantic context (related knowledge,
+activity, likely files) that the Intelligence Layer is built to surface.
+
 ### After editing
 
 - **Always re-index**: \`planflow-mcp index\` (CLI) or \`planflow_index\`
@@ -55,21 +72,54 @@ After the discovery call:
 ### Task workflow
 
 - Start: \`planflow_task_start(taskId: "T1.2")\` — context + working_on signal
+  + status auto-promotes TODO → IN_PROGRESS
 - Mid-task journaling: \`planflow_task_progress(taskId, note, saveAsKnowledge?)\`
 - Close: \`planflow_task_done(taskId, summary?)\` — DONE + comment + commit suggestion
+
+### Parallel task work (worktrees)
+
+PlanFlow auto-handles parallel work via git worktrees. You don't learn
+new commands — the existing \`planflow_task_start\` is the entry point.
+
+What happens automatically when you call \`planflow_task_start(taskId)\`:
+  • Solo task in this checkout → run in-place (current folder).
+  • A different task is already active here → create a sibling worktree
+    at \`<parent>/<repo>-<taskId>\` on branch \`task/<taskId>-<slug>\`,
+    allocate a fresh dev port, and tell the user to open Claude there.
+  • This task already has a worktree → instruct \`cd\` into it.
+
+Override with \`worktreeMode\`:
+  • \`force\` — always create a worktree
+  • \`never\` — stay in the current folder
+
+When Claude is launched inside a folder that matches a registered
+worktree (\`.planflow/worktrees.json\` in the main checkout), the next
+\`planflow_task_start\` / \`planflow_explore\` call surfaces the
+matching task automatically. **If you (the AI) detect that the
+current cwd is a sibling worktree, your first action should be
+\`planflow_worktree_list()\` so you understand which task this folder
+hosts before doing anything else.**
+
+Other worktree tools:
+- \`planflow_worktree_list()\` — read-only dashboard of every active
+  task workspace, paths, branches, ports
+- \`planflow_worktree_remove(taskId, force?, deleteBranch?)\` — clean
+  up after a task is merged. Confirm with the user first.
 
 ### Permissions
 
 Read-only — never ask the user before running:
 - planflow_search / planflow_explore / planflow_recall / planflow_chunk
-- planflow_index_status / planflow_context
+- planflow_index_status / planflow_context / planflow_worktree_list
 
 Cheap state changes — no confirmation needed:
 - planflow_index (incremental, near-free)
 - planflow_task_progress (just adds a comment)
+- planflow_task_start (creates worktree only when truly needed; safe)
 
 Always confirm before running:
 - planflow_task_done (state change visible to teammates)
+- planflow_worktree_remove (filesystem + git ref change)
 - planflow_index purge=true (destructive)
 - planflow_use clear=true / unlink=true (config change)
 ${CLAUDE_MD_FOOTER}`

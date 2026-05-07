@@ -40,6 +40,20 @@ After discovery:
     the symbol's full body (function / class / section).
   • Use Read for whole files (config, README, etc.).
 
+While implementing a task — keep using these tools, not just at the
+start. The codebase is fully indexed; new questions during work belong
+to the same toolchain:
+  • "Where else is this pattern used?"        → planflow_search
+  • "Show me the full body of that result"    → planflow_chunk(chunkId)
+  • "What's tied to this file / symbol?"      → planflow_recall
+  • "Layered context for one query"           → planflow_context
+  • Brand new area opened up mid-task         → planflow_explore again
+  Direct grep / Read is the fallback when the path or string is already
+  known exactly — it should be the SECOND choice during a task, not the
+  first. Reverting to grep mid-task means leaving ranked semantic
+  signal (related knowledge, recent activity, likely files) on the
+  table — exactly the signal that the Intelligence Layer exists for.
+
 After non-trivial edits:
   • Always re-index incrementally:
         planflow-mcp index   (CLI, fast, free)
@@ -50,18 +64,37 @@ After non-trivial edits:
 
 Task workflow:
   • Start:        planflow_task_start(taskId: "T1.2")
+        — auto-promotes status TODO → IN_PROGRESS, signals working_on,
+          and (when ANOTHER task is already active in this checkout)
+          spins up a sibling git worktree so parallel work stays clean.
   • Mid-progress: planflow_task_progress(taskId, note, saveAsKnowledge?)
   • Close:        planflow_task_done(taskId, summary?)
-        — marks DONE, comments, stops working_on, suggests commit msg.
+        — marks DONE, comments, stops working_on, suggests commit msg,
+          and surfaces worktree-cleanup commands when applicable.
+
+Parallel work (worktrees):
+  • planflow_task_start auto-handles this. Solo task → run in-place.
+    Other task already active → fresh worktree at <parent>/<repo>-<id>
+    on branch task/<id>-<slug>, with a unique dev port allocated.
+  • planflow_worktree_list — read-only dashboard of every active task
+    workspace (paths, branches, ports, "you are here" pointer).
+  • planflow_worktree_remove(taskId, force?, deleteBranch?) — clean
+    up after merge. CONFIRM with user first (filesystem + git refs).
+  • If you are launched in a folder with .planflow/worktrees.json AND
+    your cwd matches a registered worktree, your first action should
+    be planflow_worktree_list() to learn which task this folder hosts.
 
 Confirmation policy:
   • Read-only ops never need confirmation:
         planflow_search / planflow_explore / planflow_recall /
-        planflow_chunk / planflow_context / planflow_index_status
+        planflow_chunk / planflow_context / planflow_index_status /
+        planflow_worktree_list
   • Cheap state changes are fine to run unprompted:
-        planflow_index (incremental) / planflow_task_progress
+        planflow_index (incremental) / planflow_task_progress /
+        planflow_task_start (worktree creation is reversible)
   • Always confirm with the user before:
         planflow_task_done (visible state change)
+        planflow_worktree_remove (filesystem + git ref change)
         planflow_index purge=true (destructive)
         planflow_use clear=true / unlink=true (config wipe)
 

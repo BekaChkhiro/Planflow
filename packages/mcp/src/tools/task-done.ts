@@ -20,6 +20,12 @@ import {
   createErrorResult,
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
+import {
+  clearMainRepoTask,
+  detectCurrentWorktree,
+  getMainRepoRoot,
+  readState,
+} from '../worktree.js'
 
 const TaskDoneInputSchema = z.object({
   projectId: z
@@ -204,6 +210,53 @@ Prerequisites:
       lines.push(`━━━ Suggested commit ━━━━━━━━━━━`)
       lines.push(commitMessage)
       lines.push('')
+
+      // ── Worktree cleanup hint ────────────────────────────────────
+      // We don't auto-merge or auto-remove the worktree here — both
+      // are destructive enough that the user should drive them. We
+      // detect what kind of workspace this task lives in and surface
+      // the right next commands.
+      try {
+        const cwd = process.cwd()
+        const mainRepoRoot = await getMainRepoRoot(cwd)
+        if (mainRepoRoot) {
+          const state = await readState(mainRepoRoot)
+          const here = detectCurrentWorktree(state, cwd)
+          const taskEntry = state.entries.find((e) => e.taskId === input.taskId)
+
+          if (here && here.taskId === input.taskId && !here.isMainRepo) {
+            // We finished the task while inside its own worktree.
+            lines.push(`━━━ Worktree cleanup ━━━━━━━━━━`)
+            lines.push(`This task lives in worktree: ${here.path}`)
+            lines.push(`Branch: ${here.branch}`)
+            lines.push(``)
+            lines.push(`When you're ready to merge & clean up:`)
+            lines.push(`  1. Push & open PR (or merge locally):`)
+            lines.push(`     git push -u origin ${here.branch}`)
+            lines.push(`  2. After merge, from the MAIN checkout, run:`)
+            lines.push(`     planflow_worktree_remove(taskId: "${input.taskId}")`)
+            lines.push(`     (removes the worktree, frees port ${here.port ?? 'n/a'})`)
+            lines.push('')
+          } else if (taskEntry && taskEntry.isMainRepo) {
+            // Task was running in the main checkout — drop the
+            // marker so the next task_start picks the in-place path.
+            await clearMainRepoTask(mainRepoRoot).catch((err) => {
+              logger.warn('clearMainRepoTask failed', { error: String(err) })
+            })
+          } else if (taskEntry && !taskEntry.isMainRepo) {
+            // Task lives in a worktree but we're somewhere else —
+            // probably the user finalized from the main checkout.
+            lines.push(`━━━ Worktree cleanup ━━━━━━━━━━`)
+            lines.push(
+              `Worktree for ${input.taskId} is at: ${taskEntry.path} (branch ${taskEntry.branch})`
+            )
+            lines.push(`When ready: planflow_worktree_remove(taskId: "${input.taskId}")`)
+            lines.push('')
+          }
+        }
+      } catch (err) {
+        logger.warn('Worktree-aware cleanup hint failed', { error: String(err) })
+      }
 
       lines.push(`Next steps:`)
       lines.push(`  • Pick the next task: planflow_task_next()`)

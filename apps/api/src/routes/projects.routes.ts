@@ -22,6 +22,8 @@ import {
   broadcastTasksUpdated,
   broadcastTasksSynced,
   broadcastTasksReordered,
+  broadcastWorkingOnChanged,
+  connectionManager,
   getTaskLock,
 } from '../websocket/index.js'
 import { recordChange } from '../lib/record-change.js'
@@ -1725,6 +1727,115 @@ projectRoutes.post('/:id/tasks/:taskId/assign', auth, async (c) => {
     })
   } catch (error) {
     console.error('Assign task error:', error)
+    return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
+  }
+})
+
+// ============================================
+// Working-On Signal Routes (HTTP shim for the MCP)
+// ============================================
+//
+// The WebSocket server is the canonical surface for `working_on` —
+// browsers and the dashboard speak it directly. The MCP runs out of
+// process and isn't on the WS bus, so it needs an HTTP equivalent.
+// This route mirrors the WS `working_on_start` / `working_on_stop`
+// handlers (apps/api/src/websocket/server.ts) and broadcasts the same
+// event so any subscribed dashboard updates instantly.
+
+// POST /projects/:id/tasks/:taskId/work - Set/clear "working on" status
+//   body: { action: "start" | "stop" }
+//   Use taskId "_" with action "stop" to clear without naming a task.
+projectRoutes.post('/:id/tasks/:taskId/work', auth, async (c) => {
+  try {
+    const { user } = getAuth(c)
+    const projectId = c.req.param('id')
+    const taskIdParam = c.req.param('taskId')
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(projectId)) {
+      return c.json({ success: false, error: 'Invalid project ID format' }, 400)
+    }
+
+    const body = await c.req.json().catch(() => ({}))
+    const action = (body as { action?: unknown }).action
+    if (action !== 'start' && action !== 'stop') {
+      return c.json(
+        { success: false, error: 'Invalid action. Expected "start" or "stop".' },
+        400
+      )
+    }
+
+    const db = getDbClient()
+
+    // Project existence + access check (owner gate matches sibling routes).
+    const [project] = await db
+      .select({ id: schema.projects.id, userId: schema.projects.userId })
+      .from(schema.projects)
+      .where(eq(schema.projects.id, projectId))
+
+    if (!project || project.userId !== user.id) {
+      return c.json({ success: false, error: 'Project not found' }, 404)
+    }
+
+    if (action === 'stop') {
+      await connectionManager.clearWorkingOn(projectId, user.id)
+      broadcastWorkingOnChanged(projectId, user.id, null)
+      return c.json({
+        success: true,
+        data: { action: 'stop', workingOn: null },
+      })
+    }
+
+    // action === 'start' — taskId must be a real task ID.
+    const taskIdRegex = /^T\d+\.\d+$/
+    if (!taskIdRegex.test(taskIdParam)) {
+      return c.json(
+        { success: false, error: 'Invalid task ID format. Expected format: T1.1' },
+        400
+      )
+    }
+
+    const [task] = await db
+      .select({
+        id: schema.tasks.id,
+        taskId: schema.tasks.taskId,
+        name: schema.tasks.name,
+      })
+      .from(schema.tasks)
+      .where(and(eq(schema.tasks.projectId, projectId), eq(schema.tasks.taskId, taskIdParam)))
+
+    if (!task) {
+      return c.json({ success: false, error: `Task ${taskIdParam} not found` }, 404)
+    }
+
+    const startedAt = await connectionManager.setWorkingOn(
+      projectId,
+      user.id,
+      { taskId: task.taskId, taskUuid: task.id, taskName: task.name },
+      { email: user.email, name: user.name ?? null }
+    )
+
+    broadcastWorkingOnChanged(projectId, user.id, {
+      taskId: task.taskId,
+      taskUuid: task.id,
+      taskName: task.name,
+      startedAt: startedAt.toISOString(),
+    })
+
+    return c.json({
+      success: true,
+      data: {
+        action: 'start',
+        workingOn: {
+          taskId: task.taskId,
+          taskUuid: task.id,
+          taskName: task.name,
+          startedAt: startedAt.toISOString(),
+        },
+      },
+    })
+  } catch (error) {
+    console.error('Working-on update error:', error)
     return c.json({ success: false, error: 'An unexpected error occurred' }, 500)
   }
 })

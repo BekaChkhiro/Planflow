@@ -6,7 +6,7 @@
  * so existing installs can be re-run idempotently.
  */
 
-export const CLAUDE_MD_VERSION = '0.2.15'
+export const CLAUDE_MD_VERSION = '0.2.16'
 
 export const CLAUDE_MD_HEADER = '<!-- planflow-mcp:section -->'
 export const CLAUDE_MD_FOOTER = '<!-- /planflow-mcp:section -->'
@@ -105,6 +105,16 @@ Other worktree tools:
   task workspace, paths, branches, ports
 - \`planflow_worktree_remove(taskId, force?, deleteBranch?)\` — clean
   up after a task is merged. Confirm with the user first.
+
+### Commit hygiene
+
+When you create git commits in this project, DO NOT append a
+\`Co-Authored-By: Claude ...\` trailer (or any AI-attribution trailer)
+to the commit message. The git log should read as authored by the
+user alone. Implementation help is not authorship.
+
+Applies to every commit on every branch — not just task closures.
+Override only when the user explicitly asks for a co-author line.
 
 ### Permissions
 

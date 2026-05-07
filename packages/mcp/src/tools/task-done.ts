@@ -210,6 +210,9 @@ Prerequisites:
       lines.push(`━━━ Suggested commit ━━━━━━━━━━━`)
       lines.push(commitMessage)
       lines.push('')
+      lines.push(`(Commit as the user — do NOT append a Co-Authored-By: Claude`)
+      lines.push(` trailer. PlanFlow projects keep authorship clean.)`)
+      lines.push('')
 
       // ── Worktree cleanup hint ────────────────────────────────────
       // We don't auto-merge or auto-remove the worktree here — both

@@ -577,6 +577,31 @@ export class ApiClient {
   }
 
   /**
+   * Edit a task by its human task ID (e.g., "T1.1").
+   *
+   * Wraps PATCH /projects/:id/tasks/:taskId — that endpoint resolves
+   * the task by taskId server-side, enforces locks, and broadcasts
+   * the update over WebSocket. This is the right method for partial
+   * edits to a single task (name, description, status, complexity,
+   * estimatedHours, dependencies). Unlike updateTask/bulkUpdateTasks,
+   * it does not require a pre-fetch round trip to resolve the UUID.
+   */
+  async editTask(
+    projectId: string,
+    taskId: string,
+    updates: UpdateTaskRequest
+  ): Promise<Omit<Task, 'projectId'>> {
+    const response = await this.request<{
+      projectId: string
+      projectName: string
+      task: Omit<Task, 'projectId'>
+    }>('PATCH', `/projects/${projectId}/tasks/${encodeURIComponent(taskId)}`, {
+      body: updates,
+    })
+    return response.task
+  }
+
+  /**
    * Bulk update multiple tasks
    */
   async bulkUpdateTasks(

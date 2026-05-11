@@ -6,7 +6,7 @@
  * so existing installs can be re-run idempotently.
  */
 
-export const CLAUDE_MD_VERSION = '0.2.16'
+export const CLAUDE_MD_VERSION = '0.2.17'
 
 export const CLAUDE_MD_HEADER = '<!-- planflow-mcp:section -->'
 export const CLAUDE_MD_FOOTER = '<!-- /planflow-mcp:section -->'

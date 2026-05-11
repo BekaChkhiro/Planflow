@@ -48,6 +48,11 @@ vi.mock('../../db/index.js', () => ({
         }),
       }),
     }),
+    select: vi.fn().mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      }),
+    }),
     delete: vi.fn().mockReturnValue({
       where: vi.fn().mockResolvedValue([]),
     }),
@@ -82,7 +87,7 @@ vi.mock('../../websocket/index.js', () => ({
   getTaskLock: vi.fn(() => null),
 }))
 
-import { getDbClient, withTransaction } from '../../db/index.js'
+import { getDbClient, withTransaction, schema } from '../../db/index.js'
 import { canCreateProject, getProjectLimits } from '../../utils/helpers.js'
 import { parsePlanTasks } from '../../lib/task-parser.js'
 import { getTaskLock } from '../../websocket/index.js'
@@ -411,6 +416,47 @@ describe('ProjectService', () => {
   })
 
   describe('updateProjectPlan', () => {
+    /**
+     * Build a tx mock for updateProjectPlan that exposes the four
+     * verbs the service touches inside the transaction:
+     *   • update  → returns the given project on .returning()
+     *   • select  → first call returns the existing-tasks list,
+     *               second call returns the count aggregation row
+     *   • insert  → no-op (we don't assert against it)
+     *   • delete  → no-op (only used in syncMode=replace)
+     */
+    const buildTxMock = (opts: {
+      updatedProject: unknown
+      existingTasks?: Array<{ id: string; taskId: string }>
+      counts?: { totalCount: number; doneCount: number }
+    }) => {
+      const selectResults = [
+        opts.existingTasks ?? [],
+        [opts.counts ?? { totalCount: 0, doneCount: 0 }],
+      ]
+      let selectCall = 0
+      return {
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([opts.updatedProject]),
+            }),
+          }),
+        }),
+        select: vi.fn().mockImplementation(() => ({
+          from: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue(selectResults[selectCall++] ?? []),
+          }),
+        })),
+        delete: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue([]),
+        }),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockResolvedValue([]),
+        }),
+      }
+    }
+
     it('should update project plan', async () => {
       const mockUpdatedProject = {
         id: 'proj-1',
@@ -419,25 +465,9 @@ describe('ProjectService', () => {
         updatedAt: new Date(),
       }
 
-      // Mock the transaction
-      vi.mocked(withTransaction).mockImplementationOnce(async (fn) => {
-        const mockTx = {
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockReturnValue({
-                returning: vi.fn().mockResolvedValue([mockUpdatedProject]),
-              }),
-            }),
-          }),
-          delete: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue([]),
-          }),
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockResolvedValue([]),
-          }),
-        }
-        return fn(mockTx)
-      })
+      vi.mocked(withTransaction).mockImplementationOnce(async (fn) =>
+        fn(buildTxMock({ updatedProject: mockUpdatedProject }))
+      )
 
       const result = await projectService.updateProjectPlan('user-123', 'proj-1', '# Updated Plan')
 
@@ -447,8 +477,8 @@ describe('ProjectService', () => {
 
     it('should parse and sync tasks from plan', async () => {
       const mockParsedTasks = [
-        { taskId: 'T1', name: 'Task 1', status: 'TODO', description: null, complexity: null, estimatedHours: null, dependencies: [] },
-        { taskId: 'T2', name: 'Task 2', status: 'DONE', description: null, complexity: null, estimatedHours: null, dependencies: [] },
+        { taskId: 'T1', name: 'Task 1', status: 'TODO' as const },
+        { taskId: 'T2', name: 'Task 2', status: 'DONE' as const },
       ]
       vi.mocked(parsePlanTasks).mockReturnValueOnce(mockParsedTasks)
 
@@ -459,30 +489,96 @@ describe('ProjectService', () => {
         updatedAt: new Date(),
       }
 
-      vi.mocked(withTransaction).mockImplementationOnce(async (fn) => {
-        const mockTx = {
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockReturnValue({
-                returning: vi.fn().mockResolvedValue([mockUpdatedProject]),
-              }),
-            }),
-          }),
-          delete: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue([]),
-          }),
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockResolvedValue([]),
-          }),
-        }
-        return fn(mockTx)
-      })
+      // Counts come from the post-sync DB read now, not from the
+      // parser output — the test simulates what that aggregate query
+      // would return after T1/T2 were inserted (2 total, 1 DONE).
+      vi.mocked(withTransaction).mockImplementationOnce(async (fn) =>
+        fn(
+          buildTxMock({
+            updatedProject: mockUpdatedProject,
+            existingTasks: [],
+            counts: { totalCount: 2, doneCount: 1 },
+          })
+        )
+      )
 
       const result = await projectService.updateProjectPlan('user-123', 'proj-1', '# Plan with tasks')
 
       expect(result.tasksCount).toBe(2)
       expect(result.completedCount).toBe(1)
       expect(result.progress).toBe(50)
+    })
+
+    // Regression test for the destructive-sync bug. The parser
+    // intentionally returns `undefined` for fields the markdown did
+    // not mention; the service must NOT write those into the row, or
+    // every push would resurrect the data loss bug where DONE statuses
+    // and assignees were wiped back to defaults.
+    it('does not write fields the parser did not find on existing tasks', async () => {
+      // Markdown only renamed T21.4 — no status, no complexity, no
+      // hours, no dependencies. The DB row already exists.
+      vi.mocked(parsePlanTasks).mockReturnValueOnce([
+        { taskId: 'T21.4', name: 'Renamed task' },
+      ])
+
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      })
+
+      vi.mocked(withTransaction).mockImplementationOnce(async (fn) => {
+        let selectCall = 0
+        const tx = {
+          update: vi.fn().mockImplementation((table) => {
+            // The plan-update call still uses .set().where().returning()
+            // — distinguish from the task-update call by table identity.
+            if (table === schema.projects) {
+              return {
+                set: vi.fn().mockReturnValue({
+                  where: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([
+                      {
+                        id: 'proj-1',
+                        name: 'Project 1',
+                        plan: '# plan',
+                        updatedAt: new Date(),
+                      },
+                    ]),
+                  }),
+                }),
+              }
+            }
+            // tasks update — capture the .set() payload
+            return { set: setSpy }
+          }),
+          select: vi.fn().mockImplementation(() => ({
+            from: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue(
+                selectCall++ === 0
+                  ? [{ id: 'task-uuid-1', taskId: 'T21.4' }]
+                  : [{ totalCount: 1, doneCount: 1 }]
+              ),
+            }),
+          })),
+          delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+        }
+        return fn(tx)
+      })
+
+      await projectService.updateProjectPlan('user-123', 'proj-1', '# plan')
+
+      expect(setSpy).toHaveBeenCalledTimes(1)
+      const payload = setSpy.mock.calls[0][0]
+      // The task UPDATE must touch `name` (parser saw it) and the
+      // `updatedAt` bookkeeping field — and nothing else. Any of these
+      // appearing means a destructive write snuck back in.
+      expect(payload).toHaveProperty('name', 'Renamed task')
+      expect(payload).toHaveProperty('updatedAt')
+      expect(payload).not.toHaveProperty('status')
+      expect(payload).not.toHaveProperty('complexity')
+      expect(payload).not.toHaveProperty('estimatedHours')
+      expect(payload).not.toHaveProperty('dependencies')
+      expect(payload).not.toHaveProperty('description')
     })
   })
 

@@ -718,22 +718,38 @@ projectRoutes.put('/:id/plan', largeBodyLimit, auth, async (c) => {
 
     // Parse tasks from plan content first (before any DB operations)
     let parsedTasks: ReturnType<typeof parsePlanTasks> = []
-    let tasksCount = 0
-    let completedCount = 0
 
     if (body.plan) {
       try {
         parsedTasks = parsePlanTasks(body.plan)
-        tasksCount = parsedTasks.length
-        completedCount = parsedTasks.filter((t) => t.status === 'DONE').length
       } catch (parseError) {
         console.error('Task parsing error (non-fatal):', parseError)
         // Continue even if parsing fails - plan will still be saved
       }
     }
 
+    // Sync mode (default: 'merge' — non-destructive).
+    //   merge   → existing tasks are updated in place; tasks present in
+    //             the DB but missing from the markdown are LEFT ALONE.
+    //             Status/assignee/GitHub links/displayOrder/createdAt
+    //             are preserved on every task. Fields are updated only
+    //             when the parser explicitly found them.
+    //   replace → same upsert, but tasks not in markdown are deleted.
+    //             Use to clean up renamed/removed tasks.
+    const syncModeParam = (c.req.query('syncMode') ?? 'merge').toLowerCase()
+    const syncMode: 'merge' | 'replace' = syncModeParam === 'replace' ? 'replace' : 'merge'
+
     // Use transaction for atomic project update + task sync
-    const updatedProject = await withTransaction(async (tx) => {
+    type SyncCounts = { tasksCount: number; completedCount: number }
+    const result = await withTransaction(async (tx): Promise<{
+      project: {
+        id: string
+        name: string
+        plan: string | null
+        updatedAt: Date
+      }
+      counts: SyncCounts
+    }> => {
       // Update project plan
       const [project] = await tx
         .update(schema.projects)
@@ -753,33 +769,110 @@ projectRoutes.put('/:id/plan', largeBodyLimit, auth, async (c) => {
         throw new Error('PROJECT_NOT_FOUND')
       }
 
-      // Sync tasks within same transaction
-      if (parsedTasks.length > 0) {
-        // Delete existing tasks for this project
-        await tx.delete(schema.tasks).where(eq(schema.tasks.projectId, projectId))
+      // Sync tasks within same transaction — UPSERT, never wholesale-delete.
+      // Read the existing rows so we can update in place and preserve
+      // every column the parser doesn't speak about (assignee, GitHub
+      // links, locks, displayOrder, createdAt, …).
+      const existingTasks = await tx
+        .select({
+          id: schema.tasks.id,
+          taskId: schema.tasks.taskId,
+          status: schema.tasks.status,
+        })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.projectId, projectId))
 
-        // Insert new tasks
-        const tasksToInsert = parsedTasks.map((task) => ({
-          projectId,
-          taskId: task.taskId,
-          name: task.name,
-          description: task.description,
-          status: task.status,
-          complexity: task.complexity,
-          estimatedHours: task.estimatedHours,
-          dependencies: task.dependencies,
-        }))
+      const existingByTaskId = new Map(existingTasks.map((t) => [t.taskId, t]))
+      const parsedTaskIds = new Set(parsedTasks.map((t) => t.taskId))
 
+      const tasksToInsert: Array<typeof schema.tasks.$inferInsert> = []
+
+      for (const task of parsedTasks) {
+        const existing = existingByTaskId.get(task.taskId)
+
+        if (existing) {
+          // UPDATE — only fields the parser found. `undefined` means
+          // "markdown did not mention this", so the DB column is left
+          // untouched.
+          const updateData: Partial<typeof schema.tasks.$inferInsert> & {
+            updatedAt: Date
+          } = { updatedAt: new Date() }
+          if (task.name !== undefined) updateData.name = task.name
+          if (task.description !== undefined) updateData.description = task.description
+          if (task.status !== undefined) updateData.status = task.status
+          if (task.complexity !== undefined) updateData.complexity = task.complexity
+          if (task.estimatedHours !== undefined) updateData.estimatedHours = task.estimatedHours
+          if (task.dependencies !== undefined) updateData.dependencies = task.dependencies
+
+          // Skip the round-trip if nothing actually changed.
+          if (Object.keys(updateData).length > 1) {
+            await tx
+              .update(schema.tasks)
+              .set(updateData)
+              .where(eq(schema.tasks.id, existing.id))
+          }
+        } else {
+          // INSERT — apply safe DB-level defaults only for new rows.
+          tasksToInsert.push({
+            projectId,
+            taskId: task.taskId,
+            name: task.name,
+            description: task.description ?? null,
+            status: task.status ?? 'TODO',
+            complexity: task.complexity ?? 'Medium',
+            estimatedHours: task.estimatedHours ?? null,
+            dependencies: task.dependencies ?? [],
+          })
+        }
+      }
+
+      if (tasksToInsert.length > 0) {
         await tx.insert(schema.tasks).values(tasksToInsert)
       }
 
-      return project
+      // Optional cleanup: delete tasks that exist in the DB but are
+      // no longer present in the markdown. Off by default so a partial
+      // re-sync (e.g. pushing a slice of the plan) never silently
+      // destroys data.
+      if (syncMode === 'replace' && existingTasks.length > 0) {
+        const orphanIds = existingTasks
+          .filter((t) => !parsedTaskIds.has(t.taskId))
+          .map((t) => t.id)
+        if (orphanIds.length > 0) {
+          await tx.delete(schema.tasks).where(inArray(schema.tasks.id, orphanIds))
+        }
+      }
+
+      // Recompute counts from the post-sync state so progress reflects
+      // ALL tasks in the project — including ones the parser didn't
+      // touch — not just what was in the markdown.
+      const countRows = await tx
+        .select({
+          totalCount: count(),
+          doneCount: count(sql`CASE WHEN ${schema.tasks.status} = 'DONE' THEN 1 END`),
+        })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.projectId, projectId))
+
+      const totals = countRows[0] ?? { totalCount: 0, doneCount: 0 }
+
+      return {
+        project,
+        counts: {
+          tasksCount: Number(totals.totalCount),
+          completedCount: Number(totals.doneCount),
+        },
+      }
     }).catch((error) => {
       if (error.message === 'PROJECT_NOT_FOUND') {
         return null
       }
       throw error
     })
+
+    const updatedProject = result?.project ?? null
+    const tasksCount = result?.counts.tasksCount ?? 0
+    const completedCount = result?.counts.completedCount ?? 0
 
     if (!updatedProject) {
       return c.json({ success: false, error: 'Project not found' }, 404)

@@ -18,6 +18,7 @@ import { useTool } from './use.js'
 import { syncTool } from './sync.js'
 import { taskListTool } from './task-list.js'
 import { taskUpdateTool } from './task-update.js'
+import { taskEditTool } from './task-edit.js'
 import { taskNextTool } from './task-next.js'
 import { taskStartTool } from './task-start.js'
 import { taskDoneTool } from './task-done.js'
@@ -57,6 +58,7 @@ export const tools: ToolDefinition[] = [
   syncTool,
   taskListTool,
   taskUpdateTool,
+  taskEditTool,
   taskNextTool,
   taskStartTool,
   taskDoneTool,

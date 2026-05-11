@@ -14,14 +14,30 @@
  * 2. Table format: | T1.1 | Task Name | Low | TODO | - |
  */
 
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
+export type TaskComplexity = 'Low' | 'Medium' | 'High'
+
+/**
+ * A task as extracted from PROJECT_PLAN.md.
+ *
+ * IMPORTANT — sync semantics: `undefined` on an optional field means
+ * "the parser did not find this in the markdown". The sync layer uses
+ * this to merge with the existing DB row instead of resetting it. Do
+ * NOT default these in the parser — that destroys information.
+ *
+ *   • status === undefined  → leave existing DB value untouched
+ *   • status === 'TODO'     → user explicitly wrote TODO in markdown
+ *
+ * Only `taskId` and `name` are required; everything else is optional.
+ */
 export interface ParsedTask {
   taskId: string
   name: string
-  description: string | null
-  status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
-  complexity: 'Low' | 'Medium' | 'High'
-  estimatedHours: number | null
-  dependencies: string[]
+  description?: string | null
+  status?: TaskStatus
+  complexity?: TaskComplexity
+  estimatedHours?: number | null
+  dependencies?: string[]
 }
 
 /**
@@ -153,13 +169,11 @@ function parseTasksFromTables(planContent: string): ParsedTask[] {
       const hasTaskId = cells.some((cell) => /^T\d+[A-Za-z]?\.\d+$/.test(cell.trim()))
 
       if (hasTaskId && columnMap.size > 0) {
-        const task: Partial<ParsedTask> = {
-          status: 'TODO',
-          complexity: 'Medium',
-          estimatedHours: null,
-          dependencies: [],
-          description: null,
-        }
+        // Start empty — only set fields that the table row actually
+        // contains. `undefined` is preserved through to the sync layer
+        // so we don't wipe out DB state that isn't represented in the
+        // markdown column.
+        const task: Partial<ParsedTask> = {}
 
         cells.forEach((cell, index) => {
           const columnType = columnMap.get(index)
@@ -178,16 +192,16 @@ function parseTasksFromTables(planContent: string): ParsedTask[] {
               task.name = value
               break
             case 'status':
-              task.status = parseStatus(value)
+              if (value && value !== '-') task.status = parseStatus(value)
               break
             case 'complexity':
-              task.complexity = parseComplexity(value)
+              if (value && value !== '-') task.complexity = parseComplexity(value)
               break
             case 'dependencies':
               task.dependencies = parseDependencies(value)
               break
             case 'description':
-              task.description = value || null
+              if (value) task.description = value
               break
             case 'hours': {
               const hours = parseInt(value, 10)
@@ -244,18 +258,15 @@ function parseTasksFromHeaders(planContent: string): ParsedTask[] {
     if (taskHeaderMatch) {
       // Save previous task if exists
       if (currentTask && currentTask.taskId) {
-        currentTask.description = descriptionLines.join('\n').trim() || null
+        const desc = descriptionLines.join('\n').trim()
+        if (desc) currentTask.description = desc
         tasks.push(currentTask as ParsedTask)
       }
 
-      // Start new task
+      // Start new task — fields are populated only as the parser sees them
       currentTask = {
         taskId: taskHeaderMatch[1],
         name: taskHeaderMatch[2].replace(/\*+/g, '').trim(),
-        status: 'TODO',
-        complexity: 'Medium',
-        estimatedHours: null,
-        dependencies: [],
       }
       inTaskBlock = true
       descriptionLines = []
@@ -272,7 +283,7 @@ function parseTasksFromHeaders(planContent: string): ParsedTask[] {
         const checkbox = statusMatch[1].toLowerCase()
         const statusText = statusMatch[2].trim().toUpperCase()
 
-        // Determine status from text or checkbox
+        // Status was explicitly written in the markdown — set it.
         if (
           statusText.includes('DONE') ||
           statusText.includes('COMPLETE') ||
@@ -345,7 +356,8 @@ function parseTasksFromHeaders(planContent: string): ParsedTask[] {
       if (line.match(/^#{1,4}\s+/) && !line.match(/^#{2,4}\s*\*{0,2}T\d+[A-Za-z]?\.\d+/)) {
         // Save current task before moving on
         if (currentTask.taskId) {
-          currentTask.description = descriptionLines.join('\n').trim() || null
+          const desc = descriptionLines.join('\n').trim()
+          if (desc) currentTask.description = desc
           tasks.push(currentTask as ParsedTask)
         }
         currentTask = null
@@ -357,7 +369,8 @@ function parseTasksFromHeaders(planContent: string): ParsedTask[] {
 
   // Don't forget the last task
   if (currentTask && currentTask.taskId) {
-    currentTask.description = descriptionLines.join('\n').trim() || null
+    const desc = descriptionLines.join('\n').trim()
+    if (desc) currentTask.description = desc
     tasks.push(currentTask as ParsedTask)
   }
 
@@ -377,18 +390,33 @@ export function parsePlanTasks(planContent: string): ParsedTask[] {
   const headerTasks = parseTasksFromHeaders(planContent)
   const tableTasks = parseTasksFromTables(planContent)
 
-  // Combine and deduplicate by taskId (header format takes precedence)
+  // Merge per-field by taskId. A real plan often has the same task
+  // mentioned in both a summary table (which carries status/complexity)
+  // and a detailed `#### **T1.1**: …` block (which carries dependencies
+  // and estimated hours). Wholesale-overriding one with the other
+  // loses information — instead, overlay only fields that were
+  // actually present in each parse. Header values win for shared
+  // fields because the detailed block is the source of truth.
   const taskMap = new Map<string, ParsedTask>()
 
-  // Add table tasks first
-  for (const task of tableTasks) {
-    taskMap.set(task.taskId, task)
+  const mergeTask = (incoming: ParsedTask) => {
+    const existing = taskMap.get(incoming.taskId)
+    if (!existing) {
+      taskMap.set(incoming.taskId, { ...incoming })
+      return
+    }
+    const merged: ParsedTask = { ...existing }
+    if (incoming.name) merged.name = incoming.name
+    if (incoming.description !== undefined) merged.description = incoming.description
+    if (incoming.status !== undefined) merged.status = incoming.status
+    if (incoming.complexity !== undefined) merged.complexity = incoming.complexity
+    if (incoming.estimatedHours !== undefined) merged.estimatedHours = incoming.estimatedHours
+    if (incoming.dependencies !== undefined) merged.dependencies = incoming.dependencies
+    taskMap.set(incoming.taskId, merged)
   }
 
-  // Add header tasks (will override table tasks with same ID)
-  for (const task of headerTasks) {
-    taskMap.set(task.taskId, task)
-  }
+  for (const task of tableTasks) mergeTask(task)
+  for (const task of headerTasks) mergeTask(task)
 
   return Array.from(taskMap.values())
 }

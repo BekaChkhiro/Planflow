@@ -3,7 +3,7 @@
  * Handles project CRUD operations and task management
  */
 
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, count, sql, inArray } from 'drizzle-orm'
 import { getDbClient, schema, withTransaction } from '../db/index.js'
 import { canCreateProject, getProjectLimits } from '../utils/helpers.js'
 import { parsePlanTasks } from '../lib/task-parser.js'
@@ -282,26 +282,55 @@ export class ProjectService {
   }
 
   /**
-   * Update project plan and sync tasks
+   * Update project plan and sync tasks.
+   *
+   * Sync semantics — UPSERT, not delete-and-reinsert.
+   *   • Existing tasks are updated in place. Only the fields the
+   *     parser explicitly found in the markdown are written; columns
+   *     the markdown doesn't speak about (assignee, GitHub links,
+   *     displayOrder, lock state, createdAt, status when omitted, …)
+   *     are preserved exactly as they are.
+   *   • New tasks are inserted with DB-level defaults applied here.
+   *   • Tasks present in the DB but not in the markdown are LEFT
+   *     UNTOUCHED in 'merge' mode (the default). Pass 'replace' to
+   *     delete those orphans — useful for cleaning up renames.
+   *
+   * Counts are recomputed from the post-sync DB state so progress
+   * reflects every task in the project, not just the markdown slice.
    */
-  async updateProjectPlan(userId: string, projectId: string, plan: string | null): Promise<PlanUpdateResult> {
+  async updateProjectPlan(
+    userId: string,
+    projectId: string,
+    plan: string | null,
+    syncMode: 'merge' | 'replace' = 'merge'
+  ): Promise<PlanUpdateResult> {
     // Parse tasks from plan content first
     let parsedTasks: ReturnType<typeof parsePlanTasks> = []
-    let tasksCount = 0
-    let completedCount = 0
 
     if (plan) {
       try {
         parsedTasks = parsePlanTasks(plan)
-        tasksCount = parsedTasks.length
-        completedCount = parsedTasks.filter((t) => t.status === 'DONE').length
       } catch (parseError) {
         console.error('Task parsing error (non-fatal):', parseError)
       }
     }
 
-    // Use transaction for atomic update
-    const updatedProject = await withTransaction(async (tx) => {
+    // Use transaction for atomic update. We catch outside the chain
+    // (instead of `.catch(...)`) so TypeScript narrows the result type
+    // correctly — the catch handler always throws, but TS can't see
+    // that through a Promise#catch.
+    let txResult: {
+      project: {
+        id: string
+        name: string
+        plan: string | null
+        updatedAt: Date
+      }
+      tasksCount: number
+      completedCount: number
+    }
+    try {
+      txResult = await withTransaction(async (tx) => {
       // Update project plan
       const [project] = await tx
         .update(schema.projects)
@@ -321,37 +350,91 @@ export class ProjectService {
         throw new Error('PROJECT_NOT_FOUND')
       }
 
-      // Sync tasks
-      if (parsedTasks.length > 0) {
-        // Delete existing tasks
-        await tx.delete(schema.tasks).where(eq(schema.tasks.projectId, projectId))
+      // Read existing rows so we can update in place and preserve
+      // every column the parser doesn't know about.
+      const existingTasks = await tx
+        .select({ id: schema.tasks.id, taskId: schema.tasks.taskId })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.projectId, projectId))
 
-        // Insert new tasks
-        const tasksToInsert = parsedTasks.map((task) => ({
-          projectId,
-          taskId: task.taskId,
-          name: task.name,
-          description: task.description,
-          status: task.status,
-          complexity: task.complexity,
-          estimatedHours: task.estimatedHours,
-          dependencies: task.dependencies,
-        }))
+      const existingByTaskId = new Map(existingTasks.map((t) => [t.taskId, t]))
+      const parsedTaskIds = new Set(parsedTasks.map((t) => t.taskId))
 
+      const tasksToInsert: Array<typeof schema.tasks.$inferInsert> = []
+
+      for (const task of parsedTasks) {
+        const existing = existingByTaskId.get(task.taskId)
+
+        if (existing) {
+          const updateData: Partial<typeof schema.tasks.$inferInsert> & {
+            updatedAt: Date
+          } = { updatedAt: new Date() }
+          if (task.name !== undefined) updateData.name = task.name
+          if (task.description !== undefined) updateData.description = task.description
+          if (task.status !== undefined) updateData.status = task.status
+          if (task.complexity !== undefined) updateData.complexity = task.complexity
+          if (task.estimatedHours !== undefined) updateData.estimatedHours = task.estimatedHours
+          if (task.dependencies !== undefined) updateData.dependencies = task.dependencies
+
+          if (Object.keys(updateData).length > 1) {
+            await tx
+              .update(schema.tasks)
+              .set(updateData)
+              .where(eq(schema.tasks.id, existing.id))
+          }
+        } else {
+          tasksToInsert.push({
+            projectId,
+            taskId: task.taskId,
+            name: task.name,
+            description: task.description ?? null,
+            status: task.status ?? 'TODO',
+            complexity: task.complexity ?? 'Medium',
+            estimatedHours: task.estimatedHours ?? null,
+            dependencies: task.dependencies ?? [],
+          })
+        }
+      }
+
+      if (tasksToInsert.length > 0) {
         await tx.insert(schema.tasks).values(tasksToInsert)
       }
 
-      return project
-    }).catch((error) => {
-      if (error.message === 'PROJECT_NOT_FOUND') {
+      if (syncMode === 'replace' && existingTasks.length > 0) {
+        const orphanIds = existingTasks
+          .filter((t) => !parsedTaskIds.has(t.taskId))
+          .map((t) => t.id)
+        if (orphanIds.length > 0) {
+          await tx.delete(schema.tasks).where(inArray(schema.tasks.id, orphanIds))
+        }
+      }
+
+      const countRows = await tx
+        .select({
+          totalCount: count(),
+          doneCount: count(sql`CASE WHEN ${schema.tasks.status} = 'DONE' THEN 1 END`),
+        })
+        .from(schema.tasks)
+        .where(eq(schema.tasks.projectId, projectId))
+
+      const totals = countRows[0] ?? { totalCount: 0, doneCount: 0 }
+
+      return {
+        project,
+        tasksCount: Number(totals.totalCount),
+        completedCount: Number(totals.doneCount),
+      }
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'PROJECT_NOT_FOUND') {
         throw new NotFoundError('Project', projectId)
       }
       throw error
-    })
+    }
 
+    const { project: updatedProject, tasksCount, completedCount } = txResult
     const progress = tasksCount > 0 ? Math.round((completedCount / tasksCount) * 100) : 0
 
-    // Broadcast via WebSocket
     if (tasksCount > 0) {
       broadcastTasksSynced(projectId, {
         tasksCount,

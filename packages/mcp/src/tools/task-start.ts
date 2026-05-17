@@ -18,6 +18,7 @@
  * teammates see your focus immediately.
  */
 
+import path from 'node:path'
 import { z } from 'zod'
 import { getApiClient } from '../api-client.js'
 import { isAuthenticated } from '../config.js'
@@ -37,6 +38,7 @@ import {
   readState,
   registerMainRepoTask,
 } from '../worktree.js'
+import { spawnHeadlessAgent } from '../agent-spawn.js'
 
 const TaskStartInputSchema = z.object({
   projectId: z
@@ -62,6 +64,19 @@ const TaskStartInputSchema = z.object({
         '  • auto (default): create a worktree only when ANOTHER task is already active in this checkout — keeps parallel work isolated.\n' +
         '  • force: always create a fresh worktree for this task.\n' +
         '  • never: stay in the current folder no matter what.'
+    ),
+  autoExecute: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true, dispatch a headless Claude agent in the worktree to autonomously complete the task end-to-end (implement → test → commit → push → cleanup). MCP returns immediately with the log path. Default: false. Requires `claude` CLI on PATH.'
+    ),
+  mergeStrategy: z
+    .enum(['pr', 'merge-master', 'none'])
+    .optional()
+    .default('pr')
+    .describe(
+      'How the autonomous agent finishes the task. `pr` opens a pull request (safe default). `merge-master` merges directly to the main branch and pushes (destructive). `none` leaves the branch unmerged. Only used when autoExecute=true.'
     ),
 })
 
@@ -244,6 +259,218 @@ function renderWorktreeRedirect(
   return lines.join('\n')
 }
 
+// ────────────────────────────────────────────────────────────────────
+// autoExecute: headless agent dispatch
+// ────────────────────────────────────────────────────────────────────
+
+interface DispatchOpts {
+  // Record<string, any> because the Task type from @planflow/shared uses
+  // an index-signature shape that makes dotted access a TS4111 error.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  task: Record<string, any>
+  projectId: string
+  worktreeOutcome: WorktreeOutcome
+  mergeStrategy: 'pr' | 'merge-master' | 'none'
+}
+
+async function dispatchAgent(opts: DispatchOpts): Promise<ReturnType<typeof createSuccessResult>> {
+  const { task, projectId, worktreeOutcome, mergeStrategy } = opts
+
+  const taskId = task['taskId'] as string
+  const taskName = task['name'] as string
+  const taskDescription = (task['description'] as string | null | undefined) ?? null
+
+  // Determine where the agent runs. For in-place / not-a-repo we use
+  // process.cwd() because there is no separate worktree directory.
+  let agentCwd: string
+  let branchName: string
+  let mainRepoRoot: string
+
+  const slug = slugify(taskName)
+  const defaultBranch = `task/${taskId}-${slug}`
+
+  switch (worktreeOutcome.kind) {
+    case 'created':
+    case 'redirect':
+      agentCwd = worktreeOutcome.path
+      branchName = worktreeOutcome.branch
+      // Worktree dirs sit adjacent to the main repo; derive root from
+      // the state-file path rather than the worktree path itself.
+      mainRepoRoot = path.dirname(agentCwd)
+      break
+    case 'in-place':
+      agentCwd = process.cwd()
+      branchName = defaultBranch
+      mainRepoRoot = worktreeOutcome.mainRepoRoot
+      break
+    case 'not-a-repo':
+      agentCwd = process.cwd()
+      branchName = defaultBranch
+      mainRepoRoot = process.cwd()
+      break
+  }
+
+  const logDir = path.join(mainRepoRoot, '.planflow', 'agents')
+
+  // ── Build the directive prompt ──────────────────────────────────
+  // Each section is self-contained and maps to one execution step.
+  // The agent reads this top-to-bottom and executes in order.
+  const mergeInstructions =
+    mergeStrategy === 'pr'
+      ? `
+## 6. Push & open PR
+- Push the branch:
+    git push -u origin ${branchName}
+- Open a pull request:
+    gh pr create --title "feat: ${taskId} — ${taskName}" --fill
+  If \`gh\` is not available, log a clear message and skip this step.`
+      : mergeStrategy === 'merge-master'
+        ? `
+## 6. Merge to master and push
+- Checkout master, pull latest, then merge:
+    git checkout master
+    git pull origin master
+    git merge --no-ff ${branchName} -m "feat: ${taskId} — ${taskName}"
+    git push origin master`
+        : `
+## 6. No merge
+- Do NOT push or open a PR. Leave the branch committed locally.`
+
+  const directivePrompt = `
+# PlanFlow Autonomous Agent — ${taskId}: ${taskName}
+
+You are a headless autonomous agent. Complete this task end-to-end without
+human interaction. Read every section before you begin executing.
+
+## Task
+- ID:          ${taskId}
+- Project ID:  ${projectId}
+- Title:       ${taskName}
+- Branch:      ${branchName}
+- Description:
+${taskDescription ? taskDescription.trim() : '(no description — infer from title and codebase context)'}
+
+## 1. Load full task context (DO THIS FIRST — no recursion)
+Call planflow_task_start with autoExecute set to false:
+    planflow_task_start(taskId: "${taskId}", autoExecute: false)
+This loads comments, related knowledge, relevant code, and full task
+history. Do NOT call it with autoExecute: true (that spawns another agent).
+
+## 2. Implement the task
+- Read the relevant files surfaced by planflow_task_start.
+- Implement the feature / fix described above completely.
+- Follow the existing code style, patterns, and conventions in the repo.
+- Write or update tests if the project has a test suite.
+
+## 3. Run checks
+- Detect the package manager: prefer pnpm (check for pnpm-lock.yaml),
+  fall back to npm.
+- Run available scripts from package.json (in order, skip missing ones):
+    pnpm typecheck   (or npm run typecheck)
+    pnpm test        (or npm test)
+    pnpm lint        (or npm run lint)
+- If any check fails, fix the issue and re-run before continuing.
+
+## 4. Commit
+- Stage your changes. Do NOT create a new branch — you are already on
+  branch "${branchName}".
+- Commit message format (no Co-Authored-By trailer):
+    feat(<scope>): ${taskId} — ${taskName}
+  where <scope> is the most relevant package or module name.
+${mergeInstructions}
+
+## 7. Mark task done
+    planflow_task_done(taskId: "${taskId}", summary: "<one-line summary>")
+
+## 8. Clean up worktree (if applicable)
+If you are running inside a git worktree (not the main checkout), call:
+    planflow_worktree_remove(taskId: "${taskId}")
+Skip this step if you are in the main repo checkout.
+
+## STOP
+When step 8 is complete, stop. Do not poll, do not ask questions, do not
+open new tasks. Your job ends when planflow_task_done has been called.
+`.trim()
+
+  // ── Spawn ────────────────────────────────────────────────────────
+  let spawnResult: { pid: number; logPath: string }
+  try {
+    spawnResult = await spawnHeadlessAgent({
+      cwd: agentCwd,
+      prompt: directivePrompt,
+      taskId,
+      logDir,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.error('autoExecute spawn failed', { taskId, error: msg })
+
+    if (msg.includes('not found on PATH') || msg.includes('ENOENT')) {
+      return createErrorResult(
+        `Failed to dispatch autonomous agent for ${taskId}.\n\n` +
+          `The \`claude\` CLI was not found on PATH.\n` +
+          `Install Claude Code CLI: https://claude.ai/download\n\n` +
+          `Task status was NOT changed — re-run planflow_task_start once the CLI is installed.`
+      )
+    }
+
+    return createErrorResult(
+      `Failed to dispatch autonomous agent for ${taskId}: ${msg}\n\n` +
+        `Task status was NOT changed.`
+    )
+  }
+
+  // ── Build response ───────────────────────────────────────────────
+  const mergeLabel =
+    mergeStrategy === 'pr'
+      ? 'Push & open PR'
+      : mergeStrategy === 'merge-master'
+        ? 'Merge to master & push'
+        : 'Skip merge (leave branch local)'
+
+  const lines: string[] = [
+    `🤖 Autonomous agent dispatched for ${taskId} — "${taskName}"`,
+    ``,
+  ]
+
+  if (mergeStrategy === 'merge-master') {
+    lines.push(
+      `⚠️  merge-master strategy will push directly to the main branch. Make sure CI passes before this runs.`
+    )
+    lines.push(``)
+  }
+
+  if (worktreeOutcome.kind === 'not-a-repo') {
+    lines.push(`⚠️  Project is not inside a git repository — git operations in the agent will fail.`)
+    lines.push(``)
+  }
+
+  lines.push(
+    `━━━ Agent ━━━━━━━━━━━━━━━━━━━━━━━━`,
+    `pid:      ${spawnResult.pid}`,
+    `cwd:      ${agentCwd}`,
+    `branch:   ${branchName}`,
+    `strategy: ${mergeStrategy}`,
+    `log:      ${spawnResult.logPath}`,
+    ``,
+    `━━━ Watch progress ━━━━━━━━━━━━━━━`,
+    `  tail -f ${spawnResult.logPath}`,
+    ``,
+    `The agent will:`,
+    `  1. Load full task context (planflow_task_start, no recursion)`,
+    `  2. Implement the task`,
+    `  3. Run tests / lint / typecheck`,
+    `  4. Commit on branch ${branchName}`,
+    `  5. ${mergeLabel}`,
+    `  6. Mark task DONE in PlanFlow`,
+    `  7. Remove the worktree (if created)`,
+    ``,
+    `You can keep working in this session — the agent runs independently.`
+  )
+
+  return createSuccessResult(lines.join('\n'))
+}
+
 export const taskStartTool: ToolDefinition<TaskStartInput> = {
   name: 'planflow_task_start',
 
@@ -270,6 +497,8 @@ Parameters:
   - projectId (optional): Project UUID. Uses current project if omitted.
   - taskId (required): Task ID to start (e.g., "T1.1")
   - searchQuery (optional): Override the auto-search query
+  - autoExecute (optional): Dispatch a headless Claude agent to complete the task autonomously
+  - mergeStrategy (optional): pr | merge-master | none (only used with autoExecute)
 
 Prerequisites:
   • Logged in via planflow_login()
@@ -305,7 +534,7 @@ Prerequisites:
       // We need the task itself to know its title (for auto-search) and
       // metadata. List once, find by taskId — same approach as recall.
       const tasksResult = await client.listTasks(projectId)
-      const task = tasksResult.tasks.find((t) => t.taskId === input.taskId)
+      const task = tasksResult.tasks.find((t) => t['taskId'] === input.taskId)
 
       if (!task) {
         return createErrorResult(
@@ -314,7 +543,7 @@ Prerequisites:
         )
       }
 
-      const searchQuery = input.searchQuery ?? task.name
+      const searchQuery = input.searchQuery ?? task['name']
 
       // ── Worktree decision ─────────────────────────────────────────
       // We resolve the parallel-work story BEFORE any state writes.
@@ -333,23 +562,41 @@ Prerequisites:
       // response prints the next commands so the user can run them.
       const worktreeOutcome = await resolveWorktree({
         cwd: process.cwd(),
-        taskId: task.taskId,
-        taskName: task.name,
+        taskId: task['taskId'],
+        taskName: task['name'],
         projectId,
         mode: input.worktreeMode ?? 'auto',
       })
 
       if (worktreeOutcome.kind === 'redirect' || worktreeOutcome.kind === 'created') {
-        return createSuccessResult(
-          renderWorktreeRedirect(task.taskId, task.name, worktreeOutcome)
-        )
+        // autoExecute intercepts the normal "go open a terminal" redirect —
+        // the agent runs in the worktree autonomously, no human redirect needed.
+        if (!input.autoExecute) {
+          return createSuccessResult(
+            renderWorktreeRedirect(task['taskId'], task['name'], worktreeOutcome)
+          )
+        }
+      }
+
+      // ── autoExecute dispatch ───────────────────────────────────────
+      // When enabled, fork a headless agent in the resolved worktree
+      // and return immediately. The normal context-fetch flow is skipped
+      // because the agent calls planflow_task_start(autoExecute: false)
+      // itself to get full context (avoids infinite recursion by design).
+      if (input.autoExecute) {
+        return dispatchAgent({
+          task,
+          projectId,
+          worktreeOutcome,
+          mergeStrategy: input.mergeStrategy ?? 'pr',
+        })
       }
 
       // Promote the task into IN_PROGRESS only when it's still TODO.
       // We don't auto-revive DONE tasks (that's a different intent —
       // user should explicitly reopen) and we don't trample BLOCKED
       // (the block flag carries information we shouldn't silently drop).
-      const shouldPromoteStatus = task.status === 'TODO'
+      const shouldPromoteStatus = task['status'] === 'TODO'
 
       // Fan out the rest in parallel — none of them depend on each
       // other. startWorkingOn + status promotion are side-effecting
@@ -395,7 +642,7 @@ Prerequisites:
       ])
 
       const lines: string[] = []
-      lines.push(`🎯 Starting task ${task.taskId} — "${task.name}"`)
+      lines.push(`🎯 Starting task ${task['taskId']} — "${task['name']}"`)
       lines.push('')
 
       // ── Worktree status ──────────────────────────────────────────
@@ -409,14 +656,14 @@ Prerequisites:
 
       // ── Task summary ─────────────────────────────────────────────
       lines.push(`━━━ Task ━━━━━━━━━━━━━━━━━━━━━━━━`)
-      lines.push(`status:       ${task.status}`)
-      if (task.complexity != null) lines.push(`complexity:   ${task.complexity}`)
-      if (task.dependencies && task.dependencies.length > 0) {
-        lines.push(`depends on:   ${task.dependencies.join(', ')}`)
+      lines.push(`status:       ${task['status']}`)
+      if (task['complexity'] != null) lines.push(`complexity:   ${task['complexity']}`)
+      if (task['dependencies'] && task['dependencies'].length > 0) {
+        lines.push(`depends on:   ${task['dependencies'].join(', ')}`)
       }
-      if (task.description) {
+      if (task['description']) {
         lines.push('description:')
-        lines.push(task.description)
+        lines.push(task['description'])
       }
       lines.push('')
 
@@ -506,8 +753,8 @@ Prerequisites:
       }
 
       // ── Suggested branch ────────────────────────────────────────
-      const slug = slugify(task.name)
-      const branchSuggestion = `task/${task.taskId}-${slug}`
+      const slug = slugify(task['name'])
+      const branchSuggestion = `task/${task['taskId']}-${slug}`
       lines.push(`━━━ Suggestions ━━━━━━━━━━━━━━━━━`)
       lines.push(`💡 Git branch: ${branchSuggestion}`)
       lines.push('')
@@ -515,8 +762,8 @@ Prerequisites:
       // ── Next steps ──────────────────────────────────────────────
       lines.push(`Next steps:`)
       lines.push(`  • Read full chunks:   planflow_chunk(chunkId: "...")`)
-      lines.push(`  • Log progress:       planflow_task_progress(taskId: "${task.taskId}", note: "...")`)
-      lines.push(`  • Mark done:          planflow_task_done(taskId: "${task.taskId}")`)
+      lines.push(`  • Log progress:       planflow_task_progress(taskId: "${task['taskId']}", note: "...")`)
+      lines.push(`  • Mark done:          planflow_task_done(taskId: "${task['taskId']}")`)
       lines.push('')
       lines.push(`While implementing — keep using PlanFlow search tools, not grep:`)
       lines.push(`  • new question opens up    → planflow_search(query: "...")`)

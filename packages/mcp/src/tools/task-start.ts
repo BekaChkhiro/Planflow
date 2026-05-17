@@ -39,6 +39,7 @@ import {
   registerMainRepoTask,
 } from '../worktree.js'
 import { spawnHeadlessAgent } from '../agent-spawn.js'
+import { coerceBoolean } from './_coerce.js'
 
 const TaskStartInputSchema = z.object({
   projectId: z
@@ -65,8 +66,7 @@ const TaskStartInputSchema = z.object({
         '  • force: always create a fresh worktree for this task.\n' +
         '  • never: stay in the current folder no matter what.'
     ),
-  autoExecute: z
-    .boolean()
+  autoExecute: coerceBoolean()
     .optional()
     .describe(
       'When true, dispatch a headless Claude agent in the worktree to autonomously complete the task end-to-end (implement → test → commit → push → cleanup). MCP returns immediately with the log path. Default: false. Requires `claude` CLI on PATH.'

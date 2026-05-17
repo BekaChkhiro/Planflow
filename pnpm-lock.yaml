@@ -319,9 +319,6 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.0
         version: 1.25.3(hono@4.11.7)(zod@3.25.76)
-      '@planflow/shared':
-        specifier: workspace:*
-        version: link:../shared
       ignore:
         specifier: ^7.0.0
         version: 7.0.5
@@ -332,6 +329,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.2
         version: 9.39.2
+      '@planflow/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.30

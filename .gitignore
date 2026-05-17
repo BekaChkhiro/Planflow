@@ -53,6 +53,8 @@ playwright/.cache/
 # each developer indexes from their own working tree). The committed link
 # at .planflow/project.json is fine; the index state file is not.
 .planflow/index-state.json
+.planflow/worktrees.json
+.planflow/agents/
 
 # RAG / Vector databases
 data/rag/

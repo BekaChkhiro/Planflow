@@ -317,79 +317,129 @@ async function dispatchAgent(opts: DispatchOpts): Promise<ReturnType<typeof crea
   // The agent reads this top-to-bottom and executes in order.
   const mergeInstructions =
     mergeStrategy === 'pr'
-      ? `
-## 6. Push & open PR
+      ? `## 8. Push & open PR
 - Push the branch:
     git push -u origin ${branchName}
-- Open a pull request:
+- Open a pull request (no Co-Authored-By in the body):
     gh pr create --title "feat: ${taskId} — ${taskName}" --fill
-  If \`gh\` is not available, log a clear message and skip this step.`
+  If gh is not available, log a clear message and skip.`
       : mergeStrategy === 'merge-master'
-        ? `
-## 6. Merge to master and push
-- Checkout master, pull latest, then merge:
-    git checkout master
-    git pull origin master
+        ? `## 8. Merge to master and push
+- Checkout master, pull latest, merge:
+    git checkout master && git pull origin master
     git merge --no-ff ${branchName} -m "feat: ${taskId} — ${taskName}"
     git push origin master`
-        : `
-## 6. No merge
+        : `## 8. No merge
 - Do NOT push or open a PR. Leave the branch committed locally.`
+
+  // agentCwd path used in the worktree-removal note
+  const agentCwdDisplay = agentCwd === process.cwd() ? 'in-place (main checkout)' : agentCwd
 
   const directivePrompt = `
 # PlanFlow Autonomous Agent — ${taskId}: ${taskName}
 
-You are a headless autonomous agent. Complete this task end-to-end without
-human interaction. Read every section before you begin executing.
+You are a headless agent. Complete this task end-to-end using PlanFlow's
+intelligence tools — NOT grep/Read as your first move. The codebase is
+fully indexed; use it.
 
 ## Task
 - ID:          ${taskId}
 - Project ID:  ${projectId}
 - Title:       ${taskName}
 - Branch:      ${branchName}
+- Worktree:    ${agentCwdDisplay}
 - Description:
 ${taskDescription ? taskDescription.trim() : '(no description — infer from title and codebase context)'}
 
-## 1. Load full task context (DO THIS FIRST — no recursion)
-Call planflow_task_start with autoExecute set to false:
-    planflow_task_start(taskId: "${taskId}", autoExecute: false)
-This loads comments, related knowledge, relevant code, and full task
-history. Do NOT call it with autoExecute: true (that spawns another agent).
+## 1. Context load — MUST use PlanFlow tools, not grep
+First call (loads comments, knowledge, activity, ranked code chunks):
+    planflow_task_start(taskId: "${taskId}", projectId: "${projectId}", autoExecute: false)
+Do NOT pass autoExecute: true — that spawns another agent.
 
-## 2. Implement the task
-- Read the relevant files surfaced by planflow_task_start.
-- Implement the feature / fix described above completely.
-- Follow the existing code style, patterns, and conventions in the repo.
-- Write or update tests if the project has a test suite.
+Then keep exploring as questions arise during the task:
+  • planflow_recall(filePath: "...")   — everything tied to a file
+  • planflow_search(query: "...")     — sharp keyword lookup
+  • planflow_chunk(chunkId: "...")    — full body of any search hit
+  • planflow_explore(intent: "...")   — when a new sub-area opens up
+  • planflow_activity(...)            — what was touched recently
 
-## 3. Run checks
-- Detect the package manager: prefer pnpm (check for pnpm-lock.yaml),
-  fall back to npm.
-- Run available scripts from package.json (in order, skip missing ones):
-    pnpm typecheck   (or npm run typecheck)
-    pnpm test        (or npm test)
-    pnpm lint        (or npm run lint)
-- If any check fails, fix the issue and re-run before continuing.
+Use Bash grep / Read ONLY when you already know the exact path or string.
+Reverting to grep mid-task drops the ranked semantic context (related
+knowledge, recent activity, likely files) the Intelligence Layer surfaces.
+This is non-negotiable for this workflow.
 
-## 4. Commit
-- Stage your changes. Do NOT create a new branch — you are already on
-  branch "${branchName}".
-- Commit message format (no Co-Authored-By trailer):
+## 2. Journal progress
+After each meaningful milestone call:
+    planflow_task_progress(taskId: "${taskId}", note: "<what you just did or decided>")
+This shows up in the PlanFlow activity feed so the human has visibility.
+Aim for 3-6 notes across the task — not 30, not 0.
+
+## 3. Capture non-obvious decisions
+When you make a non-obvious architectural or convention choice, save it:
+    planflow_remember(title: "...", content: "...", type: "decision")
+Save: hidden constraints, surprising tradeoffs, "chose X because Y" facts.
+Skip: trivial choices, things already clear from the diff.
+
+## 4. Implement the task
+- Follow existing code style, patterns, conventions.
+- Update or add tests when the project has a test suite.
+- No Co-Authored-By trailers in commits.
+
+## 5. Validate
+Detect package manager (pnpm-lock.yaml → pnpm; else npm).
+Run in order, skip missing scripts, fix and re-run on failure:
+    pnpm typecheck | pnpm test | pnpm lint
+If typecheck shows errors, run:
+    git stash && pnpm typecheck
+to confirm they are pre-existing (don't fix unrelated issues — scope discipline).
+Then git stash pop and continue.
+
+## 6. Re-index
+After editing files, ALWAYS refresh embeddings (incremental, near-free):
+    planflow_index
+Without this, future planflow_search results miss your changes.
+
+## 7. Commit
+Stage specific files by path — never git add -A.
+Commit on branch ${branchName}. Message format:
     feat(<scope>): ${taskId} — ${taskName}
-  where <scope> is the most relevant package or module name.
+No Co-Authored-By trailer.
+
 ${mergeInstructions}
 
-## 7. Mark task done
-    planflow_task_done(taskId: "${taskId}", summary: "<one-line summary>")
+## 9. Mark task done
+    planflow_task_done(taskId: "${taskId}", projectId: "${projectId}", summary: "<one-line outcome>")
 
-## 8. Clean up worktree (if applicable)
-If you are running inside a git worktree (not the main checkout), call:
+## 10. Do NOT remove the worktree from inside it
+You are running inside the worktree at ${agentCwdDisplay}.
+Calling planflow_worktree_remove from here fails — git refuses to remove a
+worktree you are currently inside.
+Your job ends after step 9. Mention in your final summary that the dispatcher
+can clean up with:
+    cd ${mainRepoRoot}
     planflow_worktree_remove(taskId: "${taskId}")
-Skip this step if you are in the main repo checkout.
+
+## 11. Write done marker and notify
+Write a JSON done marker so the dispatcher can check status:
+    cat > ${logDir}/${taskId}.done <<'DONE_MARKER'
+    {
+      "taskId": "${taskId}",
+      "status": "done",
+      "prUrl": "<PR URL or null>",
+      "summary": "<one-line outcome>",
+      "branch": "${branchName}",
+      "finishedAt": "<ISO timestamp>"
+    }
+    DONE_MARKER
+
+If any step failed and you are aborting, write status: "failed" instead.
+
+Then send a macOS notification (fall back silently if osascript is absent):
+    osascript -e 'display notification "${taskId} done" with title "PlanFlow" subtitle "${taskName}"'
 
 ## STOP
-When step 8 is complete, stop. Do not poll, do not ask questions, do not
-open new tasks. Your job ends when planflow_task_done has been called.
+After step 11, stop. Do not poll, do not ask questions, do not open new
+tasks. Your job ends when the done marker is written.
 `.trim()
 
   // ── Spawn ────────────────────────────────────────────────────────
@@ -457,15 +507,21 @@ open new tasks. Your job ends when planflow_task_done has been called.
     `  tail -f ${spawnResult.logPath}`,
     ``,
     `The agent will:`,
-    `  1. Load full task context (planflow_task_start, no recursion)`,
-    `  2. Implement the task`,
-    `  3. Run tests / lint / typecheck`,
-    `  4. Commit on branch ${branchName}`,
-    `  5. ${mergeLabel}`,
-    `  6. Mark task DONE in PlanFlow`,
-    `  7. Remove the worktree (if created)`,
+    `  1. Load context via PlanFlow tools (not grep)`,
+    `  2. Journal progress in the activity feed`,
+    `  3. Implement the task`,
+    `  4. Validate (typecheck / test / lint)`,
+    `  5. Re-index changed files`,
+    `  6. Commit on branch ${branchName}`,
+    `  7. ${mergeLabel}`,
+    `  8. Mark task DONE in PlanFlow`,
+    `  9. Write done marker + macOS notification`,
     ``,
-    `You can keep working in this session — the agent runs independently.`
+    `Check status anytime:  planflow_agent_status(taskId: "${taskId}")`,
+    `You can keep working in this session — the agent runs independently.`,
+    ``,
+    `After the agent finishes, clean up worktree (if created) from THIS session:`,
+    `  planflow_worktree_remove(taskId: "${taskId}")`
   )
 
   return createSuccessResult(lines.join('\n'))
@@ -537,6 +593,46 @@ Prerequisites:
       const task = tasksResult.tasks.find((t) => t['taskId'] === input.taskId)
 
       if (!task) {
+        // Task not in the current project — search all accessible projects
+        // before surfacing an error. Common when the user hasn't called
+        // planflow_use() to switch to the right project.
+        const foundInMultiple: Array<{ id: string; name: string }> = []
+
+        try {
+          const allProjects = await client.listProjects()
+          const otherProjects = allProjects.filter((p) => p.id !== projectId)
+          await Promise.all(
+            otherProjects.map(async (p) => {
+              try {
+                const res = await client.listTasks(p.id)
+                if (res.tasks.find((t) => t['taskId'] === input.taskId)) {
+                  foundInMultiple.push({ id: p.id, name: p.name })
+                }
+              } catch {
+                // Skip projects we can't read (permissions etc.)
+              }
+            })
+          )
+        } catch {
+          // listProjects failed — fall through to the standard not-found error
+        }
+
+        if (foundInMultiple.length === 1) {
+          // Exactly one match — retry with the correct projectId.
+          const found = foundInMultiple[0]!
+          logger.info('Task found in different project, switching', {
+            taskId: input.taskId,
+            foundProjectId: found.id,
+          })
+          return taskStartTool.execute({ ...input, projectId: found.id })
+        } else if (foundInMultiple.length > 1) {
+          return createErrorResult(
+            `❌ Task ${input.taskId} exists in multiple projects — pass projectId explicitly:\n` +
+              foundInMultiple.map((p) => `  • ${p.name} (${p.id})`).join('\n') +
+              `\n\nExample:\n  planflow_task_start(taskId: "${input.taskId}", projectId: "${foundInMultiple[0]!.id}")`
+          )
+        }
+
         return createErrorResult(
           `❌ Task not found: ${input.taskId}\n\n` +
             `Use planflow_task_list(projectId: "${projectId}") to see available tasks.`

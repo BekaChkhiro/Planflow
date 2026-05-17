@@ -50,9 +50,9 @@ export async function spawnHeadlessAgent(opts: SpawnOpts): Promise<SpawnResult> 
 
   const logPath = path.join(logDir, `${taskId}-${Date.now()}.log`)
 
-  // Open synchronously so we can pass the raw fd to spawn's stdio array.
-  // 'a' (append) means a pre-existing log from a previous run is not truncated.
-  const logFd = fs.openSync(logPath, 'a')
+  // 'w' (truncate) so every new dispatch starts a clean log — we don't
+  // want PID from a previous run bleeding into the new session.
+  const logFd = fs.openSync(logPath, 'w')
 
   let child: ReturnType<typeof spawn>
   try {
@@ -90,6 +90,13 @@ export async function spawnHeadlessAgent(opts: SpawnOpts): Promise<SpawnResult> 
 
   // Detach so our process exit doesn't kill the agent.
   child.unref()
+
+  // Write a PID header as the first line of the log so planflow_agent_status
+  // can read the PID without scanning the whole file.
+  const header = JSON.stringify({ pid: child.pid, taskId, spawnedAt: new Date().toISOString() })
+  const headerFd = fs.openSync(logPath, 'r+')
+  fs.writeSync(headerFd, header + '\n', 0)
+  fs.closeSync(headerFd)
 
   logger.info('Headless agent spawned', { taskId, pid: child.pid, cwd, logPath })
 

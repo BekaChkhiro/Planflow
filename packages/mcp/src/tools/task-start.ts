@@ -714,11 +714,22 @@ Skip trivial or already-visible-from-diff choices.
 
 ## 5. Validate
 Detect package manager (pnpm-lock.yaml → pnpm, else npm).
-Run in order; skip missing scripts; fix failures before continuing:
-    pnpm typecheck | pnpm test | pnpm lint
-If typecheck shows errors, run git stash && pnpm typecheck to confirm they
-are pre-existing (scope discipline — don't fix unrelated issues), then
-git stash pop and continue.
+Run in order. Fix any failure before moving on.
+
+  • Typecheck:    detect via package.json scripts. Prefer \`type-check\`,
+                  then \`typecheck\`, fall back to \`tsc --noEmit\`.
+  • Tests:        \`pnpm test\` (or \`npm test\`).
+  • Lint:         \`pnpm lint\` (skip if no lint script).
+  • Build:        \`pnpm build\` (or \`npm run build\`; skip if no build script).
+                  REQUIRED — catches framework-level rules typecheck misses:
+                    Next.js Server Actions must be async, server/client
+                    component boundary violations, bundling errors.
+                  CI will run this anyway; catch it here to avoid a wasted
+                  PR + auto-merge cycle.
+
+For typecheck/lint errors that are pre-existing (not from your changes),
+run \`git stash && pnpm <script> && git stash pop\` to confirm, then skip.
+Build errors are almost always current — fix them.
 
 ## 6. Re-index
 After editing files:

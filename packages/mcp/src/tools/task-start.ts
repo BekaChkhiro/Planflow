@@ -272,13 +272,25 @@ function renderWorktreeRedirect(
 
 /**
  * Map a task's complexity field to a model alias.
- * Defaults to 'sonnet' for unknown/missing values — escalates to 'opus'
- * only for Large/XL tasks where the extra capability is worth the cost.
+ *
+ * Real-world PlanFlow projects use two convention families:
+ *   • Low / Medium / High         (plan-flow itself, work-station)
+ *   • Small / Medium / Large / XL (T-shirt sizing — earlier sample plans)
+ * Both High AND Large/XL escalate to Opus. Everything else (and missing
+ * values) defaults to Sonnet — cheaper, fine for routine work.
  */
 function modelForTask(complexity: string | null | undefined): string {
   if (!complexity) return 'sonnet'
   const c = complexity.trim().toLowerCase()
-  if (['large', 'xl', 'extra large', 'l', 'xlarge'].includes(c)) return 'opus'
+  const opusTier = [
+    // Low/Medium/High family
+    'high',
+    // T-shirt sizing family
+    'large', 'l',
+    'xl', 'xlarge', 'x-large', 'extra large', 'extra-large',
+    'xxl', 'xxlarge', 'xx-large',
+  ]
+  if (opusTier.includes(c)) return 'opus'
   return 'sonnet'
 }
 

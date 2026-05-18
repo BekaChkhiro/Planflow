@@ -273,12 +273,163 @@ interface DispatchOpts {
   mergeStrategy: 'pr' | 'merge-master' | 'none'
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Pre-loaded context builder
+// ────────────────────────────────────────────────────────────────────
+
+interface PreloadResults {
+  searchResult: Awaited<ReturnType<ReturnType<typeof getApiClient>['searchProject']>> | null
+  knowledgeResult: Awaited<ReturnType<ReturnType<typeof getApiClient>['listKnowledge']>> | null
+  activityResult: Awaited<ReturnType<ReturnType<typeof getApiClient>['getTaskActivity']>> | null
+  commentsResult: Awaited<ReturnType<ReturnType<typeof getApiClient>['listComments']>> | null
+  searchQuery: string
+}
+
+function buildPreloadedContextSection(results: PreloadResults): string {
+  const { searchResult, knowledgeResult, activityResult, commentsResult } = results
+  const lines: string[] = []
+
+  lines.push(`## Pre-loaded context (use this — don't re-search)`)
+  lines.push(``)
+  lines.push(
+    `The dispatcher already ran semantic search, knowledge lookup, comments,`
+  )
+  lines.push(
+    `and activity for this task. The results below replace 90% of the`
+  )
+  lines.push(`exploration you'd otherwise do.`)
+  lines.push(``)
+
+  // ── Code chunks ─────────────────────────────────────────────────
+  lines.push(`### Likely-relevant code chunks (ranked semantically)`)
+  const searchResults = searchResult?.results ?? []
+  if (!searchResult) {
+    lines.push(`(semantic search returned no results — project may not be indexed.`)
+    lines.push(`Run planflow_index_status to check, then planflow_index if needed.`)
+    lines.push(`For this task, use planflow_explore(intent: "<task title>") first.)`)
+  } else if (searchResults.length === 0) {
+    lines.push(
+      `(no results for "${results.searchQuery}" — project may not be indexed yet; run planflow_index_status to check)`
+    )
+  } else {
+    for (let i = 0; i < searchResults.length; i++) {
+      const r = searchResults[i]!
+      const chunk = r.chunk
+      const score = r.score.toFixed(3)
+      lines.push(
+        `#${i + 1} ${chunk.filePath}:${chunk.startLine}-${chunk.endLine}  (${chunk.kind} ${chunk.name}, score ${score}, chunkId ${chunk.id})`
+      )
+      lines.push(`   To read the full body: planflow_chunk(chunkId: "${chunk.id}")`)
+    }
+  }
+  lines.push(``)
+
+  // ── Knowledge ────────────────────────────────────────────────────
+  lines.push(`### Related knowledge entries`)
+  const knowledge = knowledgeResult?.knowledge ?? []
+  if (knowledge.length === 0) {
+    lines.push(`(none)`)
+  } else {
+    for (const entry of knowledge) {
+      const preview =
+        entry.content.length > 300 ? entry.content.slice(0, 300) + '...' : entry.content
+      lines.push(`📌 [${entry.type}] ${entry.title}`)
+      lines.push(`   ${preview.replace(/\n/g, '\n   ')}`)
+    }
+  }
+  lines.push(``)
+
+  // ── Activity ─────────────────────────────────────────────────────
+  lines.push(`### Recent activity on this task`)
+  const activityEntries = activityResult?.activities ?? []
+  if (activityEntries.length === 0) {
+    lines.push(`(none)`)
+  } else {
+    for (const a of activityEntries.slice(0, 5)) {
+      const actor = a.actor.name || a.actor.email
+      const desc = a.description || a.action
+      lines.push(`• ${formatRelativeTime(a.createdAt)} — ${actor}: ${desc}`)
+    }
+  }
+  lines.push(``)
+
+  // ── Comments ─────────────────────────────────────────────────────
+  lines.push(`### Existing comments`)
+  const comments = commentsResult?.comments ?? []
+  if (comments.length === 0) {
+    lines.push(`(none)`)
+  } else {
+    for (const comment of comments.slice(0, 5)) {
+      const author = comment.author.name || comment.author.email
+      lines.push(`💬 ${author} (${formatRelativeTime(comment.createdAt)}): ${comment.content}`)
+    }
+  }
+  lines.push(``)
+
+  // ── Search policy ────────────────────────────────────────────────
+  lines.push(`## Search policy — READ THIS`)
+  lines.push(``)
+  lines.push(`You have pre-loaded ranked context above. For ALL code lookups:`)
+  lines.push(`  ✅ planflow_chunk(chunkId: "...") — read full body of any chunk above`)
+  lines.push(`  ✅ planflow_search(query: "...") — sharp NEW keyword not covered above`)
+  lines.push(`  ✅ planflow_recall(filePath: "...") — everything tied to a specific file`)
+  lines.push(`  ✅ planflow_explore(intent: "...") — brand-new sub-area not in pre-load`)
+  lines.push(
+    `  ❌ DO NOT use Read for code files unless you need the WHOLE file AND already`
+  )
+  lines.push(
+    `     know the exact path (config / package.json / README are fine to Read).`
+  )
+  lines.push(
+    `  ❌ DO NOT use Bash grep for code — planflow_search is faster and ranks better.`
+  )
+  lines.push(
+    `Failing to use the pre-loaded context wastes ~30% of the task's budget on`
+  )
+  lines.push(`exploration the dispatcher already did for you.`)
+
+  return lines.join('\n')
+}
+
 async function dispatchAgent(opts: DispatchOpts): Promise<ReturnType<typeof createSuccessResult>> {
   const { task, projectId, worktreeOutcome, mergeStrategy } = opts
 
   const taskId = task['taskId'] as string
   const taskName = task['name'] as string
   const taskDescription = (task['description'] as string | null | undefined) ?? null
+
+  // ── Pre-load semantic context (parallel fan-out) ────────────────
+  // Run discovery before building the directive so the agent gets
+  // everything it needs inline — no round-trip needed on its side.
+  const client = getApiClient()
+  const preloadSearchQuery = task['name'] as string
+  const [preloadSearchResult, preloadKnowledgeResult, preloadActivityResult, preloadCommentsResult] =
+    await Promise.all([
+      client.searchProject(projectId, preloadSearchQuery, { limit: 10 }).catch((err) => {
+        logger.warn('dispatchAgent: preload searchProject failed', { error: String(err) })
+        return null
+      }),
+      client.listKnowledge(projectId, { search: preloadSearchQuery, limit: 8 }).catch((err) => {
+        logger.warn('dispatchAgent: preload listKnowledge failed', { error: String(err) })
+        return null
+      }),
+      client.getTaskActivity(projectId, taskId, { limit: 10 }).catch((err) => {
+        logger.warn('dispatchAgent: preload getTaskActivity failed', { error: String(err) })
+        return null
+      }),
+      client.listComments(projectId, taskId).catch((err) => {
+        logger.warn('dispatchAgent: preload listComments failed', { error: String(err) })
+        return null
+      }),
+    ])
+
+  const preloadedContextSection = buildPreloadedContextSection({
+    searchResult: preloadSearchResult,
+    knowledgeResult: preloadKnowledgeResult,
+    activityResult: preloadActivityResult,
+    commentsResult: preloadCommentsResult,
+    searchQuery: preloadSearchQuery,
+  })
 
   // Determine where the agent runs. For in-place / not-a-repo we use
   // process.cwd() because there is no separate worktree directory.
@@ -397,6 +548,8 @@ fully indexed; use it.
 - Description:
 ${taskDescription ? taskDescription.trim() : '(no description — infer from title and codebase context)'}
 
+${preloadedContextSection}
+
 ## 0. State recovery (check first)
 Before doing anything else, check if a checkpoint marker already exists:
     test -f ${logDir}/${taskId}.done && cat ${logDir}/${taskId}.done
@@ -405,22 +558,17 @@ ahead to the step AFTER that phase. For example: phase="merged" means
 steps 1-8 already succeeded — jump to step 9 (planflow_task_done).
 If no marker exists, start from step 1.
 
-## 1. Context load — MUST use PlanFlow tools, not grep
-First call (loads comments, knowledge, activity, ranked code chunks):
-    planflow_task_start(taskId: "${taskId}", projectId: "${projectId}", autoExecute: false)
-Do NOT pass autoExecute: true — that spawns another agent.
+## 1. Verify pre-loaded context covers the task
+Scan the pre-loaded section above. If it has clear ranked code, related
+knowledge, and recent activity — skip ahead to step 2 (implement). If
+something is missing (e.g. task spans a sub-area not covered), then and
+only then run planflow_explore(intent: "<narrow query>").
 
-Then keep exploring as questions arise during the task:
+Keep exploring as questions arise during the task:
   • planflow_recall(filePath: "...")   — everything tied to a file
   • planflow_search(query: "...")     — sharp keyword lookup
   • planflow_chunk(chunkId: "...")    — full body of any search hit
   • planflow_explore(intent: "...")   — when a new sub-area opens up
-  • planflow_activity(...)            — what was touched recently
-
-Use Bash grep / Read ONLY when you already know the exact path or string.
-Reverting to grep mid-task drops the ranked semantic context (related
-knowledge, recent activity, likely files) the Intelligence Layer surfaces.
-This is non-negotiable for this workflow.
 
 ## 2. Journal progress
 After each meaningful milestone call:

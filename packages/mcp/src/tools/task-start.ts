@@ -291,13 +291,18 @@ async function dispatchAgent(opts: DispatchOpts): Promise<ReturnType<typeof crea
 
   switch (worktreeOutcome.kind) {
     case 'created':
-    case 'redirect':
+    case 'redirect': {
       agentCwd = worktreeOutcome.path
       branchName = worktreeOutcome.branch
-      // Worktree dirs sit adjacent to the main repo; derive root from
-      // the state-file path rather than the worktree path itself.
-      mainRepoRoot = path.dirname(agentCwd)
+      // Use getMainRepoRoot (git common-dir walk) rather than path.dirname —
+      // dirname gives the *parent of the worktree directory*, not the main
+      // repo.  e.g. /var/lib/cloud-agent/projects/work-station-T14.1
+      // → dirname → /var/lib/cloud-agent/projects/  (wrong)
+      // → getMainRepoRoot → /var/lib/cloud-agent/projects/work-station (right)
+      const derived = await getMainRepoRoot(agentCwd)
+      mainRepoRoot = derived ?? path.dirname(agentCwd)
       break
+    }
     case 'in-place':
       agentCwd = process.cwd()
       branchName = defaultBranch
@@ -315,25 +320,65 @@ async function dispatchAgent(opts: DispatchOpts): Promise<ReturnType<typeof crea
   // ── Build the directive prompt ──────────────────────────────────
   // Each section is self-contained and maps to one execution step.
   // The agent reads this top-to-bottom and executes in order.
-  const mergeInstructions =
-    mergeStrategy === 'pr'
-      ? `## 8. Push & open PR
-- Push the branch:
-    git push -u origin ${branchName}
-- Open a pull request (no Co-Authored-By in the body):
-    gh pr create --title "feat: ${taskId} — ${taskName}" --fill
-  If gh is not available, log a clear message and skip.`
-      : mergeStrategy === 'merge-master'
-        ? `## 8. Merge to master and push
-- Checkout master, pull latest, merge:
-    git checkout master && git pull origin master
-    git merge --no-ff ${branchName} -m "feat: ${taskId} — ${taskName}"
-    git push origin master`
-        : `## 8. No merge
-- Do NOT push or open a PR. Leave the branch committed locally.`
 
   // agentCwd path used in the worktree-removal note
   const agentCwdDisplay = agentCwd === process.cwd() ? 'in-place (main checkout)' : agentCwd
+
+  // Push instructions with retry loop — networks fail mid-flight,
+  // especially on cloud-agent infra.
+  const pushRetryLoop = (remote: string, ref: string, extraArgs = '') => `\
+for attempt in 1 2 3; do
+  if timeout 60 git push${extraArgs ? ` ${extraArgs}` : ''} ${remote} ${ref} 2>&1; then
+    echo "push succeeded on attempt $attempt"
+    break
+  fi
+  if [ "$attempt" = "3" ]; then
+    echo "push failed after 3 attempts" >&2
+    exit 1
+  fi
+  sleep $((attempt * 5))
+done`
+
+  const mergeInstructions =
+    mergeStrategy === 'pr'
+      ? `## 8. Push branch & open PR
+- Push the branch with retry (networks fail mid-flight):
+\`\`\`bash
+${pushRetryLoop('origin', branchName, '-u')}
+\`\`\`
+- Write checkpoint (phase=merged):
+\`\`\`bash
+cat > ${logDir}/${taskId}.done <<'CHECKPOINT'
+{"taskId":"${taskId}","status":"in-progress","phase":"merged","prUrl":null,"branch":"${branchName}","summary":"branch pushed","lastUpdate":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","finishedAt":null}
+CHECKPOINT
+\`\`\`
+- Open a pull request (no Co-Authored-By in the body):
+    gh pr create --title "feat: ${taskId} — ${taskName}" --fill
+  Capture the PR URL from gh output. If gh is not available, log a clear message and skip.`
+      : mergeStrategy === 'merge-master'
+        ? `## 8. Merge to master and push
+- Checkout master and pull latest:
+    git checkout master && git pull origin master
+- Merge the task branch:
+    git merge --no-ff ${branchName} -m "feat: ${taskId} — ${taskName}"
+- Write checkpoint (phase=merged):
+\`\`\`bash
+cat > ${logDir}/${taskId}.done <<'CHECKPOINT'
+{"taskId":"${taskId}","status":"in-progress","phase":"merged","prUrl":null,"branch":"${branchName}","summary":"merged to master","lastUpdate":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","finishedAt":null}
+CHECKPOINT
+\`\`\`
+- Push to master with retry (networks fail mid-flight):
+\`\`\`bash
+${pushRetryLoop('origin', 'master')}
+\`\`\`
+- Write checkpoint (phase=pushed):
+\`\`\`bash
+cat > ${logDir}/${taskId}.done <<'CHECKPOINT'
+{"taskId":"${taskId}","status":"in-progress","phase":"pushed","prUrl":null,"branch":"${branchName}","summary":"pushed to master","lastUpdate":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","finishedAt":null}
+CHECKPOINT
+\`\`\``
+        : `## 8. No merge
+- Do NOT push or open a PR. Leave the branch committed locally.`
 
   const directivePrompt = `
 # PlanFlow Autonomous Agent — ${taskId}: ${taskName}
@@ -348,8 +393,17 @@ fully indexed; use it.
 - Title:       ${taskName}
 - Branch:      ${branchName}
 - Worktree:    ${agentCwdDisplay}
+- Log dir:     ${logDir}
 - Description:
 ${taskDescription ? taskDescription.trim() : '(no description — infer from title and codebase context)'}
+
+## 0. State recovery (check first)
+Before doing anything else, check if a checkpoint marker already exists:
+    test -f ${logDir}/${taskId}.done && cat ${logDir}/${taskId}.done
+If it exists and has status="in-progress", read the "phase" field and skip
+ahead to the step AFTER that phase. For example: phase="merged" means
+steps 1-8 already succeeded — jump to step 9 (planflow_task_done).
+If no marker exists, start from step 1.
 
 ## 1. Context load — MUST use PlanFlow tools, not grep
 First call (loads comments, knowledge, activity, ranked code chunks):
@@ -399,47 +453,80 @@ After editing files, ALWAYS refresh embeddings (incremental, near-free):
     planflow_index
 Without this, future planflow_search results miss your changes.
 
-## 7. Commit
+## 7. Commit and write checkpoint (phase=implemented)
 Stage specific files by path — never git add -A.
 Commit on branch ${branchName}. Message format:
     feat(<scope>): ${taskId} — ${taskName}
 No Co-Authored-By trailer.
+
+After the commit succeeds, write checkpoint immediately:
+\`\`\`bash
+mkdir -p ${logDir}
+cat > ${logDir}/${taskId}.done <<'CHECKPOINT'
+{"taskId":"${taskId}","status":"in-progress","phase":"implemented","prUrl":null,"branch":"${branchName}","summary":"committed","lastUpdate":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","finishedAt":null}
+CHECKPOINT
+\`\`\`
 
 ${mergeInstructions}
 
 ## 9. Mark task done
     planflow_task_done(taskId: "${taskId}", projectId: "${projectId}", summary: "<one-line outcome>")
 
+After planflow_task_done returns success, write checkpoint (phase=task-done):
+\`\`\`bash
+cat > ${logDir}/${taskId}.done <<'CHECKPOINT'
+{"taskId":"${taskId}","status":"in-progress","phase":"task-done","prUrl":"<PR URL or null>","branch":"${branchName}","summary":"<one-line outcome>","lastUpdate":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","finishedAt":null}
+CHECKPOINT
+\`\`\`
+
 ## 10. Do NOT remove the worktree from inside it
 You are running inside the worktree at ${agentCwdDisplay}.
 Calling planflow_worktree_remove from here fails — git refuses to remove a
 worktree you are currently inside.
-Your job ends after step 9. Mention in your final summary that the dispatcher
+Your job ends after step 11. Mention in your final summary that the dispatcher
 can clean up with:
     cd ${mainRepoRoot}
     planflow_worktree_remove(taskId: "${taskId}")
 
-## 11. Write done marker and notify
-Write a JSON done marker so the dispatcher can check status:
-    cat > ${logDir}/${taskId}.done <<'DONE_MARKER'
-    {
-      "taskId": "${taskId}",
-      "status": "done",
-      "prUrl": "<PR URL or null>",
-      "summary": "<one-line outcome>",
-      "branch": "${branchName}",
-      "finishedAt": "<ISO timestamp>"
-    }
-    DONE_MARKER
+## 11. Write final done marker and notify
+Write the final JSON marker (status="done", phase="complete"):
+\`\`\`bash
+cat > ${logDir}/${taskId}.done <<'DONE_MARKER'
+{
+  "taskId": "${taskId}",
+  "status": "done",
+  "phase": "complete",
+  "prUrl": "<PR URL or null>",
+  "summary": "<one-line outcome>",
+  "branch": "${branchName}",
+  "lastUpdate": "<ISO timestamp>",
+  "finishedAt": "<ISO timestamp>"
+}
+DONE_MARKER
+\`\`\`
 
-If any step failed and you are aborting, write status: "failed" instead.
+If ANY step failed and you are aborting, write status="failed" instead:
+\`\`\`bash
+cat > ${logDir}/${taskId}.done <<'FAILED_MARKER'
+{
+  "taskId": "${taskId}",
+  "status": "failed",
+  "phase": "<last phase that succeeded or 'none'>",
+  "prUrl": null,
+  "summary": "<what went wrong>",
+  "branch": "${branchName}",
+  "lastUpdate": "<ISO timestamp>",
+  "finishedAt": "<ISO timestamp>"
+}
+FAILED_MARKER
+\`\`\`
 
 Then send a macOS notification (fall back silently if osascript is absent):
-    osascript -e 'display notification "${taskId} done" with title "PlanFlow" subtitle "${taskName}"'
+    osascript -e 'display notification "${taskId} done" with title "PlanFlow" subtitle "${taskName}"' 2>/dev/null || true
 
 ## STOP
 After step 11, stop. Do not poll, do not ask questions, do not open new
-tasks. Your job ends when the done marker is written.
+tasks. Your job ends when the final done marker is written.
 `.trim()
 
   // ── Spawn ────────────────────────────────────────────────────────

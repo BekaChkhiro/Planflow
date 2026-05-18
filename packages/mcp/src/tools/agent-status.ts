@@ -4,14 +4,20 @@
  * Poll the completion state of a background autoExecute agent.
  *
  * Three state sources (checked in order):
- *   1. <logDir>/<taskId>.done  — JSON marker written by the agent at the end.
- *      Present → DONE (or FAILED if agent wrote status: "failed").
- *   2. PID from the first line of the log + `kill -0 <pid>` → RUNNING.
- *   3. Log exists but PID is dead and no .done → CRASHED.
- *   4. No log at all → "no agent dispatched".
+ *   1. <logDir>/<taskId>.done  — JSON marker written by the agent.
+ *      Present → DONE / FAILED / in-progress (with phase).
+ *   2. Log file mtime heuristic (cross-machine safe — no kill -0):
+ *        mtime < 60s ago  → RUNNING
+ *        mtime 1–5 min    → STALE (likely crashed)
+ *        mtime > 5 min    → CRASHED
+ *   3. No log at all → "no agent dispatched".
+ *
+ *   The old kill -0 check only worked when dispatcher and agent share a
+ *   process table (same machine). Cloud agents run on different hosts, so
+ *   kill -0 always returns ESRCH (→ false "CRASHED at 1m 22s").
+ *   Mtime-based detection works regardless of process locality.
  */
 
-import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
@@ -35,46 +41,38 @@ type AgentStatusInput = z.infer<typeof AgentStatusInputSchema>
 
 interface DoneMarker {
   taskId: string
-  status: 'done' | 'failed'
+  status: 'done' | 'failed' | 'in-progress'
+  phase?: 'implemented' | 'merged' | 'pushed' | 'task-done' | 'complete' | string | null
   prUrl?: string | null
   summary?: string | null
   branch?: string | null
+  lastUpdate?: string | null
   finishedAt?: string | null
   duration?: number | null
   cost?: string | null
 }
 
-/** Parse "PID: <n>" from the first JSON line of the log (stream-json format). */
-function parsePidFromLog(logPath: string): number | null {
+/**
+ * Classify agent liveness from log file mtime — works across machines
+ * (cloud dispatcher vs cloud worker) where kill -0 would always fail.
+ *
+ * Returns:
+ *   'running'  — mtime within the last 60 seconds
+ *   'stale'    — mtime 1–5 minutes ago (likely crashed, not 100% certain)
+ *   'crashed'  — mtime > 5 minutes ago (almost certainly dead)
+ *   'unknown'  — could not stat the file
+ */
+async function classifyByMtime(
+  logPath: string
+): Promise<'running' | 'stale' | 'crashed' | 'unknown'> {
   try {
-    const fd = fs.openSync(logPath, 'r')
-    // Read the very first line without loading the whole file.
-    const buf = Buffer.alloc(4096)
-    const bytesRead = fs.readSync(fd, buf, 0, 4096, 0)
-    fs.closeSync(fd)
-    const firstLines = buf.subarray(0, bytesRead).toString('utf8').split('\n')
-    for (const line of firstLines.slice(0, 3)) {
-      // The first line we write is: {"pid":<n>,"taskId":"...","spawnedAt":"..."}
-      try {
-        const obj = JSON.parse(line.trim())
-        if (typeof obj?.pid === 'number') return obj.pid as number
-      } catch {
-        // Not JSON — skip
-      }
-    }
+    const stat = await fsp.stat(logPath)
+    const ageMs = Date.now() - stat.mtimeMs
+    if (ageMs < 60_000) return 'running'
+    if (ageMs < 5 * 60_000) return 'stale'
+    return 'crashed'
   } catch {
-    // Unreadable
-  }
-  return null
-}
-
-/** True if a process with this PID is still alive in the current OS session. */
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
+    return 'unknown'
   }
 }
 
@@ -136,6 +134,32 @@ function formatElapsed(startMs: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
+/**
+ * Walk up from `startDir` looking for a `.planflow/agents` directory that
+ * actually exists on disk.  Stops at the filesystem root.
+ *
+ * This handles the mismatch between the dispatcher's cwd (Beka's Mac) and
+ * the main repo root that the dispatcher used when writing the log — they
+ * share the same git repo path structure, so walking upward will find
+ * `.planflow/agents` inside the repo even if `process.cwd()` is a
+ * sub-directory.
+ */
+async function findLogDirUpward(startDir: string): Promise<string | null> {
+  let dir = startDir
+  while (true) {
+    const candidate = path.join(dir, '.planflow', 'agents')
+    try {
+      const st = await fsp.stat(candidate)
+      if (st.isDirectory()) return candidate
+    } catch {
+      // Not found here — keep walking
+    }
+    const parent = path.dirname(dir)
+    if (parent === dir) return null // filesystem root
+    dir = parent
+  }
+}
+
 export const agentStatusTool: ToolDefinition<AgentStatusInput> = {
   name: 'planflow_agent_status',
 
@@ -157,13 +181,27 @@ Parameters:
   inputSchema: AgentStatusInputSchema,
 
   async execute(input: AgentStatusInput): Promise<ReturnType<typeof createSuccessResult>> {
-    // Resolve log directory — default to <main repo root>/.planflow/agents
+    // Resolve log directory.
+    // Priority:
+    //   1. Explicit override from caller (input.logDir)
+    //   2. Walk upward from cwd looking for .planflow/agents that exists
+    //   3. getMainRepoRoot(cwd) + /.planflow/agents  (may not exist yet)
+    //   4. cwd + /.planflow/agents  (last resort)
+    //
+    // The upward walk (step 2) handles the real-world case where the
+    // dispatcher calls this from a sub-directory or from a cwd that doesn't
+    // perfectly match mainRepoRoot (e.g. macOS dispatcher vs cloud worker).
     let resolvedLogDir = input.logDir
     if (!resolvedLogDir) {
-      const mainRoot = await getMainRepoRoot(process.cwd())
-      resolvedLogDir = mainRoot
-        ? path.join(mainRoot, '.planflow', 'agents')
-        : path.join(process.cwd(), '.planflow', 'agents')
+      const walked = await findLogDirUpward(process.cwd())
+      if (walked) {
+        resolvedLogDir = walked
+      } else {
+        const mainRoot = await getMainRepoRoot(process.cwd())
+        resolvedLogDir = mainRoot
+          ? path.join(mainRoot, '.planflow', 'agents')
+          : path.join(process.cwd(), '.planflow', 'agents')
+      }
     }
 
     // Find the most recent log file for this taskId.
@@ -207,46 +245,69 @@ Parameters:
     const elapsed = formatElapsed(spawnedAtMs)
 
     if (doneMarker) {
-      const status = doneMarker.status === 'failed' ? '❌ FAILED' : '✅ DONE'
+      // A "done" marker with status=in-progress means the agent wrote a
+      // checkpoint but hasn't finished yet (or crashed mid-flight after
+      // a checkpoint).  Keep the display useful by showing the phase.
+      let stateLabel: string
+      if (doneMarker.status === 'done') {
+        stateLabel = '✅ DONE'
+      } else if (doneMarker.status === 'failed') {
+        stateLabel = '❌ FAILED'
+      } else {
+        // status="in-progress" — agent wrote a checkpoint, may still be running
+        const mtimeClass = await classifyByMtime(logPath)
+        if (mtimeClass === 'running') {
+          stateLabel = `🔄 RUNNING (checkpoint: phase=${doneMarker.phase ?? 'unknown'})`
+        } else if (mtimeClass === 'stale') {
+          stateLabel = `⚠️  STALE — checkpoint phase=${doneMarker.phase ?? 'unknown'}, log inactive 1-5m`
+        } else {
+          stateLabel = `❌ CRASHED after checkpoint phase=${doneMarker.phase ?? 'unknown'}`
+        }
+      }
       const lines: string[] = [
         `planflow_agent_status: ${input.taskId}`,
         ``,
         `━━━ Status ━━━━━━━━━━━━━━━━━━━━`,
-        `state:    ${status}`,
+        `state:    ${stateLabel}`,
         `elapsed:  ${elapsed}`,
         `log:      ${logPath}`,
         ``,
-        `━━━ Done summary ━━━━━━━━━━━━━━`,
+        `━━━ Checkpoint summary ━━━━━━━━`,
       ]
+      if (doneMarker.phase) lines.push(`phase:    ${doneMarker.phase}`)
       if (doneMarker.duration != null) lines.push(`duration: ${doneMarker.duration}s`)
       if (doneMarker.cost) lines.push(`cost:     ${doneMarker.cost}`)
       if (doneMarker.prUrl) lines.push(`PR:       ${doneMarker.prUrl}`)
       if (doneMarker.branch && !doneMarker.prUrl) lines.push(`branch:   ${doneMarker.branch}`)
       if (doneMarker.summary) lines.push(`summary:  ${doneMarker.summary}`)
       if (doneMarker.finishedAt) lines.push(`finished: ${doneMarker.finishedAt}`)
+      if (doneMarker.lastUpdate && !doneMarker.finishedAt) lines.push(`updated:  ${doneMarker.lastUpdate}`)
       lines.push(``)
-      lines.push(
-        `Worktree cleanup (if a worktree was created):\n` +
-          `  planflow_worktree_remove(taskId: "${input.taskId}")`
-      )
+      if (doneMarker.status === 'done') {
+        lines.push(
+          `Worktree cleanup (if a worktree was created):\n` +
+            `  planflow_worktree_remove(taskId: "${input.taskId}")`
+        )
+      } else if (doneMarker.status !== 'in-progress') {
+        lines.push(`Re-dispatch (will resume from last checkpoint):\n` +
+          `  planflow_task_start(taskId: "${input.taskId}", autoExecute: true)`)
+      }
       return createSuccessResult(lines.join('\n'))
     }
 
-    // No done marker — check if process is alive
-    const pid = parsePidFromLog(logPath)
-    const alive = pid !== null && isProcessAlive(pid)
+    // No done marker at all — classify by log mtime (cross-machine safe)
+    const mtimeClass = await classifyByMtime(logPath)
 
-    // Extract last actions from log tail
+    // Extract last actions from log tail (useful for all live/stale/crashed states)
     const rawTail = await tailLines(logPath, 200)
     const lastActions = extractLastActions(rawTail, 5)
 
-    if (alive) {
+    if (mtimeClass === 'running') {
       const lines: string[] = [
         `planflow_agent_status: ${input.taskId}`,
         ``,
         `━━━ Status ━━━━━━━━━━━━━━━━━━━━`,
         `state:    🔄 RUNNING`,
-        `pid:      ${pid}`,
         `elapsed:  ${elapsed}`,
         `log:      ${logPath}`,
         ``,
@@ -260,13 +321,15 @@ Parameters:
       return createSuccessResult(lines.join('\n'))
     }
 
-    // Log exists, no done marker, process dead → CRASHED
+    // stale or crashed — no done marker
+    const isCrashed = mtimeClass === 'crashed' || mtimeClass === 'unknown'
+    const stateLabel = isCrashed ? '❌ CRASHED' : '⚠️  STALE (likely crashed — log inactive 1-5m)'
     const lastLine = rawTail[rawTail.length - 1] ?? '(empty log)'
     const lines: string[] = [
       `planflow_agent_status: ${input.taskId}`,
       ``,
       `━━━ Status ━━━━━━━━━━━━━━━━━━━━`,
-      `state:    ❌ CRASHED`,
+      `state:    ${stateLabel}`,
       `elapsed:  ${elapsed}`,
       `log:      ${logPath}`,
       ``,

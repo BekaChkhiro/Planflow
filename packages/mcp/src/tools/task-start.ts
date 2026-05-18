@@ -78,6 +78,13 @@ const TaskStartInputSchema = z.object({
     .describe(
       'How the autonomous agent finishes the task. `pr` opens a pull request (safe default). `merge-master` merges directly to the main branch and pushes (destructive). `none` leaves the branch unmerged. Only used when autoExecute=true.'
     ),
+  model: z
+    .enum(['auto', 'sonnet', 'opus', 'haiku'])
+    .optional()
+    .default('auto')
+    .describe(
+      'Model for the spawned autoExecute agent. `auto` (default) picks based on task complexity: Large/XL → Opus, else Sonnet. Override to force a specific model. Only used when autoExecute=true.'
+    ),
 })
 
 type TaskStartInput = z.infer<typeof TaskStartInputSchema>
@@ -263,6 +270,18 @@ function renderWorktreeRedirect(
 // autoExecute: headless agent dispatch
 // ────────────────────────────────────────────────────────────────────
 
+/**
+ * Map a task's complexity field to a model alias.
+ * Defaults to 'sonnet' for unknown/missing values — escalates to 'opus'
+ * only for Large/XL tasks where the extra capability is worth the cost.
+ */
+function modelForTask(complexity: string | null | undefined): string {
+  if (!complexity) return 'sonnet'
+  const c = complexity.trim().toLowerCase()
+  if (['large', 'xl', 'extra large', 'l', 'xlarge'].includes(c)) return 'opus'
+  return 'sonnet'
+}
+
 interface DispatchOpts {
   // Record<string, any> because the Task type from @planflow/shared uses
   // an index-signature shape that makes dotted access a TS4111 error.
@@ -271,6 +290,8 @@ interface DispatchOpts {
   projectId: string
   worktreeOutcome: WorktreeOutcome
   mergeStrategy: 'pr' | 'merge-master' | 'none'
+  /** Model alias override. 'auto' resolves via modelForTask(task.complexity). */
+  modelOverride: 'auto' | 'sonnet' | 'opus' | 'haiku'
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -392,11 +413,20 @@ function buildPreloadedContextSection(results: PreloadResults): string {
 }
 
 async function dispatchAgent(opts: DispatchOpts): Promise<ReturnType<typeof createSuccessResult>> {
-  const { task, projectId, worktreeOutcome, mergeStrategy } = opts
+  const { task, projectId, worktreeOutcome, mergeStrategy, modelOverride } = opts
 
   const taskId = task['taskId'] as string
   const taskName = task['name'] as string
   const taskDescription = (task['description'] as string | null | undefined) ?? null
+  const taskComplexity = (task['complexity'] as string | null | undefined) ?? null
+
+  // ── Resolve model ───────────────────────────────────────────────
+  const resolvedModel: string =
+    modelOverride === 'auto' ? modelForTask(taskComplexity) : modelOverride
+  const modelReason =
+    modelOverride === 'auto'
+      ? `auto-selected for ${taskComplexity ?? 'unknown'} complexity`
+      : 'explicit override'
 
   // ── Pre-load semantic context (parallel fan-out) ────────────────
   // Run discovery before building the directive so the agent gets
@@ -534,9 +564,7 @@ CHECKPOINT
   const directivePrompt = `
 # PlanFlow Autonomous Agent — ${taskId}: ${taskName}
 
-You are a headless agent. Complete this task end-to-end using PlanFlow's
-intelligence tools — NOT grep/Read as your first move. The codebase is
-fully indexed; use it.
+You are a headless agent. Complete this task end-to-end without human input.
 
 ## Task
 - ID:          ${taskId}
@@ -550,64 +578,54 @@ ${taskDescription ? taskDescription.trim() : '(no description — infer from tit
 
 ${preloadedContextSection}
 
-## 0. State recovery (check first)
-Before doing anything else, check if a checkpoint marker already exists:
+## 0. State recovery
+Check for an existing checkpoint before starting:
     test -f ${logDir}/${taskId}.done && cat ${logDir}/${taskId}.done
-If it exists and has status="in-progress", read the "phase" field and skip
-ahead to the step AFTER that phase. For example: phase="merged" means
-steps 1-8 already succeeded — jump to step 9 (planflow_task_done).
-If no marker exists, start from step 1.
+If phase="merged", skip to step 9. If no marker, start from step 1.
 
-## 1. Verify pre-loaded context covers the task
-Scan the pre-loaded section above. If it has clear ranked code, related
-knowledge, and recent activity — skip ahead to step 2 (implement). If
-something is missing (e.g. task spans a sub-area not covered), then and
-only then run planflow_explore(intent: "<narrow query>").
-
-Keep exploring as questions arise during the task:
-  • planflow_recall(filePath: "...")   — everything tied to a file
-  • planflow_search(query: "...")     — sharp keyword lookup
-  • planflow_chunk(chunkId: "...")    — full body of any search hit
-  • planflow_explore(intent: "...")   — when a new sub-area opens up
+## 1. Context check
+Pre-loaded context is above — use it. Only call planflow_explore if a
+sub-area is genuinely missing. Continue to use PlanFlow tools as questions
+arise mid-task:
+  • planflow_chunk(chunkId)       — full body of any search hit
+  • planflow_search(query)        — sharp keyword not in pre-load
+  • planflow_recall(filePath)     — everything tied to a file
+  • planflow_explore(intent)      — new sub-area that opens up mid-task
 
 ## 2. Journal progress
-After each meaningful milestone call:
-    planflow_task_progress(taskId: "${taskId}", note: "<what you just did or decided>")
-This shows up in the PlanFlow activity feed so the human has visibility.
-Aim for 3-6 notes across the task — not 30, not 0.
+Call planflow_task_progress(taskId: "${taskId}", note: "...") after each
+meaningful milestone. Target 3-6 notes total — not 30, not 0.
 
-## 3. Capture non-obvious decisions
-When you make a non-obvious architectural or convention choice, save it:
+## 3. Capture decisions
+Save non-obvious architectural choices:
     planflow_remember(title: "...", content: "...", type: "decision")
-Save: hidden constraints, surprising tradeoffs, "chose X because Y" facts.
-Skip: trivial choices, things already clear from the diff.
+Skip trivial or already-visible-from-diff choices.
 
-## 4. Implement the task
-- Follow existing code style, patterns, conventions.
-- Update or add tests when the project has a test suite.
+## 4. Implement
+- Match existing code style, patterns, and conventions.
+- Add/update tests when the project has a test suite.
 - No Co-Authored-By trailers in commits.
 
 ## 5. Validate
-Detect package manager (pnpm-lock.yaml → pnpm; else npm).
-Run in order, skip missing scripts, fix and re-run on failure:
+Detect package manager (pnpm-lock.yaml → pnpm, else npm).
+Run in order; skip missing scripts; fix failures before continuing:
     pnpm typecheck | pnpm test | pnpm lint
-If typecheck shows errors, run:
-    git stash && pnpm typecheck
-to confirm they are pre-existing (don't fix unrelated issues — scope discipline).
-Then git stash pop and continue.
+If typecheck shows errors, run git stash && pnpm typecheck to confirm they
+are pre-existing (scope discipline — don't fix unrelated issues), then
+git stash pop and continue.
 
 ## 6. Re-index
-After editing files, ALWAYS refresh embeddings (incremental, near-free):
+After editing files:
     planflow_index
-Without this, future planflow_search results miss your changes.
+Keeps future searches accurate. Near-free (incremental).
 
-## 7. Commit and write checkpoint (phase=implemented)
+## 7. Commit + checkpoint
 Stage specific files by path — never git add -A.
-Commit on branch ${branchName}. Message format:
+Commit on branch ${branchName}:
     feat(<scope>): ${taskId} — ${taskName}
 No Co-Authored-By trailer.
 
-After the commit succeeds, write checkpoint immediately:
+Write checkpoint:
 \`\`\`bash
 mkdir -p ${logDir}
 cat > ${logDir}/${taskId}.done <<'CHECKPOINT'
@@ -620,71 +638,44 @@ ${mergeInstructions}
 ## 9. Mark task done
     planflow_task_done(taskId: "${taskId}", projectId: "${projectId}", summary: "<one-line outcome>")
 
-After planflow_task_done returns success, write checkpoint (phase=task-done):
+Write checkpoint:
 \`\`\`bash
 cat > ${logDir}/${taskId}.done <<'CHECKPOINT'
 {"taskId":"${taskId}","status":"in-progress","phase":"task-done","prUrl":"<PR URL or null>","branch":"${branchName}","summary":"<one-line outcome>","lastUpdate":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","finishedAt":null}
 CHECKPOINT
 \`\`\`
 
-## 10. Do NOT remove the worktree from inside it
-You are running inside the worktree at ${agentCwdDisplay}.
-Calling planflow_worktree_remove from here fails — git refuses to remove a
-worktree you are currently inside.
-Your job ends after step 11. Mention in your final summary that the dispatcher
-can clean up with:
-    cd ${mainRepoRoot}
-    planflow_worktree_remove(taskId: "${taskId}")
+## 10. Worktree cleanup note
+You are inside the worktree at ${agentCwdDisplay}. Do NOT call
+planflow_worktree_remove — git refuses to remove the worktree you're in.
+Mention in your final summary that the dispatcher can clean up with:
+    cd ${mainRepoRoot} && planflow_worktree_remove(taskId: "${taskId}")
 
-## 11. Write final done marker and notify
-Write the final JSON marker (status="done", phase="complete"):
+## 11. Final marker + notify
 \`\`\`bash
 cat > ${logDir}/${taskId}.done <<'DONE_MARKER'
-{
-  "taskId": "${taskId}",
-  "status": "done",
-  "phase": "complete",
-  "prUrl": "<PR URL or null>",
-  "summary": "<one-line outcome>",
-  "branch": "${branchName}",
-  "lastUpdate": "<ISO timestamp>",
-  "finishedAt": "<ISO timestamp>"
-}
+{"taskId":"${taskId}","status":"done","phase":"complete","prUrl":"<PR URL or null>","summary":"<one-line outcome>","branch":"${branchName}","lastUpdate":"<ISO>","finishedAt":"<ISO>"}
 DONE_MARKER
 \`\`\`
 
-If ANY step failed and you are aborting, write status="failed" instead:
-\`\`\`bash
-cat > ${logDir}/${taskId}.done <<'FAILED_MARKER'
-{
-  "taskId": "${taskId}",
-  "status": "failed",
-  "phase": "<last phase that succeeded or 'none'>",
-  "prUrl": null,
-  "summary": "<what went wrong>",
-  "branch": "${branchName}",
-  "lastUpdate": "<ISO timestamp>",
-  "finishedAt": "<ISO timestamp>"
-}
-FAILED_MARKER
-\`\`\`
+On failure write status="failed" with the last succeeded phase and error summary.
 
-Then send a macOS notification (fall back silently if osascript is absent):
+macOS notification (silent fallback if osascript absent):
     osascript -e 'display notification "${taskId} done" with title "PlanFlow" subtitle "${taskName}"' 2>/dev/null || true
 
 ## STOP
-After step 11, stop. Do not poll, do not ask questions, do not open new
-tasks. Your job ends when the final done marker is written.
+After step 11, stop. Do not poll, do not open new tasks.
 `.trim()
 
   // ── Spawn ────────────────────────────────────────────────────────
-  let spawnResult: { pid: number; logPath: string }
+  let spawnResult: { pid: number; logPath: string; mcpConfigPath: string | null; model: string }
   try {
     spawnResult = await spawnHeadlessAgent({
       cwd: agentCwd,
       prompt: directivePrompt,
       taskId,
       logDir,
+      model: resolvedModel,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -730,9 +721,15 @@ tasks. Your job ends when the final done marker is written.
     lines.push(``)
   }
 
+  const mcpLine = spawnResult.mcpConfigPath
+    ? `planflow-mcp only  (saves ~15k tokens/turn)`
+    : `default (planflow-mcp not found in user config)`
+
   lines.push(
     `━━━ Agent ━━━━━━━━━━━━━━━━━━━━━━━━`,
     `pid:      ${spawnResult.pid}`,
+    `model:    ${resolvedModel}  (${modelReason})`,
+    `mcp:      ${mcpLine}`,
     `cwd:      ${agentCwd}`,
     `branch:   ${branchName}`,
     `strategy: ${mergeStrategy}`,
@@ -920,6 +917,7 @@ Prerequisites:
           projectId,
           worktreeOutcome,
           mergeStrategy: input.mergeStrategy ?? 'pr',
+          modelOverride: input.model ?? 'auto',
         })
       }
 

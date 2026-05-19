@@ -16,6 +16,7 @@ import {
   detectCurrentWorktree,
   getMainRepoRoot,
   getRepoRoot,
+  isForbiddenRepoRoot,
   pickPort,
   readState,
   registerMainRepoTask,
@@ -138,6 +139,46 @@ describe('getMainRepoRoot', () => {
     const main = await getMainRepoRoot(entry.path)
     expect(main).not.toBeNull()
     expect(await fs.realpath(main!)).toBe(await fs.realpath(repoRoot))
+  })
+
+  it('returns null when a stray .git resolves to a forbidden root', async () => {
+    // Simulate the user accidentally running `git init` in ~/Desktop.
+    const fakeHome = path.join(workspace, 'fake-home')
+    const strayRepo = path.join(fakeHome, 'Desktop')
+    await fs.mkdir(strayRepo, { recursive: true })
+    git(strayRepo, 'init', '-b', 'main')
+
+    // The function reads $HOME at call time, so override the env temporarily.
+    const originalHome = process.env.HOME
+    process.env.HOME = fakeHome
+    try {
+      expect(await getMainRepoRoot(strayRepo)).toBeNull()
+    } finally {
+      process.env.HOME = originalHome
+    }
+  })
+})
+
+describe('isForbiddenRepoRoot', () => {
+  const fakeHome = '/Users/test'
+
+  it('flags the home directory itself', () => {
+    expect(isForbiddenRepoRoot('/Users/test', fakeHome)).toBe(true)
+  })
+
+  it('flags ~/Desktop, ~/Documents, ~/Downloads', () => {
+    expect(isForbiddenRepoRoot('/Users/test/Desktop', fakeHome)).toBe(true)
+    expect(isForbiddenRepoRoot('/Users/test/Documents', fakeHome)).toBe(true)
+    expect(isForbiddenRepoRoot('/Users/test/Downloads', fakeHome)).toBe(true)
+  })
+
+  it('flags the filesystem root', () => {
+    expect(isForbiddenRepoRoot('/', fakeHome)).toBe(true)
+  })
+
+  it('allows legitimate project paths inside home', () => {
+    expect(isForbiddenRepoRoot('/Users/test/Desktop/my-app', fakeHome)).toBe(false)
+    expect(isForbiddenRepoRoot('/Users/test/projects/foo', fakeHome)).toBe(false)
   })
 })
 

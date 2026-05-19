@@ -28,6 +28,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import { logger } from './logger.js'
 
 const exec = promisify(execFile)
@@ -84,11 +85,84 @@ export async function getRepoRoot(cwd: string = process.cwd()): Promise<string |
 }
 
 /**
+ * Resolve the remote's default branch (usually "main" or "master"). Used
+ * when creating a worktree so its base is always the up-to-date remote
+ * branch, never a stale local checkout. Returns null when there is no
+ * `origin` remote (offline / not pushed yet / multiple remotes).
+ *
+ * Strategy:
+ *   1. Prefer `refs/remotes/origin/HEAD` — set by `git clone` and `git remote set-head`.
+ *   2. Fall back to `git ls-remote --symref origin HEAD` (works over the
+ *      wire if local doesn't have the symref).
+ *   3. If both fail, return null and the caller decides.
+ */
+export async function getRemoteDefaultBranch(
+  cwd: string = process.cwd()
+): Promise<string | null> {
+  try {
+    const { stdout } = await exec(
+      'git',
+      ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
+      { cwd }
+    )
+    const ref = stdout.trim()
+    if (ref.startsWith('origin/')) return ref.slice('origin/'.length)
+    return ref || null
+  } catch {
+    // Local symref isn't set — ask the remote directly.
+  }
+  try {
+    const { stdout } = await exec('git', ['ls-remote', '--symref', 'origin', 'HEAD'], { cwd })
+    // Output looks like: "ref: refs/heads/main\tHEAD\n<sha>\tHEAD"
+    const match = stdout.match(/ref:\s+refs\/heads\/(\S+)\s+HEAD/)
+    return match?.[1] ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Directories that are NEVER a valid main repo root. If `git rev-parse`
+ * walks up and resolves to one of these, the user almost certainly has
+ * a stray `.git` directory sitting in a shared/home location (e.g. they
+ * accidentally ran `git init` in ~/Desktop). Treating that as the repo
+ * root is catastrophic — worktrees get created as siblings of unrelated
+ * project folders, tasks branch off the wrong history, and untracked
+ * files multiply.
+ *
+ * We refuse rather than silently misbehaving.
+ */
+export function isForbiddenRepoRoot(
+  repoRoot: string,
+  homedir: string = os.homedir()
+): boolean {
+  const normalized = path.resolve(repoRoot)
+  const home = path.resolve(homedir)
+
+  // The home directory itself.
+  if (normalized === home) return true
+
+  // Common shared user dirs that should never be a git repo.
+  const forbiddenChildren = ['Desktop', 'Documents', 'Downloads', 'Pictures', 'Movies', 'Music']
+  for (const child of forbiddenChildren) {
+    if (normalized === path.join(home, child)) return true
+  }
+
+  // Filesystem root or single-segment path is also suspicious.
+  if (normalized === path.parse(normalized).root) return true
+
+  return false
+}
+
+/**
  * Resolve the MAIN repo root even when cwd is inside a linked worktree.
  *
  * `git rev-parse --git-common-dir` returns the path to the main `.git`
  * directory shared across all worktrees. The main repo root is its
  * parent (when --git-common-dir is `.git`, we fall back to toplevel).
+ *
+ * Refuses to return a "forbidden" root (e.g. ~/Desktop, ~, ~/Documents)
+ * — a stray `.git` in those locations is a setup bug, never a real repo.
  */
 export async function getMainRepoRoot(cwd: string = process.cwd()): Promise<string | null> {
   try {
@@ -109,7 +183,17 @@ export async function getMainRepoRoot(cwd: string = process.cwd()): Promise<stri
     // the common dir already names a directory (not just `.git`),
     // dirname still works because git puts shared metadata under
     // `<mainRepo>/.git`.
-    return path.dirname(absoluteCommonDir)
+    const repoRoot = path.dirname(absoluteCommonDir)
+
+    if (isForbiddenRepoRoot(repoRoot)) {
+      logger.warn(
+        'Refusing to use a forbidden directory as repo root. A stray .git was found in a shared/home directory — this is almost always a setup mistake, not a real repository.',
+        { repoRoot, cwd }
+      )
+      return null
+    }
+
+    return repoRoot
   } catch {
     return null
   }
@@ -283,13 +367,34 @@ export async function createWorktree(
     )
   }
 
+  // Decide the base. If the caller didn't specify, branch from the
+  // freshly-fetched remote default branch — otherwise the worktree
+  // inherits whatever was last checked out locally (which is often
+  // stale: e.g. main was advanced via a merged PR but the local
+  // checkout never pulled). Worktrees that start from stale base
+  // create cascading conflicts when the agent later pushes.
+  let base = opts.baseBranch
+  if (!base) {
+    const remoteDefault = await getRemoteDefaultBranch(mainRepoRoot)
+    if (remoteDefault) {
+      // Best-effort fetch so origin/<default> is current. Failure here
+      // (offline, no remote configured) is OK — we fall back to HEAD.
+      await exec('git', ['fetch', 'origin', remoteDefault], { cwd: mainRepoRoot }).catch(() => {
+        /* fetch fail is non-fatal */
+      })
+      base = `origin/${remoteDefault}`
+    } else {
+      base = 'HEAD'
+    }
+  }
+
   // If the branch already exists locally we attach to it; otherwise
   // we create it. `git worktree add -b` fails if the branch exists,
   // so we branch our own logic.
   const branchExists = await checkBranchExists(mainRepoRoot, branch)
   const args = branchExists
     ? ['worktree', 'add', worktreePath, branch]
-    : ['worktree', 'add', '-b', branch, worktreePath, opts.baseBranch ?? 'HEAD']
+    : ['worktree', 'add', '-b', branch, worktreePath, base]
 
   try {
     await exec('git', args, { cwd: mainRepoRoot })

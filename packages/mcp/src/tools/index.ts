@@ -46,6 +46,13 @@ import { recallTool } from './recall.js'
 import { chunkTool } from './chunk.js'
 import { rememberTool } from './remember.js'
 
+// Plan authoring & quality gates
+import { planValidateTool } from './plan-validate.js'
+import { planScaffoldTool } from './plan-scaffold.js'
+import { planRefineTool } from './plan-refine.js'
+import { taskCreateTool } from './task-create.js'
+import { phaseCreateTool } from './phase-create.js'
+
 export const tools: ToolDefinition[] = [
   // Auth
   loginTool,
@@ -86,6 +93,13 @@ export const tools: ToolDefinition[] = [
   recallTool,
   chunkTool,
   rememberTool,
+
+  // Plan authoring & quality gates
+  planScaffoldTool,
+  planValidateTool,
+  planRefineTool,
+  taskCreateTool,
+  phaseCreateTool,
 ]
 
 export function getTool(name: string): ToolDefinition | undefined {

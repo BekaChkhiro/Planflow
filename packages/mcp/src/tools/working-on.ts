@@ -51,11 +51,6 @@ Usage:
   planflow_working_on(projectId: "uuid", action: "start", taskId: "T1.1")
   planflow_working_on(projectId: "uuid", action: "stop")
 
-Parameters:
-  - projectId (required): Project UUID
-  - action (required): "start" or "stop"
-  - taskId (optional): Task ID (required when action=start)
-
 Prerequisites:
   • Logged in with planflow_login()`,
 

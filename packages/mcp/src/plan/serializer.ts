@@ -38,6 +38,17 @@ export function serializePhase(phase: PhaseNode): string {
   const estimate = phase.estimate ? ` (Est: ${phase.estimate})` : ''
   lines.push(`### Phase ${phase.number}: ${phase.name}${estimate}`)
   lines.push('')
+  if (phase.goal && phase.goal.trim()) {
+    lines.push(`**Goal**: ${phase.goal.trim()}`)
+    lines.push('')
+  }
+  if (phase.exitCriteria && phase.exitCriteria.length > 0) {
+    lines.push('**Exit Criteria**:')
+    for (const c of phase.exitCriteria) {
+      lines.push(`- ${c}`)
+    }
+    lines.push('')
+  }
   for (let i = 0; i < phase.tasks.length; i++) {
     lines.push(serializeTask(phase.tasks[i]!))
     if (i < phase.tasks.length - 1) {

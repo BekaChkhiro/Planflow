@@ -70,13 +70,6 @@ Usage:
     type: "pattern"
   )
 
-Parameters:
-  - projectId (required): Project UUID
-  - title (required): Short title (max 200 chars)
-  - content (required): Full description
-  - type (optional): architecture | pattern | convention | decision | dependency | environment | other
-  - tags (optional): Array of tags (e.g., ["auth", "middleware"])
-
 Prerequisites:
   • Logged in with planflow_login()
   • Editor or admin role in the project`,

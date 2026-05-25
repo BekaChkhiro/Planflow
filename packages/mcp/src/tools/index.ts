@@ -49,6 +49,8 @@ import { rememberTool } from './remember.js'
 // Plan authoring & quality gates
 import { planValidateTool } from './plan-validate.js'
 import { planScaffoldTool } from './plan-scaffold.js'
+import { planOutlineTool } from './plan-outline.js'
+import { planGapsTool } from './plan-gaps.js'
 import { planRefineTool } from './plan-refine.js'
 import { taskCreateTool } from './task-create.js'
 import { phaseCreateTool } from './phase-create.js'
@@ -95,8 +97,10 @@ export const tools: ToolDefinition[] = [
   rememberTool,
 
   // Plan authoring & quality gates
+  planOutlineTool,
   planScaffoldTool,
   planValidateTool,
+  planGapsTool,
   planRefineTool,
   taskCreateTool,
   phaseCreateTool,

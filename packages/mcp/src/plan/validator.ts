@@ -12,9 +12,12 @@
  */
 
 import type {
+  CoverageSummary,
   PlanIssue,
   PlanTree,
+  PrecisionSummary,
   TaskNode,
+  TaskPrecision,
   ValidationReport,
 } from './types.js'
 
@@ -40,6 +43,27 @@ const SECURITY_KEYWORDS =
   /\b(security|secure|hardening|audit|owasp|csrf|xss|injection|sanitiz|rate.?limit)\b/i
 const ENV_KEYWORDS = /\b(env|environment|secrets?|config(uration)?|vault|\.env)\b/i
 
+// ── Instruction-precision detectors ──────────────────────────────────
+// These scan a task's description markdown to judge whether the spec is
+// concrete enough for an agent to execute without guessing.
+
+/** A file path token like `src/auth/login.ts` or `apps/api/index.js`. */
+const FILE_PATH_RE =
+  /\b[\w@.-]+\/[\w@./-]+\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|rb|php|sql|json|ya?ml|md|css|scss|html|vue|svelte)\b/i
+/** "Touchpoints", "Files to change", "Affected files" headers. */
+const TOUCHPOINTS_RE = /\b(touchpoints?|files? to (touch|change|edit|create|modify)|affected files?)\b/i
+/** Contract/interface vocabulary — signatures, routes, payloads, types. */
+const CONTRACT_RE =
+  /\b(contract|interface|signature|endpoint|route|request|response|payload|status code|returns?|param(eter)?s?|props?|api shape|data model|schema)\b/i
+/** A numbered step list, or an explicit Steps/Implementation header. */
+const STEPS_RE = /(^|\n)\s*\d+[.)]\s+\S/
+const STEPS_HEADER_RE = /\b(steps?|implementation plan|approach)\b/i
+/** Constraints / non-goals / invariants. */
+const CONSTRAINTS_RE =
+  /\b(constraints?|non-?goals?|out of scope|do not|don'?t|must not|invariant|avoid)\b/i
+/** Runnable verification — a command or an explicit Verify header. */
+const VERIFY_RE = /\b(verify|verification)\b|`[^`]*\b(test|pnpm|npm|yarn|pytest|go test|cargo|jest|vitest)\b[^`]*`/i
+
 /**
  * Main validation entry point.
  */
@@ -47,9 +71,16 @@ export function validatePlan(plan: PlanTree): ValidationReport {
   const issues: PlanIssue[] = []
 
   issues.push(...checkStructural(plan))
+  issues.push(...checkOutline(plan))
   issues.push(...checkQuality(plan))
   issues.push(...checkTesting(plan))
   issues.push(...checkProduction(plan))
+
+  const precisionResult = checkInstructionPrecision(plan)
+  issues.push(...precisionResult.issues)
+
+  const traceResult = checkTraceability(plan)
+  issues.push(...traceResult.issues)
 
   const errors = issues.filter((i) => i.severity === 'error').length
   const warnings = issues.filter((i) => i.severity === 'warning').length
@@ -66,7 +97,170 @@ export function validatePlan(plan: PlanTree): ValidationReport {
       infos,
     },
     issues,
+    ...(precisionResult.summary ? { precision: precisionResult.summary } : {}),
+    ...(traceResult.summary ? { coverage: traceResult.summary } : {}),
   }
+}
+
+/**
+ * Validate ONLY the plan skeleton — phases, their goals, exit criteria,
+ * numbering, and scope boundaries — ignoring task-level detail. This is
+ * the gate for the FIRST checkpoint in staged authoring: lock the
+ * structure before decomposing any phase into tasks. Unlike validatePlan
+ * it does NOT require tasks to exist yet.
+ */
+export function validateOutline(plan: PlanTree): ValidationReport {
+  const issues: PlanIssue[] = []
+  issues.push(...checkPhaseSkeleton(plan))
+  issues.push(...checkOutline(plan))
+  const taskCount = plan.phases.reduce((acc, p) => acc + p.tasks.length, 0)
+  return finalizeReport(issues, plan.phases.length, taskCount)
+}
+
+/**
+ * Validate ONE phase in depth — the gate before moving on to the next
+ * phase. Runs every task-level check (quality, testing, precision) but
+ * scopes the result to the target phase, and adds phase-coverage checks.
+ * Dependency existence is still evaluated against the WHOLE plan, so
+ * cross-phase edges are caught.
+ */
+export function validatePhase(plan: PlanTree, phaseNumber: number): ValidationReport {
+  const phase = plan.phases.find((p) => p.number === phaseNumber)
+  if (!phase) {
+    return finalizeReport(
+      [
+        {
+          code: 'invalid_phase_number',
+          severity: 'error',
+          message: `Phase ${phaseNumber} does not exist in the plan.`,
+          phase: phaseNumber,
+          fix: `Existing phases: ${plan.phases.map((p) => p.number).join(', ') || '(none)'}.`,
+        },
+      ],
+      plan.phases.length,
+      0
+    )
+  }
+
+  const phaseTaskIds = new Set(phase.tasks.map((t) => t.taskId))
+  const full = validatePlan(plan)
+
+  // Keep issues that belong to this phase: phase-tagged, or task-tagged
+  // for a task that lives in this phase. (Plan-global warnings like
+  // missing_deployment_task or missing_non_goals are intentionally
+  // dropped — they're not this phase's gate.)
+  const issues = full.issues.filter(
+    (i) =>
+      i.phase === phaseNumber ||
+      (i.taskId !== undefined && phaseTaskIds.has(i.taskId))
+  )
+
+  // A phase with no tasks can't be verified — hard gate.
+  if (phase.tasks.length === 0) {
+    issues.push({
+      code: 'phase_no_tasks',
+      severity: 'error',
+      message: `Phase ${phaseNumber} (${phase.name}) has no tasks to verify.`,
+      phase: phaseNumber,
+      fix: 'Decompose the phase goal into tasks before validating it.',
+    })
+  }
+
+  // Scope the precision summary to this phase's tasks.
+  let scopedPrecision: PrecisionSummary | undefined
+  const phaseScores = (full.precision?.tasks ?? []).filter((t) =>
+    phaseTaskIds.has(t.taskId)
+  )
+  if (phaseScores.length > 0) {
+    scopedPrecision = {
+      avgScore: Math.round(
+        phaseScores.reduce((a, t) => a + t.score, 0) / phaseScores.length
+      ),
+      scoredTasks: phaseScores.length,
+      tasks: [...phaseScores].sort((a, b) => a.score - b.score),
+    }
+  }
+
+  return finalizeReport(issues, 1, phase.tasks.length, scopedPrecision)
+}
+
+/** Assemble a ValidationReport from a set of issues + counts. */
+function finalizeReport(
+  issues: PlanIssue[],
+  phases: number,
+  tasks: number,
+  precision?: PrecisionSummary
+): ValidationReport {
+  const errors = issues.filter((i) => i.severity === 'error').length
+  const warnings = issues.filter((i) => i.severity === 'warning').length
+  const infos = issues.filter((i) => i.severity === 'info').length
+  return {
+    ok: errors === 0,
+    totals: { phases, tasks, errors, warnings, infos },
+    issues,
+    ...(precision ? { precision } : {}),
+  }
+}
+
+/**
+ * Phase-skeleton structural checks — used by validateOutline. Verifies
+ * the plan has phases, numbered sequentially from 1 with no duplicates,
+ * and each has a usable name.
+ */
+function checkPhaseSkeleton(plan: PlanTree): PlanIssue[] {
+  const issues: PlanIssue[] = []
+
+  if (plan.phases.length === 0) {
+    issues.push({
+      code: 'empty_outline',
+      severity: 'error',
+      message: 'Plan has no phases.',
+      fix: 'Add at least one "### Phase 1: <Name>" with a **Goal**.',
+    })
+    return issues
+  }
+
+  const nums = plan.phases.map((p) => p.number)
+  const seen = new Set<number>()
+  for (const n of nums) {
+    if (seen.has(n)) {
+      issues.push({
+        code: 'phase_numbering',
+        severity: 'warning',
+        message: `Duplicate phase number ${n}.`,
+        phase: n,
+        fix: 'Renumber phases so each number is unique.',
+      })
+    }
+    seen.add(n)
+  }
+
+  const sorted = [...nums].sort((a, b) => a - b)
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i] !== i + 1) {
+      issues.push({
+        code: 'phase_numbering',
+        severity: 'warning',
+        message: `Phases are not numbered sequentially from 1 (got ${sorted.join(', ')}).`,
+        fix: 'Renumber so phases run 1, 2, 3, … in order.',
+      })
+      break
+    }
+  }
+
+  for (const p of plan.phases) {
+    if (!p.name || p.name.trim().length < 3) {
+      issues.push({
+        code: 'phase_numbering',
+        severity: 'warning',
+        message: `Phase ${p.number} has a missing or too-short name.`,
+        phase: p.number,
+        fix: 'Give the phase a descriptive name (e.g. "Foundation", "Core Features").',
+      })
+    }
+  }
+
+  return issues
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -218,6 +412,51 @@ function detectCycles(idMap: Map<string, TaskNode[]>): string[][] {
   }
 
   return cycles
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Outline — is the plan skeleton sound? (phase goals, exit criteria,
+// scope boundaries). These are the structural checks that matter most
+// in staged authoring, before tasks are filled in.
+// ─────────────────────────────────────────────────────────────────
+
+function checkOutline(plan: PlanTree): PlanIssue[] {
+  const issues: PlanIssue[] = []
+
+  for (const phase of plan.phases) {
+    if (!phase.goal || phase.goal.trim().length === 0) {
+      issues.push({
+        code: 'missing_phase_goal',
+        severity: 'warning',
+        message: `Phase ${phase.number} (${phase.name}) has no goal — what milestone does it deliver?`,
+        phase: phase.number,
+        fix: 'Add `**Goal**: <one sentence>` after the phase header so its tasks can be checked against it.',
+      })
+    }
+    // Exit criteria matter once a phase has real work in it.
+    if (phase.tasks.length > 0 && (!phase.exitCriteria || phase.exitCriteria.length === 0)) {
+      issues.push({
+        code: 'missing_exit_criteria',
+        severity: 'info',
+        message: `Phase ${phase.number} (${phase.name}) has no exit criteria — when is it "done"?`,
+        phase: phase.number,
+        fix: 'Add an `**Exit Criteria**:` bullet list — the testable gate before the next phase begins.',
+      })
+    }
+  }
+
+  // Brief: scope boundaries. A plan with no stated non-goals tends to
+  // sprawl — flag it once at the plan level.
+  if (!plan.meta.nonGoals || plan.meta.nonGoals.length === 0) {
+    issues.push({
+      code: 'missing_non_goals',
+      severity: 'info',
+      message: 'Plan states no non-goals — scope boundaries are undefined.',
+      fix: 'Add a `## Non-Goals` section listing what is explicitly OUT of scope, so tasks do not sprawl.',
+    })
+  }
+
+  return issues
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -442,6 +681,214 @@ function extractKeyword(name: string): string | null {
     .filter((w) => w.length >= 4)
   if (words.length === 0) return null
   return words.sort((a, b) => b.length - a.length)[0] ?? null
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Instruction precision — can an agent execute this without guessing?
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * A "feature task" is one substantial enough to deserve a precise spec:
+ * Medium/High complexity, not the phase-1 setup work, and not a test
+ * task (those are defined by what they test). Low-complexity chores
+ * don't need the full contract, so we skip them to avoid noise.
+ */
+function isFeatureTask(t: TaskNode, lastPhase: number): boolean {
+  if (t.complexity === 'Low') return false
+  if (t.phase === 1) return false
+  if (lastPhase > 1 && t.phase === lastPhase) return false
+  if (TESTING_KEYWORDS.test(t.name)) return false
+  return true
+}
+
+/**
+ * Score one task's instruction precision against a 6-point checklist and
+ * report which pieces are missing. The score is what powers the plan's
+ * "how ready is this for an agent" number; the missing list drives the
+ * concrete fixes.
+ */
+function scoreTaskPrecision(t: TaskNode): TaskPrecision {
+  const desc = t.description ?? ''
+  const checklist: Array<{ key: string; present: boolean }> = [
+    // Goal: a non-trivial description exists at all.
+    { key: 'goal', present: desc.replace(/\s+/g, ' ').trim().length >= 40 },
+    // Touchpoints: names at least one concrete file/path to change.
+    { key: 'touchpoints', present: FILE_PATH_RE.test(desc) || TOUCHPOINTS_RE.test(desc) },
+    // Contract: specifies the interface — signature, route, shape, types.
+    { key: 'contract', present: CONTRACT_RE.test(desc) },
+    // Steps: an ordered implementation outline.
+    { key: 'steps', present: STEPS_RE.test(desc) || STEPS_HEADER_RE.test(desc) },
+    // Acceptance criteria: testable done-conditions.
+    { key: 'acceptance', present: (t.acceptanceCriteria?.length ?? 0) >= 1 },
+    // Verify: a runnable check, or a linked test task.
+    {
+      key: 'verify',
+      present: VERIFY_RE.test(desc) || t.testTaskId !== undefined,
+    },
+  ]
+  const present = checklist.filter((c) => c.present).length
+  const score = Math.round((present / checklist.length) * 100)
+  const missing = checklist.filter((c) => !c.present).map((c) => c.key)
+  return { taskId: t.taskId, score, missing }
+}
+
+function checkInstructionPrecision(plan: PlanTree): {
+  issues: PlanIssue[]
+  summary?: PrecisionSummary
+} {
+  const issues: PlanIssue[] = []
+  const allTasks = flattenTasks(plan)
+  const lastPhase = Math.max(...plan.phases.map((p) => p.number), 0)
+  const featureTasks = allTasks.filter((t) => isFeatureTask(t, lastPhase))
+
+  if (featureTasks.length === 0) {
+    return { issues }
+  }
+
+  const scores: TaskPrecision[] = []
+
+  for (const t of featureTasks) {
+    const p = scoreTaskPrecision(t)
+    scores.push(p)
+    const missing = new Set(p.missing)
+
+    // Touchpoints and contract are the two highest-leverage precision
+    // signals — without them the agent guesses WHERE and WHAT. Flag as
+    // warnings so they surface above nice-to-haves.
+    if (missing.has('touchpoints')) {
+      issues.push({
+        code: 'missing_touchpoints',
+        severity: 'warning',
+        message: `Task ${t.taskId} ("${t.name}") names no files to touch — the agent will have to guess where the change goes.`,
+        taskId: t.taskId,
+        fix: 'Add a **Touchpoints** section listing the files to create/edit (e.g. "create src/auth/login.ts").',
+      })
+    }
+    if (missing.has('contract')) {
+      issues.push({
+        code: 'missing_contract',
+        severity: 'warning',
+        message: `Task ${t.taskId} ("${t.name}") has no interface contract — signatures, routes, request/response shapes, or types are unspecified.`,
+        taskId: t.taskId,
+        fix: 'Add a **Contract** section: exact function signatures, API route + request/response shape, status codes, or data-model fields.',
+      })
+    }
+    // Constraints matter most on High tasks, where scope creep and
+    // invariant violations are most likely.
+    if (t.complexity === 'High' && !CONSTRAINTS_RE.test(t.description ?? '')) {
+      issues.push({
+        code: 'missing_constraints',
+        severity: 'info',
+        message: `Task ${t.taskId} ("${t.name}") is High complexity but states no constraints / non-goals.`,
+        taskId: t.taskId,
+        fix: 'Add a **Constraints** section: what NOT to touch, invariants to preserve, and explicit out-of-scope items.',
+      })
+    }
+    // A very low score means the spec is too thin to execute precisely,
+    // regardless of which specific pieces are missing.
+    if (p.score < 50) {
+      issues.push({
+        code: 'thin_instructions',
+        severity: 'warning',
+        message: `Task ${t.taskId} ("${t.name}") scores ${p.score}% on instruction precision — too thin for an agent to execute without guessing (missing: ${p.missing.join(', ')}).`,
+        taskId: t.taskId,
+        fix: 'Flesh out the spec with Touchpoints, Contract, ordered Steps, Acceptance Criteria, and a Verify command.',
+      })
+    }
+  }
+
+  const avgScore = Math.round(
+    scores.reduce((acc, s) => acc + s.score, 0) / scores.length
+  )
+  const summary: PrecisionSummary = {
+    avgScore,
+    scoredTasks: scores.length,
+    tasks: scores.sort((a, b) => a.score - b.score),
+  }
+
+  return { issues, summary }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Traceability — does the plan actually cover the declared intent?
+// ─────────────────────────────────────────────────────────────────
+
+const TRACE_STOPWORDS = new Set([
+  'with',
+  'from',
+  'into',
+  'that',
+  'this',
+  'your',
+  'their',
+  'using',
+  'support',
+  'management',
+  'system',
+  'feature',
+  'features',
+  'data',
+  'page',
+  'pages',
+])
+
+/** Significant lowercase tokens (≥4 chars, not stopwords) for matching. */
+function significantTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !TRACE_STOPWORDS.has(w))
+}
+
+/**
+ * Check that every declared feature has at least one implementing task.
+ * Conservative: a feature is "covered" if ANY of its significant tokens
+ * appears in some task's name or description — so we only flag features
+ * with NO lexical footprint in the task list, keeping false alarms low.
+ *
+ * Runs only when the plan declares features (a `## Features` section);
+ * otherwise there is nothing to trace against.
+ */
+function checkTraceability(plan: PlanTree): {
+  issues: PlanIssue[]
+  summary?: CoverageSummary
+} {
+  const features = plan.meta.features ?? []
+  if (features.length === 0) return { issues: [] }
+
+  const allTasks = flattenTasks(plan)
+  const taskCorpus = allTasks.map((t) => `${t.name} ${t.description}`.toLowerCase())
+
+  const issues: PlanIssue[] = []
+  const uncovered: string[] = []
+
+  for (const feature of features) {
+    const tokens = significantTokens(feature)
+    // A feature with no significant tokens (e.g. "Misc") can't be traced
+    // — skip rather than false-flag.
+    if (tokens.length === 0) continue
+
+    const covered = taskCorpus.some((corpus) => tokens.some((tok) => corpus.includes(tok)))
+    if (!covered) {
+      uncovered.push(feature)
+      issues.push({
+        code: 'feature_not_covered',
+        severity: 'warning',
+        message: `Feature "${feature}" has no implementing task — the plan promises it but nothing builds it.`,
+        fix: `Add a task that implements "${feature}", or remove it from the features list if it's out of scope.`,
+      })
+    }
+  }
+
+  const traceable = features.filter((f) => significantTokens(f).length > 0).length
+  const summary: CoverageSummary = {
+    features: traceable,
+    covered: traceable - uncovered.length,
+    uncovered,
+  }
+
+  return { issues, summary }
 }
 
 // ─────────────────────────────────────────────────────────────────

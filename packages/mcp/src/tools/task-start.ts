@@ -1154,13 +1154,6 @@ Do NOT use when:
   ❌ You don't yet know which task to work on → planflow_task_next first
   ❌ You only need the task list → planflow_task_list
 
-Parameters:
-  - projectId (optional): Project UUID. Uses current project if omitted.
-  - taskId (required): Task ID to start (e.g., "T1.1")
-  - searchQuery (optional): Override the auto-search query
-  - autoExecute (optional): Dispatch a headless Claude agent to complete the task autonomously
-  - mergeStrategy (optional): pr | merge-master | none (only used with autoExecute)
-
 Prerequisites:
   • Logged in via planflow_login()
   • Project indexed via planflow_index() (for the auto-search step)`,

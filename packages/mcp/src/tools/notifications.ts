@@ -116,13 +116,6 @@ Usage:
   planflow_notifications(action: "read", notificationId: "uuid")  # Mark as read
   planflow_notifications(action: "read-all")            # Mark all as read
 
-Parameters:
-  - action (optional): "list" (default), "read", or "read-all"
-  - projectId (optional): Filter by project UUID
-  - notificationId (required for "read"): Notification UUID to mark as read
-  - unreadOnly (optional): Only show unread (default: true)
-  - limit (optional): Max notifications to fetch (default: 20, max: 100)
-
 Notification Types:
   - comment: Someone commented on a task
   - status_change: Task status was updated

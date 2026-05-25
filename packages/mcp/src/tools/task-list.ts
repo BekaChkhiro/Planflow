@@ -88,10 +88,6 @@ Usage:
   planflow_task_list(projectId: "uuid")
   planflow_task_list(projectId: "uuid", status: "TODO")
 
-Parameters:
-  - projectId (required): The project UUID (get from planflow_projects)
-  - status (optional): Filter by status - TODO, IN_PROGRESS, DONE, or BLOCKED
-
 Returns:
   - Task ID (e.g., T1.1)
   - Task name

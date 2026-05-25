@@ -75,11 +75,6 @@ Usage:
   planflow_sync(projectId: "uuid", direction: "push", content: "# Plan...")  - Upload local plan
   planflow_sync(projectId: "uuid", direction: "pull")                        - Download cloud plan
 
-Parameters:
-  - projectId (required): Project UUID from planflow_create or planflow_projects
-  - direction (required): "push" to upload, "pull" to download
-  - content (required for push): The markdown content to upload
-
 You must be logged in first with planflow_login.
 
 Returns:

@@ -12,6 +12,7 @@ import {
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js'
 import { APP_NAME, APP_VERSION } from '@planflow/shared'
+import { zodToJsonSchema as zodToJsonSchemaLib } from 'zod-to-json-schema'
 import { PlanFlowError, ToolError } from './errors.js'
 import { logger } from './logger.js'
 import { tools } from './tools/index.js'
@@ -42,46 +43,36 @@ function formatErrorResponse(error: unknown): CallToolResult {
 }
 
 /**
- * Convert Zod schema to JSON Schema for MCP protocol
+ * Convert a tool's Zod schema to the JSON Schema the MCP client exposes
+ * to the LLM.
+ *
+ * Delegates to `zod-to-json-schema` so the emitted schema is *complete*:
+ * enum values, array `items`, nested object `properties`, numeric types
+ * behind `.default()`, and `.min()/.max()/.regex()` constraints all
+ * survive. The previous hand-rolled walker flattened every non-trivial
+ * field to a bare `{ type: 'string' }`, which meant the LLM could not see
+ * enum options or nested shapes and had to guess them — producing failed
+ * calls (wasted tokens) and making array/object-driven tools like
+ * planflow_phase_create effectively undrivable.
+ *
+ * `$refStrips`: MCP clients want a single inlined object schema, not a
+ * `$ref`/`definitions` graph, so we force full inlining.
  */
 function zodToJsonSchema(schema: ToolDefinition['inputSchema']): Record<string, unknown> {
-  // For now, return a basic object schema
-  // In production, use zod-to-json-schema library
-  if ('shape' in schema && schema.shape) {
-    const shape = schema.shape as Record<string, unknown>
-    const properties: Record<string, unknown> = {}
-    const required: string[] = []
+  const jsonSchema = zodToJsonSchemaLib(schema, {
+    // Inline everything — no $ref/definitions, which some MCP clients
+    // don't resolve.
+    $refStrategy: 'none',
+    // The MCP `inputSchema` field is itself the root; we don't want the
+    // converter to wrap it in its own envelope.
+    target: 'jsonSchema7',
+  }) as Record<string, unknown>
 
-    for (const [key, value] of Object.entries(shape)) {
-      const zodField = value as { _def?: { typeName?: string; description?: string }; isOptional?: () => boolean }
+  // Strip the JSON-Schema `$schema` meta key — MCP clients don't need it
+  // and it's pure token weight on every list_tools response.
+  delete jsonSchema['$schema']
 
-      // Determine the JSON Schema type
-      let type = 'string'
-      const typeName = zodField._def?.typeName
-      if (typeName === 'ZodNumber') type = 'number'
-      if (typeName === 'ZodBoolean') type = 'boolean'
-      if (typeName === 'ZodArray') type = 'array'
-
-      properties[key] = {
-        type,
-        description: zodField._def?.description,
-      }
-
-      // Check if field is required (not optional)
-      if (typeof zodField.isOptional !== 'function' || !zodField.isOptional()) {
-        required.push(key)
-      }
-    }
-
-    return {
-      type: 'object',
-      properties,
-      required: required.length > 0 ? required : undefined,
-    }
-  }
-
-  // Fallback for non-object schemas
-  return { type: 'object', properties: {} }
+  return jsonSchema
 }
 
 /**

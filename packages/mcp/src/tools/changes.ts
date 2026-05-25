@@ -74,11 +74,6 @@ Usage:
   planflow_changes(projectId: "uuid", limit: 20)
   planflow_changes(projectId: "uuid", entityType: "task")
 
-Parameters:
-  - projectId (required): Project UUID
-  - entityType (optional): Filter by type — task | knowledge | comment | project
-  - limit (optional): Max changes to fetch (default: 50, max: 200)
-
 Prerequisites:
   • Logged in with planflow_login()`,
 

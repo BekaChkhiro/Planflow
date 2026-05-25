@@ -22,6 +22,7 @@ import { logger } from '../logger.js'
 import { parsePlan } from '../plan/parser.js'
 import { serializePlan } from '../plan/serializer.js'
 import { validatePlan } from '../plan/validator.js'
+import { composeDescription } from '../plan/task-spec.js'
 import type { TaskComplexity, TaskNode, TaskStatus } from '../plan/types.js'
 import {
   type ToolDefinition,
@@ -57,7 +58,31 @@ const TaskCreateInputSchema = z.object({
     .string()
     .min(50, 'Description must be at least 50 characters — list the concrete sub-steps as bullets.')
     .max(3000)
-    .describe('Bullet list (one per line, indented with "  - ") covering the concrete work.'),
+    .describe('Bullet list (one per line) covering the goal and concrete work. Structured spec fields below compose into this.'),
+  touchpoints: z
+    .array(z.string().min(1).max(200))
+    .optional()
+    .describe('Files to create/edit, e.g. ["create src/auth/login.ts", "edit src/routes/index.ts"]. Tells the agent WHERE the change goes — strongly recommended.'),
+  contract: z
+    .string()
+    .min(1)
+    .max(800)
+    .optional()
+    .describe('The interface contract: exact function signature, API route + request/response shape, status codes, or data-model fields. Tells the agent WHAT to build — strongly recommended for Medium/High.'),
+  steps: z
+    .array(z.string().min(1).max(300))
+    .optional()
+    .describe('Ordered implementation steps. Each becomes a numbered bullet.'),
+  constraints: z
+    .array(z.string().min(1).max(300))
+    .optional()
+    .describe('What NOT to touch, invariants to preserve, explicit out-of-scope items. Prevents scope creep — recommended for High complexity.'),
+  verify: z
+    .string()
+    .min(1)
+    .max(400)
+    .optional()
+    .describe('Runnable command(s) that prove the task is done, e.g. "pnpm test src/auth && pnpm typecheck".'),
   complexity: z
     .enum(['Low', 'Medium', 'High'])
     .describe('Low ≈ 1-3h, Medium ≈ 4-8h, High ≈ 8-20h.'),
@@ -100,12 +125,32 @@ This is a STRUCTURED, validated insert. The tool refuses inputs that would produ
   • Medium/High tasks without acceptance criteria are rejected
   • Estimated hours are required
 
+PRECISE TASKS (do this): a task is agent-executable when it spells out, not just
+describes, the work. Beyond name/description/acceptanceCriteria, pass the spec fields:
+  • touchpoints — which files to create/edit (WHERE)
+  • contract    — signatures / API route + request/response shape / types (WHAT)
+  • steps       — the ordered implementation outline
+  • constraints — what NOT to touch, invariants, out-of-scope (prevents scope creep)
+  • verify      — a runnable command that proves it's done
+They compose into the description as labeled sections and drive an Instruction-Precision
+score (0-100%) reported back. Aim for 🟢 80%+ on Medium/High tasks.
+
 Usage:
   planflow_task_create(
     content: <current PROJECT_PLAN.md>,
     phase: 2,
     name: "Implement multi-store sync engine",
-    description: "  - Diff local inventory vs. server snapshot\\n  - Resolve conflicts using last-write-wins\\n  - Retry on transient failures\\n  - Expose sync status in UI",
+    description: "Keep two store inventories converged in near-real-time.",
+    touchpoints: ["create src/sync/engine.ts", "edit src/sync/index.ts", "use src/db/inventory.ts"],
+    contract: "syncStores(localId, remoteId): Promise<SyncResult>; conflict = last-write-wins by updatedAt; emits 'sync:status' events",
+    steps: [
+      "Diff local inventory vs. server snapshot",
+      "Resolve conflicts using last-write-wins with audit trail",
+      "Retry transient failures with backoff",
+      "Emit sync status to the UI"
+    ],
+    constraints: ["do not change the existing inventory schema", "no UI changes in this task (separate task)"],
+    verify: "pnpm test src/sync && pnpm typecheck",
     complexity: "High",
     estimatedHours: 12,
     dependencies: ["T2.1", "T2.2"],
@@ -120,11 +165,12 @@ Usage:
 Auto-behavior:
   • Picks the next free task ID in the target phase (e.g. T2.5)
   • Inserts at end of phase (or after \`insertAfterTaskId\` if given)
-  • Validates the resulting plan — refuses to return if the insert breaks anything
+  • Composes spec fields into the description; validates the resulting plan
+  • Reports the new task's Instruction-Precision score + what's still missing
 
 Returns:
   • Updated PROJECT_PLAN.md content
-  • Validation summary of the resulting plan
+  • Validation summary + precision score of the resulting plan
 
 Follow-up: planflow_sync(direction: "push", content: <returned markdown>)`,
 
@@ -194,12 +240,22 @@ Follow-up: planflow_sync(direction: "push", content: <returned markdown>)`,
         )
       }
 
-      // Build & insert
+      // Build & insert. Structured spec fields (touchpoints/contract/
+      // steps/constraints/verify) compose into the description as labeled
+      // markdown sections — this is what makes the task precise enough for
+      // an agent to execute without guessing.
+      const composedDescription = composeDescription(input.description, {
+        touchpoints: input.touchpoints,
+        contract: input.contract,
+        steps: input.steps,
+        constraints: input.constraints,
+        verify: input.verify,
+      })
       const newTask: TaskNode = {
         taskId: newTaskId,
         phase: input.phase,
         name: input.name,
-        description: normalizeDescription(input.description),
+        description: composedDescription,
         status: input.status as TaskStatus,
         complexity: input.complexity as TaskComplexity,
         estimatedHours: input.estimatedHours,
@@ -243,6 +299,19 @@ Follow-up: planflow_sync(direction: "push", content: <returned markdown>)`,
         }
         lines.push('')
       }
+
+      // Instruction-precision feedback for the task just created — tells
+      // the author whether it's agent-ready or still needs specifics.
+      const precision = report.precision?.tasks.find((t) => t.taskId === newTaskId)
+      if (precision) {
+        const bar = precision.score >= 80 ? '🟢' : precision.score >= 50 ? '🟡' : '🔴'
+        lines.push(`🎯 Instruction precision: ${bar} ${precision.score}%`)
+        if (precision.missing.length > 0) {
+          lines.push(`   Add for a sharper spec: ${precision.missing.join(', ')}`)
+        }
+        lines.push('')
+      }
+
       lines.push('💡 Next: planflow_sync(direction: "push", content: <updated>) to persist.')
       lines.push('')
       lines.push('───────── Updated PROJECT_PLAN.md ─────────')
@@ -272,17 +341,3 @@ function expectedHours(complexity: 'Low' | 'Medium' | 'High'): {
   }
 }
 
-function normalizeDescription(desc: string): string {
-  const lines = desc.split('\n')
-  const out: string[] = []
-  for (const l of lines) {
-    const trimmed = l.trim()
-    if (!trimmed) continue
-    if (/^-\s+/.test(trimmed)) {
-      out.push(`  ${trimmed}`)
-    } else {
-      out.push(`  - ${trimmed}`)
-    }
-  }
-  return out.join('\n')
-}

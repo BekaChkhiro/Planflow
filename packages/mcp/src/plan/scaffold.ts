@@ -22,6 +22,7 @@ import type {
   TaskNode,
 } from './types.js'
 import { serializePlan } from './serializer.js'
+import { scaffoldSpecPrompts } from './task-spec.js'
 
 /**
  * Generate a complete PROJECT_PLAN.md as a string from a ScaffoldInput.
@@ -54,6 +55,11 @@ export function buildPlanTree(input: ScaffoldInput): PlanTree {
 
   // Renumber feature/test task pairs across phases consistently
   linkTestPairs(phases)
+
+  // Stamp the precise-task template onto feature tasks so generated plans
+  // start agent-ready: each gets explicit Touchpoints/Contract/Constraints/
+  // Verify section prompts the user (or refining LLM) fills with specifics.
+  addSpecPromptsToFeatureTasks(phases)
 
   return {
     meta: {
@@ -96,6 +102,23 @@ function buildPreamble(input: ScaffoldInput, today: string): string {
   lines.push(`**Project Type**: ${humanProjectType(input.projectType)}`)
   lines.push('')
   lines.push(`**Status**: Planning (0% complete)`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## Core Features')
+  lines.push('')
+  lines.push('The intent this plan must deliver (every feature should map to a task):')
+  lines.push('')
+  for (const f of input.features) lines.push(`- ${f}`)
+  lines.push('')
+  lines.push('---')
+  lines.push('')
+  lines.push('## Non-Goals')
+  lines.push('')
+  lines.push('What this project deliberately does NOT do (keeps scope honest — edit these):')
+  lines.push('')
+  lines.push('- _(fill in: out-of-scope features deferred to a later milestone)_')
+  lines.push('- _(fill in: platforms / integrations explicitly not supported yet)_')
   lines.push('')
   lines.push('---')
   lines.push('')
@@ -428,6 +451,12 @@ function buildFoundationPhase(input: ScaffoldInput): PhaseNode {
   return {
     number: 1,
     name: 'Foundation',
+    goal: 'Stand up the repo, toolchain, data layer, and cross-cutting concerns so feature work can begin on solid ground.',
+    exitCriteria: [
+      'A fresh clone builds, lints, and runs the empty app',
+      'CI is green on every PR; migrations and env validation work',
+      'Logging + error tracking capture a test error end-to-end',
+    ],
     tasks,
   }
 }
@@ -487,6 +516,12 @@ function buildCoreFeaturesPhase(
   return {
     number: phase,
     name: 'Core Features',
+    goal: `Deliver the core features end-to-end (${features.join(', ')}) — the product's primary value.`,
+    exitCriteria: [
+      'Every core feature works end-to-end on the happy path',
+      'All inputs validated; errors surface clearly to the user',
+      'Each feature is demo-able to a stakeholder',
+    ],
     tasks,
   }
 }
@@ -640,6 +675,12 @@ function buildAdvancedPhase(
   return {
     number: phase,
     name: 'Advanced Features & Hardening',
+    goal: 'Add the differentiating features and harden the system against security, abuse, and edge cases.',
+    exitCriteria: [
+      'Advanced features work and are covered by tests',
+      'Security pass complete: rate limits, input sanitization, dependency audit clean',
+      'No known high-severity vulnerabilities',
+    ],
     tasks,
   }
 }
@@ -762,6 +803,12 @@ function buildTestingAndDeployPhase(
   return {
     number: phase,
     name: 'Testing, Deployment & Launch',
+    goal: 'Prove the system works under test, ship it to production, and make it observable and operable.',
+    exitCriteria: [
+      'Test coverage gate passes in CI; E2E suite green against a preview',
+      'Merge to main deploys to production with a working rollback',
+      'Monitoring and alerts fire on a simulated outage',
+    ],
     tasks,
   }
 }
@@ -769,6 +816,25 @@ function buildTestingAndDeployPhase(
 // ─────────────────────────────────────────────────────────────────
 // Cross-phase linking
 // ─────────────────────────────────────────────────────────────────
+
+/**
+ * Append precise-spec section prompts to every feature task — Medium/High
+ * complexity, not the Phase-1 setup work, not a test task. Mirrors the
+ * validator's `isFeatureTask` predicate so the tasks the precision check
+ * scores are exactly the ones that carry the template.
+ */
+function addSpecPromptsToFeatureTasks(phases: PhaseNode[]): void {
+  const lastPhase = Math.max(...phases.map((p) => p.number), 0)
+  for (const phase of phases) {
+    for (const t of phase.tasks) {
+      if (t.complexity === 'Low') continue
+      if (t.phase === 1) continue
+      if (lastPhase > 1 && t.phase === lastPhase) continue
+      if (/\b(test|tests|testing|unit|integration|e2e|qa)\b/i.test(t.name)) continue
+      t.description = scaffoldSpecPrompts(t.description)
+    }
+  }
+}
 
 function linkTestPairs(phases: PhaseNode[]): void {
   const testPhase = phases.find((p) => /test|qa/i.test(p.name))

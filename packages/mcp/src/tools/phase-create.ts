@@ -13,6 +13,7 @@ import { logger } from '../logger.js'
 import { parsePlan } from '../plan/parser.js'
 import { serializePlan } from '../plan/serializer.js'
 import { validatePlan } from '../plan/validator.js'
+import { composeDescription } from '../plan/task-spec.js'
 import type { PhaseNode, TaskNode } from '../plan/types.js'
 import {
   type ToolDefinition,
@@ -32,6 +33,14 @@ const TaskSpec = z.object({
       message: 'Vague task name — use Verb + Noun.',
     }),
   description: z.string().min(50).max(3000),
+  // Precise-spec fields — compose into the description as labeled sections
+  // so each task is agent-executable without guessing. Strongly recommended
+  // for Medium/High tasks; they drive the Instruction-Precision score.
+  touchpoints: z.array(z.string().min(1).max(200)).optional(),
+  contract: z.string().min(1).max(800).optional(),
+  steps: z.array(z.string().min(1).max(300)).optional(),
+  constraints: z.array(z.string().min(1).max(300)).optional(),
+  verify: z.string().min(1).max(400).optional(),
   complexity: z.enum(['Low', 'Medium', 'High']),
   estimatedHours: z.number().positive().max(100),
   status: z.enum(['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED']).optional().default('TODO'),
@@ -82,6 +91,11 @@ Same quality bar as planflow_task_create, applied to every task in the bulk inse
   • Estimated hours required
   • Phase number must not collide with an existing phase
 
+For precise, agent-executable tasks, also give each task the spec fields —
+touchpoints (files), contract (signatures/route/shape/types), steps (ordered),
+constraints (what NOT to touch), verify (a runnable command). They compose into
+the description and drive a per-task Instruction-Precision score reported back.
+
 Usage:
   planflow_phase_create(
     content: <current plan>,
@@ -98,7 +112,12 @@ Usage:
       },
       {
         name: "Set up product analytics",
-        description: "  - Wire PostHog / Mixpanel\\n  - Define key events\\n  - Build conversion dashboard",
+        description: "Instrument the app so activation and conversion are measurable.",
+        touchpoints: ["create src/analytics/client.ts", "edit src/app/layout.tsx"],
+        contract: "track(event: string, props?: Record<string, unknown>): void; events: signup, activate, convert",
+        steps: ["Wire PostHog/Mixpanel client", "Define key events", "Build conversion dashboard"],
+        constraints: ["never send PII (email, name) as event props"],
+        verify: "pnpm test src/analytics",
         complexity: "Medium",
         estimatedHours: 6,
         acceptanceCriteria: [
@@ -187,7 +206,13 @@ Follow-up: planflow_sync(direction: "push", content: <returned>) to persist.`,
           taskId,
           phase: input.number,
           name: t.name,
-          description: normalizeDescription(t.description),
+          description: composeDescription(t.description, {
+            touchpoints: t.touchpoints,
+            contract: t.contract,
+            steps: t.steps,
+            constraints: t.constraints,
+            verify: t.verify,
+          }),
           status: t.status,
           complexity: t.complexity,
           estimatedHours: t.estimatedHours,
@@ -241,6 +266,24 @@ Follow-up: planflow_sync(direction: "push", content: <returned>) to persist.`,
         }
         lines.push('')
       }
+
+      // Instruction-precision feedback for the tasks just created.
+      const newIds = new Set(newTaskIds.map((id) => id.toUpperCase()))
+      const newScores = (report.precision?.tasks ?? []).filter((t) =>
+        newIds.has(t.taskId.toUpperCase())
+      )
+      if (newScores.length > 0) {
+        const avg = Math.round(
+          newScores.reduce((acc, s) => acc + s.score, 0) / newScores.length
+        )
+        const bar = avg >= 80 ? '🟢' : avg >= 50 ? '🟡' : '🔴'
+        lines.push(`🎯 Instruction precision (new feature tasks): ${bar} ${avg}%`)
+        for (const s of newScores.filter((t) => t.score < 80)) {
+          lines.push(`   • ${s.taskId}: ${s.score}% — add: ${s.missing.join(', ')}`)
+        }
+        lines.push('')
+      }
+
       lines.push('💡 Next: planflow_sync(direction: "push", content: <updated>) to persist.')
       lines.push('')
       lines.push('───────── Updated PROJECT_PLAN.md ─────────')
@@ -265,19 +308,4 @@ function expectedHours(c: 'Low' | 'Medium' | 'High'): { min: number; max: number
     case 'High':
       return { min: 8, max: 20 }
   }
-}
-
-function normalizeDescription(desc: string): string {
-  const lines = desc.split('\n')
-  const out: string[] = []
-  for (const l of lines) {
-    const trimmed = l.trim()
-    if (!trimmed) continue
-    if (/^-\s+/.test(trimmed)) {
-      out.push(`  ${trimmed}`)
-    } else {
-      out.push(`  - ${trimmed}`)
-    }
-  }
-  return out.join('\n')
 }

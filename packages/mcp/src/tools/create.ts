@@ -62,10 +62,6 @@ Usage:
   planflow_create(name: "My Project")
   planflow_create(name: "My Project", description: "A description of my project")
 
-Parameters:
-  - name (required): Project name (1-255 characters)
-  - description (optional): Project description (max 1000 characters)
-
 You must be logged in first with planflow_login.
 
 Returns:

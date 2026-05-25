@@ -20,7 +20,7 @@ import { AuthError, ApiError } from '../errors.js'
 import { logger } from '../logger.js'
 import { parsePlan } from '../plan/parser.js'
 import type { PlanIssue, ValidationReport } from '../plan/types.js'
-import { validatePlan } from '../plan/validator.js'
+import { validatePlan, validateOutline, validatePhase } from '../plan/validator.js'
 import {
   type ToolDefinition,
   createSuccessResult,
@@ -44,9 +44,28 @@ const PlanValidateInputSchema = z
       .optional()
       .default(false)
       .describe('If true, the tool reports `ok: false` when warnings are present (not just errors).'),
+    scope: z
+      .enum(['full', 'outline', 'phase'])
+      .optional()
+      .default('full')
+      .describe(
+        'Which gate to run (staged authoring):\n' +
+          '  • full (default): the whole plan — structure + tasks + production readiness.\n' +
+          '  • outline: ONLY the phase skeleton (goals, exit criteria, numbering, non-goals). Does not require tasks to exist — the gate before decomposing phases.\n' +
+          '  • phase: ONE phase in depth (its tasks, coverage, precision). Requires `phase`. The gate before moving to the next phase.'
+      ),
+    phase: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Phase number to validate when scope="phase".'),
   })
   .refine((i) => !!i.content || !!i.projectId, {
     message: 'Provide either `content` or `projectId`.',
+  })
+  .refine((i) => i.scope !== 'phase' || i.phase !== undefined, {
+    message: 'scope="phase" requires a `phase` number.',
   })
 
 type PlanValidateInput = z.infer<typeof PlanValidateInputSchema>
@@ -63,6 +82,16 @@ Usage:
   planflow_plan_validate(projectId: "uuid")                  — fetch from cloud
   planflow_plan_validate(content: "...", failOnWarnings: true) — strict gate
 
+Staged authoring (build the plan top-down, gating each level):
+  planflow_plan_validate(content: "...", scope: "outline")       — gate 1: phase
+        skeleton only (goals, exit criteria, numbering, non-goals). Tasks not
+        required yet. Run this BEFORE decomposing phases into tasks.
+  planflow_plan_validate(content: "...", scope: "phase", phase: 2) — gate 2: one
+        phase in depth (its tasks, coverage, precision). Run before moving to
+        the next phase, so errors are caught one phase at a time.
+  planflow_plan_validate(content: "...")                         — gate 3: the
+        whole plan (scope defaults to "full").
+
 Checks performed:
 
 Structural (errors — must fix):
@@ -71,6 +100,11 @@ Structural (errors — must fix):
   • Orphan dependencies (T2.3 → T9.9 which doesn't exist)
   • Phase ordering violations (Phase 1 task depends on a Phase 3 task)
   • Malformed task IDs / invalid phase numbers
+
+Outline / structure (warnings — is the skeleton sound before tasks are filled?):
+  • Phase with no goal (what milestone does it deliver?)
+  • Phase with no exit criteria (when is it "done"?)
+  • Plan with no non-goals (scope boundaries undefined)
 
 Quality (warnings):
   • Phase imbalance (>10 tasks or empty phases)
@@ -84,6 +118,18 @@ Testing (warnings):
   • Feature tasks with no companion test task
   • Missing testing phase / no test tasks at all
   • Medium/High tasks without acceptance criteria
+
+Traceability (warnings — does the plan cover what it set out to build?):
+  • Declared feature (## Features) with no implementing task
+  • Reports feature coverage: how many declared features have a task
+
+Instruction precision (warnings — can an agent execute without guessing?):
+  • No touchpoints — task names no files to create/edit
+  • No contract — signatures, routes, request/response shape, or types unspecified
+  • No constraints / non-goals on High-complexity tasks
+  • Thin instructions — overall precision score below 50%
+  Also reports an "Instruction precision" score (0-100%) per feature task
+  plus a plan average, so you can see how agent-ready the plan is at a glance.
 
 Production readiness (warnings):
   • No deployment task
@@ -138,7 +184,13 @@ You must be logged in (with projectId mode) — but content mode is fully offlin
     }
 
     const plan = parsePlan(content)
-    const report = validatePlan(plan)
+    const scope = input.scope ?? 'full'
+    const report =
+      scope === 'outline'
+        ? validateOutline(plan)
+        : scope === 'phase'
+          ? validatePhase(plan, input.phase!)
+          : validatePlan(plan)
 
     const gateOk = input.failOnWarnings
       ? report.totals.errors === 0 && report.totals.warnings === 0
@@ -148,6 +200,8 @@ You must be logged in (with projectId mode) — but content mode is fully offlin
       gateOk,
       strict: input.failOnWarnings ?? false,
       projectName,
+      scope,
+      phase: input.phase,
     })
 
     logger.info('Plan validation finished', {
@@ -183,17 +237,30 @@ interface FormatOptions {
   gateOk: boolean
   strict: boolean
   projectName?: string
+  scope?: 'full' | 'outline' | 'phase'
+  phase?: number
 }
 
 function formatReport(report: ValidationReport, opts: FormatOptions): string {
   const lines: string[] = []
+  const label =
+    opts.scope === 'outline'
+      ? 'Outline gate'
+      : opts.scope === 'phase'
+        ? `Phase ${opts.phase} gate`
+        : 'Plan validation'
   const header = opts.gateOk
-    ? '✅ Plan validation passed'
+    ? `✅ ${label} passed`
     : report.totals.errors > 0
-      ? '❌ Plan validation FAILED — errors must be fixed'
-      : '⚠️  Plan validation passed with warnings'
+      ? `❌ ${label} FAILED — errors must be fixed`
+      : `⚠️  ${label} passed with warnings`
 
   lines.push(header)
+  if (opts.scope === 'outline') {
+    lines.push('   (phase skeleton only — tasks not required yet)')
+  } else if (opts.scope === 'phase') {
+    lines.push('   (this phase in depth — the gate before the next phase)')
+  }
   if (opts.projectName) lines.push(`   Project: ${opts.projectName}`)
   lines.push('')
 
@@ -205,6 +272,31 @@ function formatReport(report: ValidationReport, opts: FormatOptions): string {
   lines.push(`   Warnings:  ${report.totals.warnings}`)
   lines.push(`   Info:      ${report.totals.infos}`)
   lines.push('')
+
+  // Instruction precision — how ready the plan is for an agent to
+  // execute flawlessly, as a single number plus the weakest tasks.
+  if (report.precision) {
+    const { avgScore, scoredTasks, tasks } = report.precision
+    const bar =
+      avgScore >= 80 ? '🟢' : avgScore >= 60 ? '🟡' : '🔴'
+    lines.push(`🎯 Instruction precision: ${bar} ${avgScore}% (avg across ${scoredTasks} feature task${scoredTasks === 1 ? '' : 's'})`)
+    const weakest = tasks.filter((t) => t.score < 80).slice(0, 5)
+    for (const t of weakest) {
+      lines.push(`   • ${t.taskId}: ${t.score}% — missing: ${t.missing.join(', ')}`)
+    }
+    lines.push('')
+  }
+
+  // Feature coverage — does the plan deliver what it set out to?
+  if (report.coverage && report.coverage.features > 0) {
+    const { features, covered, uncovered } = report.coverage
+    const icon = covered === features ? '🟢' : '🔴'
+    lines.push(`🧭 Feature coverage: ${icon} ${covered}/${features} features have a task`)
+    for (const f of uncovered.slice(0, 8)) {
+      lines.push(`   • not covered: "${f}"`)
+    }
+    lines.push('')
+  }
 
   if (report.issues.length === 0) {
     lines.push('🎯 No issues found. The plan is clean — safe to write/sync.')

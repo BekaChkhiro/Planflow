@@ -40,6 +40,9 @@ const FIELD_LINE = /^\s*-\s+\*\*([^*]+)\*\*\s*:\s*(.*)$/
 const STATUS_LINE = /^\s*-\s+\[[ x]\]\s+\*\*Status\*\*\s*:\s*([A-Z_]+)\s*$/
 const BULLET = /^\s{2,}-\s+(.+)$/
 const META_LINE = /^\*\*([^*]+)\*\*\s*:\s*(.+)$/
+// Like META_LINE but tolerates an empty value (e.g. "**Exit Criteria**:"
+// whose items follow as bullets on the next lines).
+const PHASE_META_LINE = /^\*\*([^*]+)\*\*\s*:\s*(.*)$/
 
 const VALID_STATUS: ReadonlySet<TaskStatus> = new Set([
   'TODO',
@@ -69,8 +72,10 @@ export function parsePlan(source: string): PlanTree {
   let currentTask: TaskNode | null = null
   let currentDescription: string[] = []
   let currentAcceptance: string[] = []
+  let currentPhaseExit: string[] = []
   let inDescription = false
   let inAcceptance = false
+  let inPhaseExit = false
 
   let firstPhaseLine = -1
   let lastPhaseEndLine = -1
@@ -96,9 +101,16 @@ export function parsePlan(source: string): PlanTree {
   function flushPhase() {
     flushTask()
     if (currentPhase) {
+      if (currentPhaseExit.length > 0) {
+        currentPhase.exitCriteria = currentPhaseExit
+          .map((s) => s.trim())
+          .filter(Boolean)
+      }
       phases.push(currentPhase)
       currentPhase = null
     }
+    currentPhaseExit = []
+    inPhaseExit = false
   }
 
   for (let i = 0; i < lines.length; i++) {
@@ -138,6 +150,40 @@ export function parsePlan(source: string): PlanTree {
         sourceLine: i,
       }
       lastPhaseEndLine = i
+      continue
+    }
+
+    // Between a phase header and its first task: capture phase-level
+    // Goal / Exit Criteria metadata. These live as `**Goal**: ...` and
+    // `**Exit Criteria**:` + bullets, with no leading `- ` (they're
+    // phase-scoped, not task fields).
+    if (currentPhase && !currentTask) {
+      const phaseMeta = line.match(PHASE_META_LINE)
+      if (phaseMeta) {
+        const key = (phaseMeta[1] ?? '').trim().toLowerCase()
+        const value = (phaseMeta[2] ?? '').trim()
+        if (key === 'goal') {
+          currentPhase.goal = value
+          inPhaseExit = false
+          lastPhaseEndLine = i
+          continue
+        }
+        if (key === 'exit criteria' || key === 'exit') {
+          inPhaseExit = true
+          if (value) currentPhaseExit.push(value)
+          lastPhaseEndLine = i
+          continue
+        }
+      }
+      // Bullets under Exit Criteria (top-level "- item" or indented).
+      const exitBullet = line.match(/^\s*-\s+(.+)$/)
+      if (inPhaseExit && exitBullet) {
+        currentPhaseExit.push((exitBullet[1] ?? '').trim())
+        lastPhaseEndLine = i
+        continue
+      }
+      // A rule or non-bullet prose ends exit-criteria capture.
+      if (line.trim().startsWith('---')) inPhaseExit = false
       continue
     }
 
@@ -299,7 +345,43 @@ function parseMeta(lines: string[]): PlanMeta {
         break
     }
   }
+
+  // Brief sections (Non-Goals / Success Criteria) can appear anywhere in
+  // the preamble, often past the 60-line metadata window, so scan the
+  // full document for their bullet lists.
+  const nonGoals = collectSection(lines, /^#{1,3}\s+(non-?goals?|out of scope)\b/i)
+  if (nonGoals.length > 0) meta.nonGoals = nonGoals
+  const success = collectSection(lines, /^#{1,3}\s+success criteria\b/i)
+  if (success.length > 0) meta.successCriteria = success
+  const features = collectSection(
+    lines,
+    /^#{1,3}\s+((core|mvp)\s+)?features\b/i
+  )
+  if (features.length > 0) meta.features = features
+
   return meta
+}
+
+/**
+ * Collect the `- ` bullet items directly under the first heading that
+ * matches `headingRe`, stopping at the next heading or horizontal rule.
+ * Checkbox bullets (`- [ ] item`) are unwrapped to their text.
+ */
+function collectSection(lines: string[], headingRe: RegExp): string[] {
+  const items: string[] = []
+  let inSection = false
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (headingRe.test(line)) {
+      inSection = true
+      continue
+    }
+    if (!inSection) continue
+    if (line.startsWith('#') || line.startsWith('---')) break
+    const bullet = line.match(/^-\s+(?:\[[ x]\]\s+)?(.+)$/)
+    if (bullet) items.push((bullet[1] ?? '').trim())
+  }
+  return items
 }
 
 function parsePhaseFromTaskId(taskId: string): number | undefined {

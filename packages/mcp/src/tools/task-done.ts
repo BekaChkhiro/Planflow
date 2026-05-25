@@ -100,12 +100,6 @@ Do NOT use when:
   ❌ You're closing without commentary AND without stopping working_on
      — those bare ops still exist as standalone tools
 
-Parameters:
-  - projectId (optional): Project UUID. Uses current project if omitted.
-  - taskId (required): Task ID to close (e.g., "T1.1")
-  - summary (optional): Final comment text — what got done, any follow-ups
-  - commitType (optional): Conventional Commits type (default "feat")
-
 Prerequisites:
   • Logged in via planflow_login()`,
 

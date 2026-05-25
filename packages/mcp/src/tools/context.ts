@@ -82,16 +82,6 @@ Usage:
   planflow_context(projectId: "uuid", layers: ["knowledge", "realtime"])
   planflow_context(projectId: "uuid", knowledgeLimit: 100, changesLimit: 50)
 
-Parameters:
-  - projectId (required): Project UUID
-  - query (optional): Semantic search query (enables vector layer)
-  - layers (optional): Which layers to fetch
-      ["knowledge", "vector", "realtime", "activity"] (default: all)
-  - knowledgeLimit (optional): Max knowledge entries (default: 50)
-  - changesLimit (optional): Max recent changes (default: 30)
-  - activityLimit (optional): Max activity entries (default: 30)
-  - knowledgeType (optional): Filter by type (architecture, pattern, etc.)
-
 Prerequisites:
   • Logged in with planflow_login()
   • For vector results: project must be indexed with planflow_index()`,

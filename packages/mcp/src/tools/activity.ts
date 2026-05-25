@@ -179,13 +179,6 @@ Usage:
   planflow_activity(projectId: "uuid", action: "task_status_changed")  # Filter by action
   planflow_activity(projectId: "uuid", limit: 50)         # Get more activities
 
-Parameters:
-  - projectId (required): Project UUID
-  - taskId (optional): Filter by task (e.g., "T1.1", "T2.3")
-  - action (optional): Filter by action type
-  - entityType (optional): Filter by entity type (task, comment, project, member)
-  - limit (optional): Max activities to fetch (default: 20, max: 100)
-
 Action Types:
   Task: task_created, task_updated, task_status_changed, task_assigned, task_unassigned
   Comment: comment_created, comment_updated, comment_deleted

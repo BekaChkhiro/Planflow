@@ -172,11 +172,7 @@ Returns one of four states:
   • NONE    — no agent was dispatched for this task
 
 Use this from the DISPATCHING session (the one that called planflow_task_start with
-autoExecute:true) to check progress without tailing the log manually.
-
-Parameters:
-  - taskId (required): Task ID that was dispatched (e.g. "T4.13")
-  - logDir (optional): Override the agents log directory`,
+autoExecute:true) to check progress without tailing the log manually.`,
 
   inputSchema: AgentStatusInputSchema,
 

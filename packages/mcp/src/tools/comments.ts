@@ -120,10 +120,6 @@ See all comments and replies on a specific task.
 Usage:
   planflow_comments(projectId: "uuid", taskId: "T1.1")
 
-Parameters:
-  - projectId (required): Project UUID
-  - taskId (required): Task ID (e.g., "T1.1", "T2.3")
-
 Output includes:
   - Comment content
   - Author name/email

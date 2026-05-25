@@ -67,23 +67,39 @@ Plan authoring (NEW — use these to produce production-ready plans):
   rewrite PROJECT_PLAN.md, do NOT free-hand it. Use the quality-gated
   pipeline:
 
-  1. planflow_plan_scaffold({ projectName, projectType, description,
-        features, stack, flags })
-        — generates a complete plan with Testing Strategy + Production
-          Readiness sections + paired test tasks baked in. Output is
-          self-validated.
-  2. planflow_plan_validate(content: <generated markdown>)
-        — full audit: cycles, orphan deps, phase order, complexity skew,
-          missing test/deploy/security tasks, vague names. Errors block
-          shipping; warnings are flagged with concrete fixes.
-  3. planflow_plan_refine(content: ...)  (if validate reports errors)
-        — mechanical auto-fixes: drops orphan deps, renumbers duplicate
-          IDs, breaks cycles, fills missing hours. Semantic issues
-          (vague names, short descriptions, missing test tasks) are
-          left for you to address.
-  4. Repeat 2-3 until validation is clean.
-  5. Write PROJECT_PLAN.md to disk.
-  6. planflow_sync(direction: "push", content: ...) — push to cloud.
+  PREFERRED: build the plan TOP-DOWN, in stages, gating each level — this
+  catches structural errors before they compound into dozens of mis-scoped
+  tasks. Do NOT generate a whole plan in one shot for non-trivial projects.
+
+  1. planflow_plan_outline({ projectName, description, nonGoals,
+        successCriteria?, phases: [{ number, name, goal, exitCriteria }] })
+        — Stage 1: the SKELETON only — Brief (scope / non-goals) + phases
+          with goals + exit criteria, NO tasks. Runs the outline gate on
+          its own output. Show the user; get sign-off on phases + scope.
+  2. For EACH phase, in order:
+        planflow_phase_create(content, number, name, tasks: [...])
+        planflow_plan_validate(content, scope: "phase", phase: N)
+        — decompose one phase, then gate it. Do NOT start phase N+1 until
+          phase N's gate passes. Fix issues with planflow_plan_refine or
+          by editing, then re-validate.
+  3. planflow_plan_validate(content)  — Stage 3: final FULL gate (cycles,
+        orphan deps, phase order, complexity skew, missing test/deploy/
+        security tasks, instruction precision, feature→task coverage).
+        Errors block shipping.
+  4. planflow_plan_refine(content: ...) for mechanical fixes; repeat 3-4
+        until clean.
+  5. planflow_plan_gaps(content: ...)  — Stage 5: adversarial "what's
+        missing" pass (data migration, rollback, concurrency, empty/error
+        states, pagination, accessibility). Advisory — decide per item,
+        add tasks for real gaps, then re-validate.
+  6. Write PROJECT_PLAN.md to disk.
+  7. planflow_sync(direction: "push", content: ...) — push to cloud.
+
+  Quick alternative: planflow_plan_scaffold({ projectName, projectType,
+  description, features, stack, flags }) generates a complete plan in one
+  shot (Testing Strategy + Production Readiness + paired test tasks +
+  per-phase goals/exit criteria + Non-Goals, self-validated). Good for a
+  fast first draft; still run the gates above and fill the spec fields.
 
   Mid-flight authoring:
   • planflow_task_create(content, phase, name, description, complexity,
@@ -92,6 +108,20 @@ Plan authoring (NEW — use these to produce production-ready plans):
         descriptions, acceptance criteria required for Medium/High).
   • planflow_phase_create(content, number, name, tasks: [...]) —
         bulk-insert a phase with N tasks, same quality bar applied.
+
+  Make tasks PRECISE (so an agent executes them flawlessly, not by
+  guessing). On task_create / phase_create, pass the spec fields beyond
+  description + acceptanceCriteria:
+    • touchpoints — files to create/edit (WHERE)
+    • contract    — signatures / API route + request/response shape /
+                    types / status codes (WHAT)
+    • steps       — the ordered implementation outline
+    • constraints — what NOT to touch, invariants, out-of-scope
+    • verify      — a runnable command that proves it's done
+  They compose into the task description and drive an Instruction-
+  Precision score (0-100%) reported back. Aim for 80%+ on Medium/High
+  tasks; planflow_plan_validate flags missing touchpoints/contract and
+  reports the plan's average precision.
 
   Run planflow_plan_validate ANY time you've edited the plan markdown
   by hand. It's cheap and prevents subtle errors (orphan deps after a

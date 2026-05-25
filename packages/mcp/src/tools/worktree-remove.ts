@@ -59,12 +59,7 @@ Do NOT use when:
 
 Confirmation policy:
   • State changes the filesystem and git refs — ASK the user before
-    running, especially if the worktree has uncommitted changes.
-
-Parameters:
-  - taskId (required): Task ID whose worktree to remove
-  - force (optional): Discard uncommitted changes (default false)
-  - deleteBranch (optional): Also delete the branch (default false)`,
+    running, especially if the worktree has uncommitted changes.`,
 
   inputSchema: WorktreeRemoveInputSchema,
 

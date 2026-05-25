@@ -79,11 +79,6 @@ Usage:
   planflow_task_update(projectId: "uuid", taskId: "T1.1", status: "IN_PROGRESS")
   planflow_task_update(projectId: "uuid", taskId: "T2.3", status: "DONE")
 
-Parameters:
-  - projectId (required): The project UUID (get from planflow_projects)
-  - taskId (required): The task ID (e.g., "T1.1", "T2.3")
-  - status (required): New status - TODO, IN_PROGRESS, DONE, or BLOCKED
-
 Status meanings:
   - TODO: Task not yet started
   - IN_PROGRESS: Currently working on this task

@@ -93,15 +93,6 @@ Do NOT use when:
      planflow_remember directly
   ❌ The note is sensitive / private — comments are visible to teammates
 
-Parameters:
-  - projectId (optional): Project UUID. Uses current project if omitted.
-  - taskId (required): Task ID
-  - note (required): What happened
-  - saveAsKnowledge (optional): default false. When true, persist as knowledge.
-  - knowledgeType (optional): default "decision". One of architecture |
-    pattern | convention | decision | dependency | environment | other.
-  - knowledgeTitle (optional): defaults to "TX.Y: <first sentence>"
-
 Prerequisites:
   • Logged in via planflow_login()`,
 

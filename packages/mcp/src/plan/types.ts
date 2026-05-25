@@ -38,6 +38,17 @@ export interface PhaseNode {
   number: number
   name: string                    // "Foundation"
   estimate?: string               // raw "Est: 16h" or similar
+  /**
+   * What this phase delivers — its milestone, in one sentence. The
+   * anchor for verifying the phase's tasks actually add up to something
+   * coherent. (Markdown: `**Goal**: ...` after the phase header.)
+   */
+  goal?: string
+  /**
+   * Testable conditions that mean the phase is "done" — the gate before
+   * the next phase begins. (Markdown: `**Exit Criteria**:` bullet list.)
+   */
+  exitCriteria?: string[]
   tasks: TaskNode[]
 }
 
@@ -52,6 +63,22 @@ export interface PlanMeta {
   status?: string
   createdDate?: string
   lastUpdated?: string
+  /**
+   * The "Brief" — scope boundaries set before any task exists. Errors
+   * here poison the whole plan, so they're captured structurally:
+   *   • nonGoals        — what is explicitly OUT of scope
+   *   • successCriteria — what "done" means for the whole project
+   * (Markdown: `## Non-Goals` and `## Success Criteria` bullet sections.)
+   */
+  nonGoals?: string[]
+  successCriteria?: string[]
+  /**
+   * The declared core features — the intent the plan must deliver.
+   * Traceability checks every feature against the task list so a
+   * promised feature can't silently lack an implementing task.
+   * (Markdown: `## Features` / `## Core Features` / `## MVP Features`.)
+   */
+  features?: string[]
 }
 
 export interface PlanTree {
@@ -93,6 +120,22 @@ export type IssueCode =
   | 'missing_test_task'
   | 'missing_testing_section'
   | 'feature_without_acceptance_criteria'
+  // instruction precision (warnings) — is the task spec unambiguous
+  // enough for an agent to execute without guessing?
+  | 'missing_touchpoints'
+  | 'missing_contract'
+  | 'missing_constraints'
+  | 'thin_instructions'
+  // outline / structure (warnings) — is the plan skeleton sound before
+  // tasks are even filled in?
+  | 'missing_phase_goal'
+  | 'missing_exit_criteria'
+  | 'missing_non_goals'
+  | 'empty_outline'
+  | 'phase_numbering'
+  | 'phase_no_tasks'
+  // traceability (warnings) — does the plan actually cover the intent?
+  | 'feature_not_covered'
   // production (warnings)
   | 'missing_deployment_task'
   | 'missing_monitoring_task'
@@ -111,6 +154,44 @@ export interface PlanIssue {
   fix?: string
 }
 
+/**
+ * Per-task instruction-precision breakdown. Measures whether a task's
+ * spec is unambiguous enough that an agent can execute it without
+ * guessing — the difference between "long description" and "precise
+ * instructions". Computed only for feature tasks (Medium/High, not a
+ * setup/test task), since trivial tasks don't need the full contract.
+ */
+export interface TaskPrecision {
+  taskId: string
+  /** 0-100 — fraction of the precision checklist the task satisfies. */
+  score: number
+  /** Checklist items the task is missing (e.g. "contract", "touchpoints"). */
+  missing: string[]
+}
+
+export interface PrecisionSummary {
+  /** Average precision score across all feature tasks (0-100). */
+  avgScore: number
+  /** Number of feature tasks scored. */
+  scoredTasks: number
+  /** Per-task breakdown, sorted lowest-score first. */
+  tasks: TaskPrecision[]
+}
+
+/**
+ * Feature → task traceability. Answers "does the plan actually cover
+ * what it set out to build?" — the only completeness measure, as opposed
+ * to the consistency checks everything else performs.
+ */
+export interface CoverageSummary {
+  /** Number of declared features. */
+  features: number
+  /** How many have at least one implementing task. */
+  covered: number
+  /** Declared features with no implementing task found. */
+  uncovered: string[]
+}
+
 export interface ValidationReport {
   ok: boolean                     // true iff no `error`-severity issues
   totals: {
@@ -121,6 +202,17 @@ export interface ValidationReport {
     infos: number
   }
   issues: PlanIssue[]
+  /**
+   * Instruction-precision summary. Present when the plan has at least
+   * one feature task to score. Surfaces "how ready is this plan for an
+   * agent to execute flawlessly" as a single number plus per-task gaps.
+   */
+  precision?: PrecisionSummary
+  /**
+   * Feature → task coverage. Present when the plan declares features
+   * (a `## Features` section). Surfaces promised-but-unbuilt features.
+   */
+  coverage?: CoverageSummary
 }
 
 // ─────────────────────────────────────────────────────────────────

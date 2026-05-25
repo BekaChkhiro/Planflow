@@ -68,12 +68,6 @@ Usage:
   planflow_comment(projectId: "uuid", taskId: "T1.1", content: "@john@email.com please review")
   planflow_comment(projectId: "uuid", taskId: "T1.1", content: "I agree!", parentId: "comment-uuid")
 
-Parameters:
-  - projectId (required): Project UUID
-  - taskId (required): Task ID (e.g., "T1.1", "T2.3")
-  - content (required): Comment text (max 10000 chars)
-  - parentId (optional): Comment ID to reply to
-
 Features:
   - @mentions: Include @email to notify team members
   - Replies: Use parentId to create threaded replies

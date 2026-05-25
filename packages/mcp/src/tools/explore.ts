@@ -132,12 +132,6 @@ Do NOT use when:
      this case AND signals working_on
   ❌ You only need a single specific chunk → planflow_chunk(chunkId)
 
-Parameters:
-  - projectId (optional): Project UUID. Uses current project if omitted.
-  - intent (required): The change description in plain language
-  - searchLimit (optional): max code/doc chunks (default 8)
-  - knowledgeLimit (optional): max knowledge entries (default 5)
-
 Prerequisites:
   • Logged in via planflow_login()
   • Project indexed via planflow_index() (otherwise the search layer is empty)`,

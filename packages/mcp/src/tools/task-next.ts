@@ -258,9 +258,6 @@ Analyzes project tasks and recommends the best next task based on:
 Usage:
   planflow_task_next(projectId: "uuid")
 
-Parameters:
-  - projectId (required): The project UUID (get from planflow_projects)
-
 Returns:
   - Recommended task with details
   - Reasoning for the recommendation

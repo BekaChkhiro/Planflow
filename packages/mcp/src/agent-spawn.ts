@@ -151,7 +151,7 @@ async function writeMinimalMcpConfig(
  * not on PATH (ENOENT) or if stdio setup fails.
  */
 export async function spawnHeadlessAgent(opts: SpawnOpts): Promise<SpawnResult> {
-  const { cwd, prompt, taskId, logDir, model = 'sonnet' } = opts
+  const { cwd, prompt, taskId, logDir, model = 'opus' } = opts
 
   await fsp.mkdir(logDir, { recursive: true })
 

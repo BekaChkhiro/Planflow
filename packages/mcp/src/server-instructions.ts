@@ -145,6 +145,12 @@ Parallel work (worktrees):
     workspace (paths, branches, ports, "you are here" pointer).
   • planflow_worktree_remove(taskId, force?, deleteBranch?) — clean
     up after merge. CONFIRM with user first (filesystem + git refs).
+  • planflow_post_merge_cleanup(taskId) — AFTER an autoExecute
+    auto-merge. The merge lands on GitHub asynchronously once the agent
+    has exited, leaving the dispatching session stale. This fast-forwards
+    the local default branch to origin, removes the task worktree, and
+    force-deletes the squash-merged local branch (which "git branch -d"
+    refuses). Run it when planflow_agent_status shows DONE / phase=merged.
   • If you are launched in a folder with .planflow/worktrees.json AND
     your cwd matches a registered worktree, your first action should
     be planflow_worktree_list() to learn which task this folder hosts.

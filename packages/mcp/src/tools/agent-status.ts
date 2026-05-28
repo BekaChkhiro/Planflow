@@ -280,10 +280,24 @@ autoExecute:true) to check progress without tailing the log manually.`,
       if (doneMarker.lastUpdate && !doneMarker.finishedAt) lines.push(`updated:  ${doneMarker.lastUpdate}`)
       lines.push(``)
       if (doneMarker.status === 'done') {
-        lines.push(
-          `Worktree cleanup (if a worktree was created):\n` +
-            `  planflow_worktree_remove(taskId: "${input.taskId}")`
-        )
+        const merged =
+          doneMarker.phase != null &&
+          ['merged', 'complete', 'task-done'].includes(String(doneMarker.phase))
+        if (merged) {
+          // The work auto-merged on GitHub after the agent exited, so the
+          // dispatching session is stale: local default branch is behind,
+          // the task branch lingers, and the worktree is still on disk.
+          // post_merge_cleanup reconciles all of it in one call.
+          lines.push(
+            `Post-merge cleanup (sync local default branch, drop task branch + worktree):\n` +
+              `  planflow_post_merge_cleanup(taskId: "${input.taskId}")`
+          )
+        } else {
+          lines.push(
+            `Worktree cleanup (if a worktree was created):\n` +
+              `  planflow_worktree_remove(taskId: "${input.taskId}")`
+          )
+        }
       } else if (doneMarker.status !== 'in-progress') {
         lines.push(`Re-dispatch (will resume from last checkpoint):\n` +
           `  planflow_task_start(taskId: "${input.taskId}", autoExecute: true)`)

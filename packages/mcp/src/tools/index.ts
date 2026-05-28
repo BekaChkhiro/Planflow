@@ -26,6 +26,7 @@ import { taskProgressTool } from './task-progress.js'
 import { workingOnTool } from './working-on.js'
 import { worktreeListTool } from './worktree-list.js'
 import { worktreeRemoveTool } from './worktree-remove.js'
+import { postMergeCleanupTool } from './post-merge-cleanup.js'
 import { agentStatusTool } from './agent-status.js'
 
 // Activity / collaboration
@@ -76,6 +77,7 @@ export const tools: ToolDefinition[] = [
   workingOnTool,
   worktreeListTool,
   worktreeRemoveTool,
+  postMergeCleanupTool,
   agentStatusTool,
 
   // Activity / collaboration

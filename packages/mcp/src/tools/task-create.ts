@@ -312,6 +312,21 @@ Follow-up: planflow_sync(direction: "push", content: <returned markdown>)`,
         lines.push('')
       }
 
+      // Autonomy — can this task be autoExecuted, or does it need a human?
+      const verdict = report.autonomy?.verdicts.find((v) => v.taskId === newTaskId)
+      if (verdict) {
+        const icon = verdict.level === 'agent' ? '🤖' : verdict.level === 'assisted' ? '🤝' : '🧑'
+        lines.push(`${icon} Autonomy: ${verdict.level}`)
+        if (verdict.level === 'human') {
+          lines.push(`   Human-only — ${verdict.blockers.join('; ')}. autoExecute won't complete it.`)
+        } else if (verdict.level === 'assisted') {
+          lines.push(`   ${verdict.reasons[0] ?? 'Pair or review — too thin to run unattended.'}`)
+        } else {
+          lines.push(`   Safe to run: planflow_task_start(taskId: "${newTaskId}", autoExecute: true)`)
+        }
+        lines.push('')
+      }
+
       lines.push('💡 Next: planflow_sync(direction: "push", content: <updated>) to persist.')
       lines.push('')
       lines.push('───────── Updated PROJECT_PLAN.md ─────────')

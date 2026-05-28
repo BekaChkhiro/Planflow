@@ -284,6 +284,21 @@ Follow-up: planflow_sync(direction: "push", content: <returned>) to persist.`,
         lines.push('')
       }
 
+      // Autonomy — which of the new tasks can autoExecute run?
+      const newVerdicts = (report.autonomy?.verdicts ?? []).filter((v) =>
+        newIds.has(v.taskId.toUpperCase())
+      )
+      if (newVerdicts.length > 0) {
+        const a = newVerdicts.filter((v) => v.level === 'agent').length
+        const as = newVerdicts.filter((v) => v.level === 'assisted').length
+        const h = newVerdicts.filter((v) => v.level === 'human').length
+        lines.push(`🤖 Agent autonomy: ${a} agent-ready · ${as} assisted · ${h} human-only`)
+        for (const v of newVerdicts.filter((v) => v.level === 'human')) {
+          lines.push(`   • 🧑 ${v.taskId}: human-only — ${v.blockers.join('; ')}`)
+        }
+        lines.push('')
+      }
+
       lines.push('💡 Next: planflow_sync(direction: "push", content: <updated>) to persist.')
       lines.push('')
       lines.push('───────── Updated PROJECT_PLAN.md ─────────')

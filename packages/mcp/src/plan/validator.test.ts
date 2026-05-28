@@ -15,6 +15,8 @@ import { composeDescription } from './task-spec.js'
 import { validateOutline, validatePhase } from './validator.js'
 import { buildOutline, buildOutlineMarkdown } from './outline.js'
 import { analyzeGaps } from './gaps.js'
+import { classifyTaskAutonomy } from './autonomy.js'
+import type { TaskNode } from './types.js'
 
 const minimalPlan = `# Test Project - Project Plan
 
@@ -509,6 +511,67 @@ describe('traceability (feature → task coverage)', () => {
     )
     const report = validatePlan(parsePlan(noFeatures))
     expect(report.coverage).toBeUndefined()
+  })
+})
+
+describe('classifyTaskAutonomy', () => {
+  const makeTask = (over: Partial<TaskNode>): TaskNode => ({
+    taskId: 'T2.1',
+    phase: 2,
+    name: 'A task',
+    description: '',
+    status: 'TODO',
+    complexity: 'Medium',
+    dependencies: [],
+    ...over,
+  })
+
+  it('flags external account/credential work as human-only', () => {
+    const v = classifyTaskAutonomy(
+      makeTask({
+        name: 'Set up Stripe billing',
+        description: 'Create an account on Stripe and paste the API key into the env.',
+        acceptanceCriteria: ['Payments work'],
+      })
+    )
+    expect(v.level).toBe('human')
+    expect(v.blockers.length).toBeGreaterThan(0)
+  })
+
+  it('flags UX/design judgement as human-only', () => {
+    const v = classifyTaskAutonomy(
+      makeTask({
+        name: 'Design the dashboard wireframe',
+        description: 'Produce a wireframe and choose between two layout options.',
+      })
+    )
+    expect(v.level).toBe('human')
+  })
+
+  it('marks a precise, verifiable, codeable task agent-ready', () => {
+    const v = classifyTaskAutonomy(
+      makeTask({
+        name: 'Implement JWT login endpoint',
+        description:
+          '- **Touchpoints**: create src/routes/auth/login.ts\n' +
+          '- **Contract**: POST /api/auth/login, response 200 { token }\n' +
+          '- **Verify**: `pnpm test src/routes/auth`',
+        acceptanceCriteria: ['Valid creds return 200'],
+      })
+    )
+    expect(v.level).toBe('agent')
+    expect(v.blockers).toEqual([])
+  })
+
+  it('marks a thin codeable task assisted (not agent, not human)', () => {
+    const v = classifyTaskAutonomy(
+      makeTask({
+        name: 'Build the reports view',
+        description: 'Show some reports to the user.',
+      })
+    )
+    expect(v.level).toBe('assisted')
+    expect(v.reasons.length).toBeGreaterThan(0)
   })
 })
 

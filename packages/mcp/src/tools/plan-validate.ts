@@ -298,6 +298,23 @@ function formatReport(report: ValidationReport, opts: FormatOptions): string {
     lines.push('')
   }
 
+  // Autonomy — which tasks can autoExecute run, which need a human?
+  if (report.autonomy) {
+    const { agent, assisted, human, verdicts } = report.autonomy
+    lines.push(
+      `🤖 Agent autonomy: ${agent} agent-ready · ${assisted} assisted · ${human} human-only`
+    )
+    const humanTasks = verdicts.filter((v) => v.level === 'human').slice(0, 6)
+    for (const v of humanTasks) {
+      lines.push(`   • 🧑 ${v.taskId}: human-only — ${v.blockers.join('; ')}`)
+    }
+    const assistedTasks = verdicts.filter((v) => v.level === 'assisted').slice(0, 4)
+    for (const v of assistedTasks) {
+      lines.push(`   • 🤝 ${v.taskId}: assisted — ${v.reasons[0] ?? 'needs review'}`)
+    }
+    lines.push('')
+  }
+
   if (report.issues.length === 0) {
     lines.push('🎯 No issues found. The plan is clean — safe to write/sync.')
     return lines.join('\n')

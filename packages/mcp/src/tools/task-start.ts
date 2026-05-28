@@ -40,6 +40,8 @@ import {
 } from '../worktree.js'
 import { spawnHeadlessAgent } from '../agent-spawn.js'
 import { coerceBoolean } from './_coerce.js'
+import { classifyTaskAutonomy } from '../plan/autonomy.js'
+import type { TaskNode } from '../plan/types.js'
 
 const TaskStartInputSchema = z.object({
   projectId: z
@@ -1268,6 +1270,33 @@ Prerequisites:
       // because the agent calls planflow_task_start(autoExecute: false)
       // itself to get full context (avoids infinite recursion by design).
       if (input.autoExecute) {
+        // Autonomy gate: a human-only task (external account/credential
+        // setup, third-party console config, product/UX judgement, manual
+        // sign-off) will stall a headless agent and waste an Opus run. Stop
+        // before dispatch and tell the user why.
+        const verdict = classifyTaskAutonomy({
+          taskId: task['taskId'] as string,
+          name: (task['name'] as string) ?? '',
+          description: (task['description'] as string | null | undefined) ?? '',
+          status: 'TODO',
+          complexity: 'Medium',
+          phase: 0,
+          dependencies: [],
+          acceptanceCriteria: task['acceptanceCriteria'] as string[] | undefined,
+          testTaskId: task['testTaskId'] as string | undefined,
+        } as TaskNode)
+
+        if (verdict.level === 'human') {
+          return createErrorResult(
+            `🧑 ${task['taskId']} looks human-only — not dispatching an agent.\n\n` +
+              `Detected work an autoExecute agent can't complete on its own:\n` +
+              verdict.blockers.map((b) => `  • ${b}`).join('\n') +
+              `\n\nDo this part by hand. If you believe it's actually agent-friendly,\n` +
+              `tighten the task wording (remove the human-only step or split it out),\n` +
+              `then re-run planflow_task_start(taskId: "${task['taskId']}", autoExecute: true).`
+          )
+        }
+
         return dispatchAgent({
           task,
           projectId,

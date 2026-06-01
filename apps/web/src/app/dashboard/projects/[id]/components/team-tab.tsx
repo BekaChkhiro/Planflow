@@ -431,7 +431,7 @@ export function TeamTab({ projectId }: { projectId: string }) {
           <DialogHeader>
             <DialogTitle>Invite Member</DialogTitle>
             <DialogDescription>
-              Invite a team member to join this project. They must already be a member of your organization.
+              Invite anyone by email to join this project. If they aren&apos;t in your organization yet, they&apos;ll be added as a viewer when they accept.
             </DialogDescription>
           </DialogHeader>
           <Form {...inviteForm}>

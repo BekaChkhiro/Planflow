@@ -108,9 +108,9 @@ projectInvitationsRoutes.post('/:token/accept', auth, async (c) => {
       return c.json({ success: false, error: 'This invitation was sent to a different email address' }, 403)
     }
 
-    // The invitee must still be a member of the project's organization. Project
-    // membership requires org membership (enforced at invite time); re-verify it
-    // here so a user removed from the org after being invited can't slip back in.
+    // Project membership requires organization membership. The invitee may not be
+    // an org member yet (they can be invited directly to a project) — in that case
+    // they are auto-enrolled into the organization as a viewer when they accept.
     const [orgMembership] = await db
       .select({ id: schema.organizationMembers.id })
       .from(schema.organizationMembers)
@@ -121,13 +121,6 @@ projectInvitationsRoutes.post('/:token/accept', auth, async (c) => {
         )
       )
       .limit(1)
-
-    if (!orgMembership) {
-      return c.json(
-        { success: false, error: 'You must be a member of the organization to join this project' },
-        403
-      )
-    }
 
     // If the user is already a member, return a clean 409 instead of letting the
     // unique(project_id, user_id) constraint surface as a generic 500.
@@ -151,8 +144,18 @@ projectInvitationsRoutes.post('/:token/accept', auth, async (c) => {
       return c.json({ success: false, error: 'You are already a member of this project' }, 409)
     }
 
-    // Use transaction for atomic member creation + invitation update
+    // Use transaction for atomic (org enrollment +) member creation + invitation update
     await withTransaction(async (tx) => {
+      // Auto-enroll the invitee into the organization as a viewer if they aren't
+      // a member yet, so the "every project member is an org member" invariant holds.
+      if (!orgMembership) {
+        await tx.insert(schema.organizationMembers).values({
+          organizationId: invitation.organizationId,
+          userId: user.id,
+          role: 'viewer',
+        })
+      }
+
       // Add user to project_members with invitation's role
       await tx.insert(schema.projectMembers).values({
         projectId: invitation.projectId,

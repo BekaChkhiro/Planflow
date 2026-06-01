@@ -5019,40 +5019,31 @@ projectRoutes.post('/:id/members/invitations', auth, async (c) => {
       return c.json({ success: false, error: 'Only project owners can invite members' }, 403)
     }
 
-    // Check if email is already a member of the organization
-    const [orgMember] = await db
-      .select({ userId: schema.organizationMembers.userId })
-      .from(schema.organizationMembers)
-      .innerJoin(schema.users, eq(schema.users.id, schema.organizationMembers.userId))
-      .where(
-        and(
-          eq(schema.organizationMembers.organizationId, project.organizationId),
-          eq(schema.users.email, email.toLowerCase())
-        )
-      )
+    // Look up the invitee by email. They do NOT need to be an organization member
+    // yet — if they accept, they are auto-added to the organization as a viewer.
+    // The user may not even have an account yet (external invitee); that's fine.
+    const [invitedUser] = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.email, email.toLowerCase()))
       .limit(1)
 
-    if (!orgMember) {
-      return c.json(
-        { success: false, error: 'User must be a member of the organization first' },
-        400
-      )
-    }
-
-    // Check if user is already a project member
-    const [existingMember] = await db
-      .select({ id: schema.projectMembers.id })
-      .from(schema.projectMembers)
-      .where(
-        and(
-          eq(schema.projectMembers.projectId, projectId),
-          eq(schema.projectMembers.userId, orgMember.userId)
+    // If the invitee already has an account, make sure they aren't already a member.
+    if (invitedUser) {
+      const [existingMember] = await db
+        .select({ id: schema.projectMembers.id })
+        .from(schema.projectMembers)
+        .where(
+          and(
+            eq(schema.projectMembers.projectId, projectId),
+            eq(schema.projectMembers.userId, invitedUser.id)
+          )
         )
-      )
-      .limit(1)
+        .limit(1)
 
-    if (existingMember) {
-      return c.json({ success: false, error: 'User is already a member of this project' }, 409)
+      if (existingMember) {
+        return c.json({ success: false, error: 'User is already a member of this project' }, 409)
+      }
     }
 
     // Check for an existing ACTIVE (non-expired, unaccepted) pending invitation.

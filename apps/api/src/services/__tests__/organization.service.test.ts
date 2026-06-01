@@ -691,7 +691,8 @@ describe('OrganizationService', () => {
         updatedAt: new Date(),
       }
 
-      mockDb._mocks.setLimitResults([[mockInvitation], [mockOrg]])
+      // Order: 1) find invitation, 2) existing-membership check (none), 3) fetch org
+      mockDb._mocks.setLimitResults([[mockInvitation], [], [mockOrg]])
 
       vi.mocked(withTransaction).mockImplementationOnce(async (fn) => {
         const mockTx = {
@@ -717,6 +718,56 @@ describe('OrganizationService', () => {
 
       await expect(organizationService.acceptInvitation('user-123', 'user@example.com', 'invalid-token'))
         .rejects.toThrow(NotFoundError)
+    })
+
+    it('should throw ConflictError if already a member', async () => {
+      const mockInvitation = {
+        id: 'inv-123',
+        organizationId: 'org-123',
+        email: 'user@example.com',
+        role: 'member',
+        expiresAt: new Date(Date.now() + 86400000),
+        acceptedAt: null,
+      }
+      // Order: 1) find invitation, 2) existing-membership check returns a row
+      mockDb._mocks.setLimitResults([[mockInvitation], [{ id: 'member-123' }]])
+
+      await expect(organizationService.acceptInvitation('user-123', 'user@example.com', 'valid-token'))
+        .rejects.toThrow(ConflictError)
+    })
+
+    it('should accept invitation when email differs only by case', async () => {
+      const mockInvitation = {
+        id: 'inv-123',
+        organizationId: 'org-123',
+        email: 'User@Example.com',
+        role: 'member',
+        expiresAt: new Date(Date.now() + 86400000),
+        acceptedAt: null,
+      }
+      const mockOrg = {
+        id: 'org-123',
+        name: 'Test Org',
+        slug: 'test-org',
+        description: null,
+        createdBy: 'owner-id',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      mockDb._mocks.setLimitResults([[mockInvitation], [], [mockOrg]])
+
+      vi.mocked(withTransaction).mockImplementationOnce(async (fn) => {
+        const mockTx = {
+          insert: vi.fn().mockReturnValue({ values: vi.fn().mockResolvedValue([]) }),
+          update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+          }),
+        }
+        return fn(mockTx)
+      })
+
+      const result = await organizationService.acceptInvitation('user-123', 'user@example.com', 'valid-token')
+      expect(result.id).toBe('org-123')
     })
 
     it('should throw ConflictError if already accepted', async () => {

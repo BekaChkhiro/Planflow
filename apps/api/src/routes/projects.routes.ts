@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, desc, eq, count, sql, or, ilike, isNull, isNotNull, inArray } from 'drizzle-orm'
+import { and, desc, eq, count, gt, sql, or, ilike, isNull, isNotNull, inArray } from 'drizzle-orm'
 import crypto from 'crypto'
 import {
   CreateProjectRequestSchema,
@@ -5055,7 +5055,8 @@ projectRoutes.post('/:id/members/invitations', auth, async (c) => {
       return c.json({ success: false, error: 'User is already a member of this project' }, 409)
     }
 
-    // Check for existing pending invitation
+    // Check for an existing ACTIVE (non-expired, unaccepted) pending invitation.
+    // Expired invitations must NOT block a fresh invite — they can never be accepted.
     const [existingInvitation] = await db
       .select({ id: schema.projectInvitations.id })
       .from(schema.projectInvitations)
@@ -5063,7 +5064,8 @@ projectRoutes.post('/:id/members/invitations', auth, async (c) => {
         and(
           eq(schema.projectInvitations.projectId, projectId),
           eq(schema.projectInvitations.email, email.toLowerCase()),
-          isNull(schema.projectInvitations.acceptedAt)
+          isNull(schema.projectInvitations.acceptedAt),
+          gt(schema.projectInvitations.expiresAt, new Date())
         )
       )
       .limit(1)
@@ -5071,6 +5073,18 @@ projectRoutes.post('/:id/members/invitations', auth, async (c) => {
     if (existingInvitation) {
       return c.json({ success: false, error: 'An invitation is already pending for this email' }, 409)
     }
+
+    // Clean up any stale (expired, unaccepted) invitations for this email so they
+    // don't accumulate and so the pending-invitations list stays accurate.
+    await db
+      .delete(schema.projectInvitations)
+      .where(
+        and(
+          eq(schema.projectInvitations.projectId, projectId),
+          eq(schema.projectInvitations.email, email.toLowerCase()),
+          isNull(schema.projectInvitations.acceptedAt)
+        )
+      )
 
     // Generate invitation token
     const token = crypto.randomBytes(32).toString('hex')
@@ -5176,7 +5190,8 @@ projectRoutes.get('/:id/members/invitations', auth, async (c) => {
       .where(
         and(
           eq(schema.projectInvitations.projectId, projectId),
-          isNull(schema.projectInvitations.acceptedAt)
+          isNull(schema.projectInvitations.acceptedAt),
+          gt(schema.projectInvitations.expiresAt, new Date())
         )
       )
       .orderBy(desc(schema.projectInvitations.createdAt))

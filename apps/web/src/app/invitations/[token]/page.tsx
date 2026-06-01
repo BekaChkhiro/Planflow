@@ -252,8 +252,9 @@ export default function InvitationPage() {
     const expiresAt = new Date(invitation.expiresAt)
     const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 
-    // Check if the invitation email matches the logged-in user's email
-    const emailMismatch = user?.email && invitation.email !== user.email
+    // Check if the invitation email matches the logged-in user's email (case-insensitive)
+    const emailMismatch =
+      user?.email && invitation.email.toLowerCase() !== user.email.toLowerCase()
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">

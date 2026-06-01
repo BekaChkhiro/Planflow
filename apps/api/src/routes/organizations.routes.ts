@@ -693,7 +693,10 @@ organizationsRoutes.post('/:id/invitations', auth, async (c) => {
       )
     }
 
-    const { email, role } = validation.data
+    const { email: rawEmail, role } = validation.data
+    // Normalize email to lowercase so it matches the stored (lowercased) user email.
+    // Without this, an invite to "Foo@Bar.com" can never be accepted by user "foo@bar.com".
+    const email = rawEmail.toLowerCase().trim()
     const db = getDbClient()
 
     // Check membership and role (must be owner or admin)
@@ -1164,9 +1167,31 @@ invitationsRoutes.post('/:token/accept', auth, async (c) => {
       return c.json({ success: false, error: 'Invitation has expired' }, 410)
     }
 
-    // Check invitee email matches authenticated user
-    if (invitation.email !== user.email) {
+    // Check invitee email matches authenticated user (case-insensitive)
+    if (invitation.email.toLowerCase() !== user.email.toLowerCase()) {
       return c.json({ success: false, error: 'This invitation was sent to a different email address' }, 403)
+    }
+
+    // If the user is already a member, return a clean 409 instead of letting the
+    // unique(organization_id, user_id) constraint surface as a generic 500.
+    const [existingMembership] = await db
+      .select({ id: schema.organizationMembers.id })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, invitation.organizationId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (existingMembership) {
+      // Mark the invitation as accepted so it stops showing as pending.
+      await db
+        .update(schema.teamInvitations)
+        .set({ acceptedAt: new Date() })
+        .where(eq(schema.teamInvitations.id, invitation.id))
+      return c.json({ success: false, error: 'You are already a member of this organization' }, 409)
     }
 
     // Use transaction for atomic member creation + invitation update
@@ -1231,8 +1256,8 @@ invitationsRoutes.post('/:token/decline', auth, async (c) => {
       return c.json({ success: false, error: 'Invitation not found' }, 404)
     }
 
-    // Check email matches user
-    if (invitation.email !== user.email) {
+    // Check email matches user (case-insensitive)
+    if (invitation.email.toLowerCase() !== user.email.toLowerCase()) {
       return c.json({ success: false, error: 'This invitation was sent to a different email address' }, 403)
     }
 

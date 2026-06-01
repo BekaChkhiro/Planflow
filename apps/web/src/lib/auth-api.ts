@@ -86,7 +86,7 @@ async function authRequest<T>(endpoint: string, options: RequestOptions = {}): P
           if (!retryResponse.ok) {
             throw new ApiError(
               retryResponse.status,
-              retryData?.message || retryResponse.statusText,
+              retryData?.error || retryData?.message || retryResponse.statusText,
               retryData
             )
           }
@@ -99,7 +99,7 @@ async function authRequest<T>(endpoint: string, options: RequestOptions = {}): P
       store.logout()
     }
 
-    throw new ApiError(response.status, data?.message || response.statusText, data)
+    throw new ApiError(response.status, data?.error || data?.message || response.statusText, data)
   }
 
   return data as T

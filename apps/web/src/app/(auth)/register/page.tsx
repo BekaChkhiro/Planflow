@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -45,6 +45,8 @@ type RegisterFormData = z.infer<typeof RegisterFormSchema>
 
 export default function RegisterPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const returnUrl = searchParams.get('returnUrl')
   const { register, isLoading: authLoading } = useAuth()
   const { track } = useAnalytics()
   const [error, setError] = useState<string | null>(null)
@@ -78,8 +80,11 @@ export default function RegisterPage() {
     if (result.success) {
       // Track signup event (user will be identified on first login)
       track('user_signed_up', { source: 'web' })
-      // Registration successful - redirect to login
-      router.push('/login?registered=true')
+      // Registration successful - redirect to login, preserving any invitation returnUrl
+      const loginQuery = returnUrl
+        ? `/login?registered=true&returnUrl=${encodeURIComponent(returnUrl)}`
+        : '/login?registered=true'
+      router.push(loginQuery)
     } else {
       setError(result.error || 'Registration failed. Please try again.')
     }
@@ -94,7 +99,7 @@ export default function RegisterPage() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <OAuthButtons mode="register" disabled={isLoading} />
+        <OAuthButtons mode="register" redirectUrl={returnUrl || undefined} disabled={isLoading} />
 
         <OAuthDivider />
 
@@ -213,7 +218,10 @@ export default function RegisterPage() {
       <CardFooter className="flex flex-col space-y-4">
         <div className="text-sm text-muted-foreground">
           Already have an account?{' '}
-          <Link href="/login" className="text-primary hover:underline">
+          <Link
+            href={returnUrl ? `/login?returnUrl=${encodeURIComponent(returnUrl)}` : '/login'}
+            className="text-primary hover:underline"
+          >
             Sign in
           </Link>
         </div>

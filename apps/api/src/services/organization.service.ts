@@ -526,7 +526,9 @@ export class OrganizationService {
     orgId: string,
     input: CreateInvitationInput
   ): Promise<TeamInvitation> {
-    const { email, role, inviterName, inviterEmail } = input
+    const { email: rawEmail, role, inviterName, inviterEmail } = input
+    // Normalize email to lowercase so it matches the stored (lowercased) user email.
+    const email = rawEmail.toLowerCase().trim()
 
     // Check requester role
     const membership = await this.getMembership(userId, orgId)
@@ -724,8 +726,28 @@ export class OrganizationService {
       throw new ServiceError('Invitation has expired', 'INVITATION_EXPIRED', 410)
     }
 
-    if (invitation.email !== userEmail) {
+    if (invitation.email.toLowerCase() !== userEmail.toLowerCase()) {
       throw new AuthorizationError('This invitation was sent to a different email address')
+    }
+
+    // If already a member, surface a clean conflict instead of a unique-constraint 500.
+    const [existingMembership] = await this.db
+      .select({ id: schema.organizationMembers.id })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, invitation.organizationId),
+          eq(schema.organizationMembers.userId, userId)
+        )
+      )
+      .limit(1)
+
+    if (existingMembership) {
+      await this.db
+        .update(schema.teamInvitations)
+        .set({ acceptedAt: new Date() })
+        .where(eq(schema.teamInvitations.id, invitation.id))
+      throw new ConflictError('You are already a member of this organization')
     }
 
     // Accept in transaction
@@ -777,7 +799,7 @@ export class OrganizationService {
       throw new NotFoundError('Invitation')
     }
 
-    if (invitation.email !== userEmail) {
+    if (invitation.email.toLowerCase() !== userEmail.toLowerCase()) {
       throw new AuthorizationError('This invitation was sent to a different email address')
     }
 

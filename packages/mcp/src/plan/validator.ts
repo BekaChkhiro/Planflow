@@ -20,6 +20,7 @@ import type {
   TaskPrecision,
   ValidationReport,
 } from './types.js'
+import { summarizeAutonomy } from './autonomy.js'
 
 const VAGUE_NAME_PATTERNS = [
   /\b(stuff|misc|other|various|miscellaneous|tbd|todo|fixme)\b/i,
@@ -82,6 +83,10 @@ export function validatePlan(plan: PlanTree): ValidationReport {
   const traceResult = checkTraceability(plan)
   issues.push(...traceResult.issues)
 
+  const allTasksForAutonomy = flattenTasks(plan)
+  const autonomy =
+    allTasksForAutonomy.length > 0 ? summarizeAutonomy(allTasksForAutonomy) : undefined
+
   const errors = issues.filter((i) => i.severity === 'error').length
   const warnings = issues.filter((i) => i.severity === 'warning').length
   const infos = issues.filter((i) => i.severity === 'info').length
@@ -99,6 +104,7 @@ export function validatePlan(plan: PlanTree): ValidationReport {
     issues,
     ...(precisionResult.summary ? { precision: precisionResult.summary } : {}),
     ...(traceResult.summary ? { coverage: traceResult.summary } : {}),
+    ...(autonomy ? { autonomy } : {}),
   }
 }
 

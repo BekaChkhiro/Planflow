@@ -40,6 +40,8 @@ import {
 } from '../worktree.js'
 import { spawnHeadlessAgent } from '../agent-spawn.js'
 import { coerceBoolean } from './_coerce.js'
+import { classifyTaskAutonomy } from '../plan/autonomy.js'
+import type { TaskNode } from '../plan/types.js'
 
 const TaskStartInputSchema = z.object({
   projectId: z
@@ -93,7 +95,7 @@ const TaskStartInputSchema = z.object({
     .optional()
     .default('auto')
     .describe(
-      'Model for the spawned autoExecute agent. `auto` (default) picks based on task complexity: Large/XL → Opus, else Sonnet. Override to force a specific model. Only used when autoExecute=true.'
+      'Model for the spawned autoExecute agent. `auto` (default) → Opus for every task (policy: all autoExecute tasks run on Opus). Pass an explicit "sonnet"/"haiku" to force a cheaper model. Only used when autoExecute=true.'
     ),
 })
 
@@ -283,25 +285,15 @@ function renderWorktreeRedirect(
 /**
  * Map a task's complexity field to a model alias.
  *
- * Real-world PlanFlow projects use two convention families:
- *   • Low / Medium / High         (plan-flow itself, work-station)
- *   • Small / Medium / Large / XL (T-shirt sizing — earlier sample plans)
- * Both High AND Large/XL escalate to Opus. Everything else (and missing
- * values) defaults to Sonnet — cheaper, fine for routine work.
+ * Policy: every autoExecute task runs on Opus, regardless of complexity.
+ * Routine work still benefits from the strongest model, and the cost
+ * trade-off is the user's to make — they can still force a cheaper model
+ * per call with an explicit `model: "sonnet"` (or "haiku") override.
+ * `complexity` is accepted for signature stability but no longer affects
+ * the choice.
  */
-function modelForTask(complexity: string | null | undefined): string {
-  if (!complexity) return 'sonnet'
-  const c = complexity.trim().toLowerCase()
-  const opusTier = [
-    // Low/Medium/High family
-    'high',
-    // T-shirt sizing family
-    'large', 'l',
-    'xl', 'xlarge', 'x-large', 'extra large', 'extra-large',
-    'xxl', 'xxlarge', 'xx-large',
-  ]
-  if (opusTier.includes(c)) return 'opus'
-  return 'sonnet'
+function modelForTask(_complexity: string | null | undefined): string {
+  return 'opus'
 }
 
 interface DispatchOpts {
@@ -447,7 +439,7 @@ async function dispatchAgent(opts: DispatchOpts): Promise<ReturnType<typeof crea
     modelOverride === 'auto' ? modelForTask(taskComplexity) : modelOverride
   const modelReason =
     modelOverride === 'auto'
-      ? `auto-selected for ${taskComplexity ?? 'unknown'} complexity`
+      ? 'auto → Opus (policy: all autoExecute tasks use Opus)'
       : 'explicit override'
 
   // ── Pre-load semantic context (parallel fan-out) ────────────────
@@ -1278,6 +1270,33 @@ Prerequisites:
       // because the agent calls planflow_task_start(autoExecute: false)
       // itself to get full context (avoids infinite recursion by design).
       if (input.autoExecute) {
+        // Autonomy gate: a human-only task (external account/credential
+        // setup, third-party console config, product/UX judgement, manual
+        // sign-off) will stall a headless agent and waste an Opus run. Stop
+        // before dispatch and tell the user why.
+        const verdict = classifyTaskAutonomy({
+          taskId: task['taskId'] as string,
+          name: (task['name'] as string) ?? '',
+          description: (task['description'] as string | null | undefined) ?? '',
+          status: 'TODO',
+          complexity: 'Medium',
+          phase: 0,
+          dependencies: [],
+          acceptanceCriteria: task['acceptanceCriteria'] as string[] | undefined,
+          testTaskId: task['testTaskId'] as string | undefined,
+        } as TaskNode)
+
+        if (verdict.level === 'human') {
+          return createErrorResult(
+            `🧑 ${task['taskId']} looks human-only — not dispatching an agent.\n\n` +
+              `Detected work an autoExecute agent can't complete on its own:\n` +
+              verdict.blockers.map((b) => `  • ${b}`).join('\n') +
+              `\n\nDo this part by hand. If you believe it's actually agent-friendly,\n` +
+              `tighten the task wording (remove the human-only step or split it out),\n` +
+              `then re-run planflow_task_start(taskId: "${task['taskId']}", autoExecute: true).`
+          )
+        }
+
         return dispatchAgent({
           task,
           projectId,

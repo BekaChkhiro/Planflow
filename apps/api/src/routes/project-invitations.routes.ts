@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { getDbClient, schema, withTransaction } from '../db/index.js'
 import { auth, getAuth } from '../middleware/index.js'
 
@@ -74,7 +74,7 @@ projectInvitationsRoutes.post('/:token/accept', auth, async (c) => {
     const token = c.req.param('token')
     const db = getDbClient()
 
-    // Find invitation by token
+    // Find invitation by token (join project to get its organization for the membership check)
     const [invitation] = await db
       .select({
         id: schema.projectInvitations.id,
@@ -84,8 +84,10 @@ projectInvitationsRoutes.post('/:token/accept', auth, async (c) => {
         expiresAt: schema.projectInvitations.expiresAt,
         acceptedAt: schema.projectInvitations.acceptedAt,
         invitedBy: schema.projectInvitations.invitedBy,
+        organizationId: schema.projects.organizationId,
       })
       .from(schema.projectInvitations)
+      .innerJoin(schema.projects, eq(schema.projects.id, schema.projectInvitations.projectId))
       .where(eq(schema.projectInvitations.token, token))
       .limit(1)
 
@@ -104,6 +106,49 @@ projectInvitationsRoutes.post('/:token/accept', auth, async (c) => {
     // Check invitee email matches authenticated user
     if (invitation.email.toLowerCase() !== user.email.toLowerCase()) {
       return c.json({ success: false, error: 'This invitation was sent to a different email address' }, 403)
+    }
+
+    // The invitee must still be a member of the project's organization. Project
+    // membership requires org membership (enforced at invite time); re-verify it
+    // here so a user removed from the org after being invited can't slip back in.
+    const [orgMembership] = await db
+      .select({ id: schema.organizationMembers.id })
+      .from(schema.organizationMembers)
+      .where(
+        and(
+          eq(schema.organizationMembers.organizationId, invitation.organizationId),
+          eq(schema.organizationMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (!orgMembership) {
+      return c.json(
+        { success: false, error: 'You must be a member of the organization to join this project' },
+        403
+      )
+    }
+
+    // If the user is already a member, return a clean 409 instead of letting the
+    // unique(project_id, user_id) constraint surface as a generic 500.
+    const [existingMembership] = await db
+      .select({ id: schema.projectMembers.id })
+      .from(schema.projectMembers)
+      .where(
+        and(
+          eq(schema.projectMembers.projectId, invitation.projectId),
+          eq(schema.projectMembers.userId, user.id)
+        )
+      )
+      .limit(1)
+
+    if (existingMembership) {
+      // Mark the invitation as accepted so it stops showing as pending.
+      await db
+        .update(schema.projectInvitations)
+        .set({ acceptedAt: new Date() })
+        .where(eq(schema.projectInvitations.id, invitation.id))
+      return c.json({ success: false, error: 'You are already a member of this project' }, 409)
     }
 
     // Use transaction for atomic member creation + invitation update

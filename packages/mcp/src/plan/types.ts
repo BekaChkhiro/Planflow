@@ -192,6 +192,28 @@ export interface CoverageSummary {
   uncovered: string[]
 }
 
+/**
+ * Task delegability — "can an autoExecute agent run this, or does it need
+ * a human?" Complements precision (how clearly specified) by judging
+ * whether the KIND of work is delegable at all.
+ */
+export type AutonomyLevel = 'agent' | 'assisted' | 'human'
+
+export interface AutonomyVerdict {
+  taskId: string
+  level: AutonomyLevel
+  reasons: string[]
+  /** Specific human-only items detected (non-empty only for level "human"). */
+  blockers: string[]
+}
+
+export interface AutonomySummary {
+  agent: number
+  assisted: number
+  human: number
+  verdicts: AutonomyVerdict[]
+}
+
 export interface ValidationReport {
   ok: boolean                     // true iff no `error`-severity issues
   totals: {
@@ -213,6 +235,11 @@ export interface ValidationReport {
    * (a `## Features` section). Surfaces promised-but-unbuilt features.
    */
   coverage?: CoverageSummary
+  /**
+   * Task delegability breakdown — how many tasks are agent-ready vs
+   * need a human. Present when the plan has at least one task.
+   */
+  autonomy?: AutonomySummary
 }
 
 // ─────────────────────────────────────────────────────────────────

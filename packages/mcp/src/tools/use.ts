@@ -22,6 +22,7 @@ import {
 } from '../config.js'
 import { AuthError, ApiError } from '../errors.js'
 import { logger } from '../logger.js'
+import { getProjectDir } from '../claude-env.js'
 import {
   type ToolDefinition,
   createSuccessResult,
@@ -67,7 +68,7 @@ function resolve(): Resolution {
     // .planflow/project.json when present, which is exactly the case
     // we need to populate currentProjectName here so show-current
     // doesn't render "Name: unknown" for a perfectly-set-up repo.
-    const cwd = process.cwd()
+    const cwd = getProjectDir()
     const fromMap = lookupProjectByPath(cwd)
     if (fromMap) {
       currentProjectId = fromMap.projectId
@@ -178,7 +179,7 @@ Useful when you switch between several PlanFlow projects on the same machine
 
     // Standalone unlink: just remove the cwd binding, leave selection alone.
     if (input.unlink && !input.projectId) {
-      const cwd = process.cwd()
+      const cwd = getProjectDir()
       const removed = removeProjectLink(cwd)
       return createSuccessResult(
         removed
@@ -195,7 +196,7 @@ Useful when you switch between several PlanFlow projects on the same machine
           `ℹ️ No current project set.\n\n` +
             `Set one with:\n` +
             `  planflow_use(projectId: "your-project-uuid")\n\n` +
-            `That will also bind ${process.cwd()}\n` +
+            `That will also bind ${getProjectDir()}\n` +
             `to that project for future sessions (pass link:false to opt out).\n\n` +
             `List projects: planflow_projects()`
         )
@@ -203,7 +204,7 @@ Useful when you switch between several PlanFlow projects on the same machine
 
       const sourceLabel: Record<typeof resolution.source, string> = {
         'memory': 'this session',
-        'cwd-link': `cwd link (${process.cwd()})`,
+        'cwd-link': `cwd link (${getProjectDir()})`,
         'config': 'global config (last-used fallback)',
       }
 
@@ -248,7 +249,7 @@ Useful when you switch between several PlanFlow projects on the same machine
       // — future "show current" calls then don't render "Name: unknown".
       let cwdLinked: string | null = null
       if (input.link) {
-        cwdLinked = process.cwd()
+        cwdLinked = getProjectDir()
         setProjectLink(cwdLinked, currentProjectId, project.name)
       }
 

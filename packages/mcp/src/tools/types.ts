@@ -4,7 +4,7 @@
  * Defines the structure for MCP tools.
  */
 
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import type { z } from 'zod'
 
 /**
@@ -51,6 +51,31 @@ export interface ToolDefinition<TInput = unknown> {
   inputSchema: z.ZodTypeAny
 
   /**
+   * Optional MCP tool annotations (behavioral hints surfaced to the
+   * client). When omitted, `server.ts` falls back to the central
+   * classification in `annotations.ts` keyed by tool name. Declaring it
+   * here lets a tool override that default inline.
+   *
+   * `readOnlyHint: true` lets Claude Code auto-run the tool without a
+   * permission prompt — the structured equivalent of the "read-only,
+   * never ask" list we currently keep in prose in CLAUDE.md.
+   */
+  annotations?: ToolAnnotations
+
+  /**
+   * Optional Zod schema describing the tool's *structured* output. When
+   * present, `server.ts` advertises it as the MCP `outputSchema` and the
+   * tool's success results should carry a matching `structuredContent`
+   * object (see `createStructuredResult`).
+   *
+   * This is what lets downstream automation — notably Claude Code's
+   * dynamic workflows / ultracode orchestration — consume planflow
+   * results as data (e.g. fan out one agent per task) instead of
+   * re-parsing the human-facing text.
+   */
+  outputSchema?: z.ZodTypeAny
+
+  /**
    * Tool implementation. The optional second argument carries per-call
    * helpers (right now: a progress notifier). Existing tools that don't
    * declare it stay backwards compatible — TS structural typing makes
@@ -65,6 +90,24 @@ export interface ToolDefinition<TInput = unknown> {
 export function createSuccessResult(text: string): ToolResult {
   return {
     content: [{ type: 'text', text }],
+  }
+}
+
+/**
+ * Create a successful tool result that carries BOTH a human-readable text
+ * block and a machine-readable `structuredContent` object.
+ *
+ * MCP clients that understand structured output (Claude Code) hand the
+ * object to automation untouched; everything else still renders the text.
+ * The `structuredContent` should match the tool's declared `outputSchema`.
+ */
+export function createStructuredResult(
+  text: string,
+  structured: Record<string, unknown>
+): ToolResult {
+  return {
+    content: [{ type: 'text', text }],
+    structuredContent: structured,
   }
 }
 

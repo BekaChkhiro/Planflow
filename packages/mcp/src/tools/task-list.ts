@@ -11,7 +11,8 @@ import { AuthError, ApiError } from '../errors.js'
 import { logger } from '../logger.js'
 import {
   type ToolDefinition,
-  createSuccessResult,
+  type ToolResult,
+  createStructuredResult,
   createErrorResult,
   formatTable,
 } from './types.js'
@@ -28,6 +29,36 @@ const TaskListInputSchema = z.object({
 })
 
 type TaskListInput = z.infer<typeof TaskListInputSchema>
+
+/**
+ * Structured output shape — the machine-readable counterpart to the
+ * human table. Built to be fan-out food for dynamic workflows: an
+ * orchestrator can map `tasks` straight to one agent per task, honouring
+ * `dependencies` and `status`.
+ */
+const TaskListOutputSchema = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+  filter: z.string().nullable(),
+  stats: z.object({
+    total: z.number(),
+    todo: z.number(),
+    inProgress: z.number(),
+    done: z.number(),
+    blocked: z.number(),
+    progressPercent: z.number(),
+  }),
+  tasks: z.array(
+    z.object({
+      taskId: z.string(),
+      name: z.string(),
+      status: z.string(),
+      complexity: z.string(),
+      estimatedHours: z.number().nullable(),
+      dependencies: z.array(z.string()),
+    })
+  ),
+})
 
 /**
  * Truncate a string to a maximum length
@@ -99,8 +130,9 @@ Returns:
 You must be logged in first with planflow_login.`,
 
   inputSchema: TaskListInputSchema,
+  outputSchema: TaskListOutputSchema,
 
-  async execute(input: TaskListInput): Promise<ReturnType<typeof createSuccessResult>> {
+  async execute(input: TaskListInput): Promise<ToolResult> {
     logger.info('Fetching tasks list', { projectId: input.projectId, status: input.status })
 
     // Check if authenticated locally first
@@ -137,14 +169,34 @@ You must be logged in first with planflow_login.`,
       // Handle empty tasks list
       if (tasks.length === 0) {
         const filterMessage = input.status ? ` with status "${input.status}"` : ''
-        return createSuccessResult(
+        const emptyStats = {
+          total: response.tasks.length,
+          todo: response.tasks.filter((t) => t.status === 'TODO').length,
+          inProgress: response.tasks.filter((t) => t.status === 'IN_PROGRESS').length,
+          done: response.tasks.filter((t) => t.status === 'DONE').length,
+          blocked: response.tasks.filter((t) => t.status === 'BLOCKED').length,
+          progressPercent: response.tasks.length
+            ? Math.round(
+                (response.tasks.filter((t) => t.status === 'DONE').length / response.tasks.length) *
+                  100
+              )
+            : 0,
+        }
+        return createStructuredResult(
           `📋 No tasks found${filterMessage}.\n\n` +
             `Project: ${response.projectName}\n\n` +
             (input.status
               ? '💡 Try removing the status filter to see all tasks:\n' +
                 `  planflow_task_list(projectId: "${input.projectId}")`
               : '💡 Tasks are created when you sync your PROJECT_PLAN.md:\n' +
-                `  planflow_sync(projectId: "${input.projectId}", direction: "push")`)
+                `  planflow_sync(projectId: "${input.projectId}", direction: "push")`),
+          {
+            projectId: input.projectId,
+            projectName: response.projectName,
+            filter: input.status ?? null,
+            stats: emptyStats,
+            tasks: [],
+          }
         )
       }
 
@@ -200,7 +252,20 @@ You must be logged in first with planflow_login.`,
         `  • planflow_sync(projectId: "${input.projectId}", direction: "pull")`,
       ].join('\n')
 
-      return createSuccessResult(output)
+      return createStructuredResult(output, {
+        projectId: input.projectId,
+        projectName: response.projectName,
+        filter: input.status ?? null,
+        stats: { ...stats, progressPercent },
+        tasks: tasks.map((task) => ({
+          taskId: task.taskId,
+          name: task.name,
+          status: task.status,
+          complexity: task.complexity,
+          estimatedHours: task.estimatedHours ?? null,
+          dependencies: task.dependencies,
+        })),
+      })
     } catch (error) {
       logger.error('Failed to fetch tasks', { error: String(error), projectId: input.projectId })
 

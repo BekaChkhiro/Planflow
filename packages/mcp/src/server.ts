@@ -16,6 +16,7 @@ import { zodToJsonSchema as zodToJsonSchemaLib } from 'zod-to-json-schema'
 import { PlanFlowError, ToolError } from './errors.js'
 import { logger } from './logger.js'
 import { tools } from './tools/index.js'
+import { TOOL_ANNOTATIONS } from './tools/annotations.js'
 import type { ToolDefinition, ToolExecutionContext } from './tools/types.js'
 import { SERVER_INSTRUCTIONS } from './server-instructions.js'
 
@@ -101,11 +102,22 @@ export function createServer(): Server {
     logger.debug('Listing tools', { count: tools.length })
 
     return {
-      tools: tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: zodToJsonSchema(tool.inputSchema),
-      })),
+      tools: tools.map((tool) => {
+        // Behavioral hints for the client's permission engine: an inline
+        // override on the tool wins, else the central classification in
+        // annotations.ts. `readOnlyHint: true` lets Claude Code skip the
+        // permission prompt for pure reads.
+        const annotations = tool.annotations ?? TOOL_ANNOTATIONS[tool.name]
+        return {
+          name: tool.name,
+          description: tool.description,
+          inputSchema: zodToJsonSchema(tool.inputSchema),
+          ...(annotations && { annotations }),
+          // Advertise the structured-output shape so clients can validate
+          // `structuredContent` and hand it to automation as typed data.
+          ...(tool.outputSchema && { outputSchema: zodToJsonSchema(tool.outputSchema) }),
+        }
+      }),
     }
   })
 

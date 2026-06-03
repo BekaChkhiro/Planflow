@@ -24,6 +24,7 @@ import {
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
 import { coerceBoolean } from './_coerce.js'
+import { getProjectDir } from '../claude-env.js'
 import { scanProject } from './_scanner.js'
 import { planIncrementalChanges } from './_incremental.js'
 
@@ -131,7 +132,7 @@ Prerequisites:
       )
     }
 
-    const rawDir = input.directory ?? process.cwd()
+    const rawDir = input.directory ?? getProjectDir()
     const dirPath = rawDir.startsWith('~')
       ? rawDir.replace(/^~/, process.env['HOME'] || '')
       : rawDir

@@ -28,6 +28,7 @@ import {
 } from './types.js'
 import { getCurrentProjectId } from './use.js'
 import { coerceBoolean } from './_coerce.js'
+import { getProjectDir } from '../claude-env.js'
 import * as progress from '../progress.js'
 import { scanProject, detectLanguage, type ScannedFile } from './_scanner.js'
 import { writeIndexState, clearIndexState } from './_index-state.js'
@@ -356,7 +357,7 @@ Prerequisites:
           ? input.directory.startsWith('~')
             ? input.directory.replace(/^~/, process.env['HOME'] || '')
             : input.directory
-          : process.cwd()
+          : getProjectDir()
         clearIndexState(purgeRoot)
       } catch (err) {
         logger.error('Purge failed', { error: String(err) })
@@ -372,7 +373,7 @@ Prerequisites:
       return executeFilesMode(projectId, input.files, input.dryRun, purgeNotice, ctx)
     }
 
-    const directory = input.directory ?? process.cwd()
+    const directory = input.directory ?? getProjectDir()
     return executeDirectoryMode(
       projectId,
       directory,

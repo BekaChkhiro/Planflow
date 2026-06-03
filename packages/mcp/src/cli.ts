@@ -396,15 +396,129 @@ export function runInitCommand(args: string[]): number {
       `pick up future template updates (idempotent).`,
       '',
       'Next steps (per project):',
-      '  1. Open Claude in your project directory',
-      '  2. Run: planflow_use(projectId: "your-uuid")',
+      '  1. Run: planflow-mcp setup',
+      '     (adds "alwaysLoad": true to .mcp.json so Claude loads the tools',
+      '      eagerly — the tool-first workflow needs them present up front)',
+      '  2. Open Claude in your project directory',
+      '  3. Run: planflow_use(projectId: "your-uuid")',
       '     (one-time link — future sessions auto-resolve from cwd)',
-      '  3. Run: planflow_index',
+      '  4. Run: planflow_index',
       '     (initial index of the codebase, ~5-10 min for a typical repo)',
       '',
       scope === 'global'
         ? `Tip: the MCP server also returns these instructions in its\ninitialize handshake (v0.2.8+), so MCP-aware clients pick up the\nworkflow even without CLAUDE.md. The global file is a safety net.`
         : 'Tip: planflow-mcp init --global writes to ~/.claude/CLAUDE.md\nso every Claude session uses the workflow, not just this project.',
+      '',
+    ].join('\n')
+  )
+  return 0
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: setup
+//
+// Patches the project-scoped `.mcp.json` so Claude Code loads the planflow
+// tools *eagerly* — `alwaysLoad: true` exempts the server from tool-search
+// deferral (Claude Code v2.1.121+). This matters because planflow is a
+// TOOL-FIRST server: the whole "reach for planflow_explore before grep"
+// workflow only works if those tools are present in the system prompt at
+// session start instead of hidden behind a tool-search step.
+//
+// Idempotent: preserves any existing command/args/env for the server and
+// only flips the `alwaysLoad` flag. If the server isn't registered yet, a
+// sensible `npx -y planflow-mcp` default entry is added.
+// ---------------------------------------------------------------------------
+
+const MCP_SERVER_KEY = 'planflow-mcp'
+
+interface McpServerEntry {
+  command?: string
+  args?: string[]
+  alwaysLoad?: boolean
+  [k: string]: unknown
+}
+interface McpJson {
+  mcpServers?: Record<string, McpServerEntry>
+  [k: string]: unknown
+}
+
+/** True when this entry is (or launches) the planflow MCP server. */
+function entryIsPlanflow(key: string, entry: McpServerEntry): boolean {
+  if (key === MCP_SERVER_KEY) return true
+  const haystack = [entry.command ?? '', ...(entry.args ?? [])].join(' ')
+  return haystack.includes('planflow-mcp')
+}
+
+export function runSetupCommand(): number {
+  const mcpJsonPath = join(process.cwd(), '.mcp.json')
+
+  let config: McpJson = {}
+  if (existsSync(mcpJsonPath)) {
+    try {
+      const raw = readFileSync(mcpJsonPath, 'utf-8')
+      config = raw.trim() ? (JSON.parse(raw) as McpJson) : {}
+    } catch (err) {
+      process.stderr.write(
+        `planflow-mcp: ${mcpJsonPath} exists but isn't valid JSON — refusing to overwrite.\n` +
+          `  (${String(err)})\n` +
+          `  Fix it by hand, or add "alwaysLoad": true to the planflow-mcp server entry.\n`
+      )
+      return 1
+    }
+  }
+
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    process.stderr.write(`planflow-mcp: ${mcpJsonPath} is not a JSON object — refusing to touch it.\n`)
+    return 1
+  }
+
+  const servers = (config.mcpServers ??= {})
+
+  // Find an already-registered planflow entry (under any key).
+  const existingKey = Object.keys(servers).find((k) => entryIsPlanflow(k, servers[k]!))
+
+  let added = false
+  let alreadyEager = false
+  if (existingKey) {
+    const entry = servers[existingKey]!
+    if (entry.alwaysLoad === true) {
+      alreadyEager = true
+    } else {
+      entry.alwaysLoad = true
+    }
+  } else {
+    servers[MCP_SERVER_KEY] = {
+      command: 'npx',
+      args: ['-y', 'planflow-mcp'],
+      alwaysLoad: true,
+    }
+    added = true
+  }
+
+  if (alreadyEager) {
+    process.stdout.write(
+      `planflow-mcp: ${mcpJsonPath} already loads planflow eagerly (alwaysLoad: true). Nothing to do.\n`
+    )
+    return 0
+  }
+
+  try {
+    writeFileSync(mcpJsonPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
+  } catch (err) {
+    process.stderr.write(`planflow-mcp: failed to write ${mcpJsonPath}: ${String(err)}\n`)
+    return 1
+  }
+
+  process.stdout.write(
+    [
+      `✅ ${added ? 'registered planflow-mcp in' : 'enabled alwaysLoad in'} ${mcpJsonPath}`,
+      '',
+      'Claude Code will now load the planflow tools at session start instead of',
+      'deferring them behind a tool-search step — the tool-first workflow',
+      '(reach for planflow_explore / planflow_search before grep) needs them',
+      'present up front to actually kick in.',
+      '',
+      'Restart Claude Code (or run /mcp reconnect) to pick up the change.',
       '',
     ].join('\n')
   )
@@ -526,6 +640,8 @@ export function runHelpCommand(): number {
       '                                (project-local — Claude uses planflow tools in this repo)',
       '  planflow-mcp init --global    Write the template to ~/.claude/CLAUDE.md',
       '                                (every future Claude Code session uses planflow tools)',
+      '  planflow-mcp setup            Add "alwaysLoad": true to .mcp.json so Claude Code',
+      '                                loads planflow tools eagerly (needed for tool-first)',
       '  planflow-mcp index            Incremental index of the current directory',
       '  planflow-mcp status           Print index status for the linked project',
       '  planflow-mcp progress         Show current long-running tool progress',
@@ -577,6 +693,9 @@ export async function dispatchCli(args: string[]): Promise<boolean> {
       break
     case 'init':
       exitCode = runInitCommand(args.slice(1))
+      break
+    case 'setup':
+      exitCode = runSetupCommand()
       break
     case 'progress':
       exitCode = await runProgressCommand(args.slice(1))

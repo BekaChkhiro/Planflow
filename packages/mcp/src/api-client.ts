@@ -17,6 +17,7 @@ import type {
 } from '@planflow/shared'
 import { ApiError, AuthError } from './errors.js'
 import { getApiToken, getApiUrl, isAuthenticated as checkConfigAuth } from './config.js'
+import { getSessionId, isClaudeCode } from './claude-env.js'
 import { logger } from './logger.js'
 
 // ============================================================
@@ -301,6 +302,19 @@ export class ApiClient {
 
         if (this.token) {
           headers['Authorization'] = `Bearer ${this.token}`
+        }
+
+        // Tag the request with the Claude Code session so the backend can
+        // scope presence/activity to a single session instead of the whole
+        // user — one developer may run several parallel sessions/windows.
+        // Sent as headers (not body) so they're inert for any endpoint that
+        // doesn't read them: unknown headers never break a request.
+        const sessionId = getSessionId()
+        if (sessionId) {
+          headers['x-planflow-session'] = sessionId
+        }
+        if (isClaudeCode()) {
+          headers['x-planflow-client'] = 'claude-code'
         }
 
         const response = await fetch(url, {

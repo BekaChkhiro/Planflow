@@ -11,7 +11,8 @@ import { AuthError, ApiError } from '../errors.js'
 import { logger } from '../logger.js'
 import {
   type ToolDefinition,
-  createSuccessResult,
+  type ToolResult,
+  createStructuredResult,
   createErrorResult,
   formatKeyValue,
 } from './types.js'
@@ -24,6 +25,51 @@ const TaskNextInputSchema = z.object({
 })
 
 type TaskNextInput = z.infer<typeof TaskNextInputSchema>
+
+/**
+ * Structured output — the machine-readable recommendation. `state`
+ * disambiguates the empty / all-done / blocked cases from a real
+ * recommendation so an orchestrator can branch without parsing prose.
+ */
+const StatsSchema = z.object({
+  total: z.number(),
+  todo: z.number(),
+  inProgress: z.number(),
+  done: z.number(),
+  blocked: z.number(),
+  progressPercent: z.number(),
+})
+
+const TaskNextOutputSchema = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+  state: z.enum(['recommendation', 'all_complete', 'no_available', 'empty']),
+  stats: StatsSchema,
+  recommended: z
+    .object({
+      taskId: z.string(),
+      name: z.string(),
+      complexity: z.string(),
+      estimatedHours: z.number().nullable(),
+      dependencies: z.array(z.string()),
+      phase: z.number(),
+      score: z.number(),
+      reasons: z.array(z.string()),
+      unlocksCount: z.number(),
+    })
+    .nullable(),
+  alternatives: z.array(
+    z.object({
+      taskId: z.string(),
+      name: z.string(),
+      complexity: z.string(),
+      estimatedHours: z.number().nullable(),
+      unlocksCount: z.number(),
+    })
+  ),
+})
+
+const ZERO_STATS = { total: 0, todo: 0, inProgress: 0, done: 0, blocked: 0, progressPercent: 0 }
 
 /**
  * Task with computed scoring fields
@@ -267,8 +313,9 @@ Returns:
 You must be logged in first with planflow_login.`,
 
   inputSchema: TaskNextInputSchema,
+  outputSchema: TaskNextOutputSchema,
 
-  async execute(input: TaskNextInput): Promise<ReturnType<typeof createSuccessResult>> {
+  async execute(input: TaskNextInput): Promise<ToolResult> {
     logger.info('Finding next task recommendation', { projectId: input.projectId })
 
     // Check if authenticated locally first
@@ -296,10 +343,18 @@ You must be logged in first with planflow_login.`,
 
       // Handle empty tasks list
       if (tasks.length === 0) {
-        return createSuccessResult(
+        return createStructuredResult(
           `📋 No tasks found in project "${response.projectName}".\n\n` +
             '💡 Tasks are created when you sync your PROJECT_PLAN.md:\n' +
-            `  planflow_sync(projectId: "${input.projectId}", direction: "push")`
+            `  planflow_sync(projectId: "${input.projectId}", direction: "push")`,
+          {
+            projectId: input.projectId,
+            projectName: response.projectName,
+            state: 'empty',
+            stats: ZERO_STATS,
+            recommended: null,
+            alternatives: [],
+          }
         )
       }
 
@@ -337,6 +392,9 @@ You must be logged in first with planflow_login.`,
       }
       const progressPercent = Math.round((stats.done / stats.total) * 100)
 
+      // Machine-readable stats reused across every structured return.
+      const structuredStats = { ...stats, progressPercent }
+
       // Build progress bar
       const progressBarLength = 10
       const filledBlocks = Math.floor(progressPercent / 10)
@@ -345,7 +403,7 @@ You must be logged in first with planflow_login.`,
 
       // Handle all tasks complete
       if (stats.done === stats.total) {
-        return createSuccessResult(
+        return createStructuredResult(
           `🎉 Congratulations! All tasks completed!\n\n` +
             `✅ Project: ${response.projectName}\n` +
             `📊 Progress: ${progressBar} 100%\n` +
@@ -357,7 +415,15 @@ You must be logged in first with planflow_login.`,
             `  • Gather user feedback\n` +
             `  • Plan next version/features\n` +
             `  • Celebrate your success! 🎊\n\n` +
-            `Great work on completing this project! 🚀`
+            `Great work on completing this project! 🚀`,
+          {
+            projectId: input.projectId,
+            projectName: response.projectName,
+            state: 'all_complete',
+            stats: structuredStats,
+            recommended: null,
+            alternatives: [],
+          }
         )
       }
 
@@ -395,7 +461,14 @@ You must be logged in first with planflow_login.`,
           `  • planflow_task_list(projectId: "${input.projectId}", status: "IN_PROGRESS")\n` +
           `  • planflow_task_update(projectId: "${input.projectId}", taskId: "TX.Y", status: "DONE")`
 
-        return createSuccessResult(output)
+        return createStructuredResult(output, {
+          projectId: input.projectId,
+          projectName: response.projectName,
+          state: 'no_available',
+          stats: structuredStats,
+          recommended: null,
+          alternatives: [],
+        })
       }
 
       // Score all available tasks
@@ -510,7 +583,30 @@ You must be logged in first with planflow_login.`,
         alternativeCount: alternatives.length,
       })
 
-      return createSuccessResult(output)
+      return createStructuredResult(output, {
+        projectId: input.projectId,
+        projectName: response.projectName,
+        state: 'recommendation',
+        stats: structuredStats,
+        recommended: {
+          taskId: recommended.taskId,
+          name: recommended.name,
+          complexity: recommended.complexity,
+          estimatedHours: recommended.estimatedHours ?? null,
+          dependencies: recommended.dependencies,
+          phase: recommended.phase,
+          score: recommended.score,
+          reasons: recommended.reasons,
+          unlocksCount: recommended.unlocksCount,
+        },
+        alternatives: alternatives.map((alt) => ({
+          taskId: alt.taskId,
+          name: alt.name,
+          complexity: alt.complexity,
+          estimatedHours: alt.estimatedHours ?? null,
+          unlocksCount: alt.unlocksCount,
+        })),
+      })
     } catch (error) {
       logger.error('Failed to find next task', {
         error: String(error),

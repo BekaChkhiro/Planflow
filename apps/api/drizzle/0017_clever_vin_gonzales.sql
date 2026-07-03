@@ -1,0 +1,1 @@
+ALTER TABLE "task_pipelines" ADD COLUMN "session_url" text;

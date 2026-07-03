@@ -13,6 +13,7 @@ export const taskPipelines = pgTable('task_pipelines', {
   fireUrl: text('fire_url').notNull(),
   tokenEncrypted: text('token_encrypted').notNull(),
   currentTaskId: text('current_task_id'),
+  sessionUrl: text('session_url'),
   lastFiredTaskId: text('last_fired_task_id'),
   lastFiredAt: timestamp('last_fired_at', { withTimezone: true }),
   message: text('message'),

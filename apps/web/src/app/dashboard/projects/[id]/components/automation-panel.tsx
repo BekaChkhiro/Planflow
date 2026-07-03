@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card'
 interface PipelineState {
   status: string
   currentTaskId?: string | null
+  sessionUrl?: string | null
   message?: string | null
 }
 interface RoutineCfg {
@@ -136,9 +137,21 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
                   </span>
                 )}
               </div>
-              {pipeline?.message && (
-                <p className="truncate text-xs text-muted-foreground">{pipeline.message}</p>
-              )}
+              <div className="flex items-center gap-2">
+                {pipeline?.message && (
+                  <p className="truncate text-xs text-muted-foreground">{pipeline.message}</p>
+                )}
+                {pipeline?.sessionUrl && (
+                  <a
+                    href={pipeline.sessionUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-primary hover:underline"
+                  >
+                    Open session <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
             </>
           ) : (
             <>

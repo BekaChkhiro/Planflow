@@ -28,6 +28,7 @@ interface Pipeline {
   token: string // in-memory only, never persisted
   status: PipelineStatus
   currentTaskId?: string
+  sessionUrl?: string
   lastFiredTaskId?: string
   lastFiredAt?: number
   startedAt: number
@@ -41,6 +42,7 @@ export interface PipelineState {
   projectId: string
   status: PipelineStatus
   currentTaskId?: string
+  sessionUrl?: string
   message?: string
   startedAt: number
 }
@@ -50,6 +52,7 @@ function publicState(p: Pipeline): PipelineState {
     projectId: p.projectId,
     status: p.status,
     currentTaskId: p.currentTaskId,
+    sessionUrl: p.sessionUrl,
     message: p.message,
     startedAt: p.startedAt,
   }
@@ -103,6 +106,7 @@ async function persist(p: Pipeline): Promise<void> {
     fireUrl: p.fireUrl,
     tokenEncrypted: encryptSecret(p.token),
     currentTaskId: p.currentTaskId ?? null,
+    sessionUrl: p.sessionUrl ?? null,
     lastFiredTaskId: p.lastFiredTaskId ?? null,
     lastFiredAt: p.lastFiredAt ? new Date(p.lastFiredAt) : null,
     message: p.message ?? null,
@@ -140,6 +144,7 @@ export async function loadPipelinesFromDb(): Promise<void> {
         token: decryptSecret(r.tokenEncrypted),
         status: r.status as PipelineStatus,
         currentTaskId: r.currentTaskId ?? undefined,
+        sessionUrl: r.sessionUrl ?? undefined,
         lastFiredTaskId: r.lastFiredTaskId ?? undefined,
         lastFiredAt: r.lastFiredAt ? r.lastFiredAt.getTime() : undefined,
         message: r.message ?? undefined,
@@ -239,11 +244,13 @@ async function fireTask(p: Pipeline, task: TaskRow): Promise<void> {
       body: JSON.stringify({ text }),
     })
     if (res.ok) {
+      const data = (await res.json().catch(() => null)) as { claude_code_session_url?: string } | null
       p.lastFiredTaskId = task.taskId
       p.lastFiredAt = Date.now()
+      p.sessionUrl = data?.claude_code_session_url ?? p.sessionUrl
       p.message = `Started ${task.taskId}: ${task.name}`
       void persist(p)
-      log.info({ projectId: p.projectId, taskId: task.taskId }, 'pipeline fired task')
+      log.info({ projectId: p.projectId, taskId: task.taskId, session: p.sessionUrl }, 'pipeline fired task')
     } else {
       const body = await res.text()
       p.status = 'error'

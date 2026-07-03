@@ -258,15 +258,20 @@ async function fireTask(p: Pipeline, task: TaskRow): Promise<void> {
 
 function buildTaskPrompt(projectId: string, task: TaskRow): string {
   return [
-    `Execute PlanFlow task ${task.taskId} end-to-end in this repository. Work on ONLY this task.`,
+    `Execute EXACTLY this PlanFlow task and NOTHING else: ${task.taskId}.`,
     `Title: ${task.name}`,
     task.description ? `Description: ${task.description}` : '',
     '',
+    'STRICT RULES:',
+    `- Work on task ${task.taskId} ONLY. Do NOT call planflow_task_next. Do NOT choose, start, or implement any other task.`,
+    `- The taskId to pass to every planflow tool is exactly "${task.taskId}" for project "${projectId}". Never substitute a different taskId.`,
+    `- If task ${task.taskId} is already DONE, or does not apply to this repository, STOP immediately and do nothing — do NOT pick another task.`,
+    '',
     'Steps:',
-    `1. Call planflow_task_start with projectId "${projectId}" and taskId "${task.taskId}".`,
-    `2. Implement the task fully on a \`claude/task-${task.taskId}\` branch. Run the project's tests and make them pass.`,
-    '3. Open a pull request. Resolve any merge conflicts so it is mergeable, then MERGE the PR into the default branch yourself.',
-    `4. Only after the PR is merged, call planflow_task_done with projectId "${projectId}", taskId "${task.taskId}", and a short summary.`,
+    `1. Call planflow_task_start(projectId: "${projectId}", taskId: "${task.taskId}").`,
+    `2. Implement task ${task.taskId} fully on a \`claude/task-${task.taskId}\` branch. Run the build and tests and make them pass.`,
+    '3. Open a pull request. Resolve any conflicts so it is mergeable, then MERGE the PR into the default branch yourself.',
+    `4. Only after the PR is merged, call planflow_task_done(projectId: "${projectId}", taskId: "${task.taskId}") with a short summary.`,
   ]
     .filter(Boolean)
     .join('\n')

@@ -19,6 +19,7 @@ const log = loggers.server
 
 const ROUTINE_BETA = 'experimental-cc-routine-2026-04-01'
 const REFIRE_COOLDOWN_MS = 30 * 60 * 1000 // don't re-fire the same task within 30 min
+const STALL_TIMEOUT_MS = 60 * 60 * 1000 // an IN_PROGRESS task with no PR after 60 min is stalled
 
 export type PipelineStatus = 'running' | 'paused' | 'completed' | 'error'
 
@@ -211,7 +212,23 @@ async function tickOne(projectId: string): Promise<void> {
   }
 
   if (current.status === 'IN_PROGRESS') {
-    p.message = `Working on ${current.taskId} — waiting for its PR to merge`
+    const hasPR = !!current.githubPrState
+    const firedAgo = p.lastFiredAt ? Date.now() - p.lastFiredAt : Number.POSITIVE_INFINITY
+    // Stalled: we started this task, but no PR ever appeared. The session likely
+    // failed to make progress — mark it blocked and pause rather than leave it
+    // stuck "active" forever.
+    if (!hasPR && p.lastFiredTaskId === current.taskId && firedAgo > STALL_TIMEOUT_MS) {
+      await setTaskStatus(current.id, 'BLOCKED')
+      p.sessionUrl = undefined
+      p.status = 'paused'
+      p.message = `Task ${current.taskId} made no progress (no PR after ${Math.round(
+        STALL_TIMEOUT_MS / 60000
+      )} min) — marked blocked, pipeline paused. Check the session, then resume.`
+      return
+    }
+    p.message = hasPR
+      ? `${current.taskId}: PR open — waiting for it to merge`
+      : `Working on ${current.taskId}…`
     return // gate: do not advance until merged
   }
 
@@ -249,17 +266,30 @@ async function fireTask(p: Pipeline, task: TaskRow): Promise<void> {
       p.lastFiredAt = Date.now()
       p.sessionUrl = data?.claude_code_session_url ?? p.sessionUrl
       p.message = `Started ${task.taskId}: ${task.name}`
+      // Mark the task active immediately — a session is now working on it.
+      await setTaskStatus(task.id, 'IN_PROGRESS')
       void persist(p)
       log.info({ projectId: p.projectId, taskId: task.taskId, session: p.sessionUrl }, 'pipeline fired task')
     } else {
       const body = await res.text()
+      // The session did not start — do not leave the task marked active.
+      await setTaskStatus(task.id, 'TODO')
       p.status = 'error'
       p.message = `Failed to start ${task.taskId} (HTTP ${res.status}). Check the routine URL/token.`
       log.error({ status: res.status, body }, 'pipeline fire failed')
     }
   } catch (e) {
+    await setTaskStatus(task.id, 'TODO')
     p.status = 'error'
     p.message = `Error starting ${task.taskId}: ${e instanceof Error ? e.message : String(e)}`
+  }
+}
+
+async function setTaskStatus(taskDbId: string, status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'): Promise<void> {
+  try {
+    await getDbClient().update(schema.tasks).set({ status }).where(eq(schema.tasks.id, taskDbId))
+  } catch {
+    /* best effort */
   }
 }
 

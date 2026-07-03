@@ -85,6 +85,30 @@ export class PlanflowClient {
       body: JSON.stringify(patch),
     })
   }
+  deleteTasks(projectId: string, taskIds: string[]) {
+    return this.req(`/projects/${projectId}/tasks/bulk-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ taskIds }),
+    })
+  }
+  bulkUpdateTasks(projectId: string, tasks: unknown[]) {
+    return this.req(`/projects/${projectId}/tasks`, {
+      method: 'PUT',
+      body: JSON.stringify({ tasks }),
+    })
+  }
+  reorderTasks(projectId: string, tasks: Array<{ taskId: string; displayOrder: number }>) {
+    return this.req(`/projects/${projectId}/tasks/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ tasks }),
+    })
+  }
+  updatePlan(projectId: string, plan: string) {
+    return this.req(`/projects/${projectId}/plan`, {
+      method: 'PUT',
+      body: JSON.stringify({ plan }),
+    })
+  }
   workingOn(projectId: string, taskId: string) {
     return this.req(`/projects/${projectId}/tasks/${taskId}/work`, { method: 'POST', body: '{}' })
   }

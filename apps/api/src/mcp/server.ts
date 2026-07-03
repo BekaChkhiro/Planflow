@@ -112,6 +112,46 @@ export function buildMcpServer(apiBase: string, token: string): McpServer {
     { projectId: z.string(), taskId: z.string() },
     ({ projectId, taskId }) => c.workingOn(projectId, taskId)
   )
+  tool(
+    'planflow_task_delete',
+    'Delete one or more tasks by their human task IDs (e.g. ["T1.2","T1.3"]).',
+    { projectId: z.string(), taskIds: z.array(z.string()) },
+    ({ projectId, taskIds }) => c.deleteTasks(projectId, taskIds)
+  )
+  tool(
+    'planflow_tasks_bulk_update',
+    'Bulk-update multiple existing tasks. Each item needs a taskId plus the fields to change.',
+    {
+      projectId: z.string(),
+      tasks: z.array(
+        z.object({
+          taskId: z.string(),
+          name: z.string().optional(),
+          description: z.string().optional(),
+          status: z.enum(['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED']).optional(),
+          complexity: z.enum(['Low', 'Medium', 'High']).optional(),
+          estimatedHours: z.number().optional(),
+          dependencies: z.array(z.string()).optional(),
+        })
+      ),
+    },
+    ({ projectId, tasks }) => c.bulkUpdateTasks(projectId, tasks)
+  )
+  tool(
+    'planflow_tasks_reorder',
+    'Reorder tasks on the board. Provide each taskId with its new displayOrder.',
+    {
+      projectId: z.string(),
+      tasks: z.array(z.object({ taskId: z.string(), displayOrder: z.number() })),
+    },
+    ({ projectId, tasks }) => c.reorderTasks(projectId, tasks)
+  )
+  tool(
+    'planflow_plan_update',
+    'Replace the project plan (PROJECT_PLAN.md markdown). Tasks are automatically re-parsed and synced from the new plan — use this to rebuild or restructure the whole plan from scratch.',
+    { projectId: z.string(), plan: z.string().describe('Full PROJECT_PLAN.md markdown') },
+    ({ projectId, plan }) => c.updatePlan(projectId, plan)
+  )
 
   // Comments
   tool('planflow_comments', 'List comments on a task.', { projectId: z.string(), taskId: z.string() }, ({ projectId, taskId }) =>

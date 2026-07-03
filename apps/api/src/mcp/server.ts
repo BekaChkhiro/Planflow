@@ -113,6 +113,33 @@ export function buildMcpServer(apiBase: string, token: string): McpServer {
     ({ projectId, taskId }) => c.workingOn(projectId, taskId)
   )
   tool(
+    'planflow_task_create',
+    'Create a new task. Appends it to the project plan (which is re-synced to create the task). Pick a unique taskId like "T3.5" — call planflow_task_list first to choose the next free number.',
+    {
+      projectId: z.string(),
+      taskId: z.string().describe('Unique human ID, e.g. "T3.5"'),
+      name: z.string(),
+      description: z.string().optional(),
+      complexity: z.enum(['Low', 'Medium', 'High']).optional(),
+      status: z.enum(['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED']).optional(),
+      dependencies: z.array(z.string()).optional(),
+    },
+    async ({ projectId, taskId, name, description, complexity, status, dependencies }) => {
+      const planRes: any = await c.projectPlan(projectId)
+      const current: string = (typeof planRes === 'string' ? planRes : planRes?.plan) || ''
+      const checkbox = status === 'DONE' ? 'x' : ' '
+      const lines = [
+        `#### **${taskId}**: ${name}`,
+        `- [${checkbox}] **Status**: ${status ?? 'TODO'}`,
+      ]
+      if (complexity) lines.push(`- **Complexity**: ${complexity}`)
+      if (dependencies?.length) lines.push(`- **Dependencies**: ${dependencies.join(', ')}`)
+      if (description) lines.push(`- **Description**: ${description}`)
+      const newPlan = `${current.trimEnd()}\n\n${lines.join('\n')}\n`
+      return c.updatePlan(projectId, newPlan)
+    }
+  )
+  tool(
     'planflow_task_delete',
     'Delete one or more tasks by their human task IDs (e.g. ["T1.2","T1.3"]).',
     { projectId: z.string(), taskIds: z.array(z.string()) },

@@ -264,24 +264,40 @@ async function fireTask(p: Pipeline, task: TaskRow): Promise<void> {
 }
 
 function buildTaskPrompt(projectId: string, task: TaskRow): string {
-  return [
+  const lines: string[] = [
     `Execute EXACTLY this PlanFlow task and NOTHING else: ${task.taskId}.`,
-    `Title: ${task.name}`,
-    task.description ? `Description: ${task.description}` : '',
+    '',
+    'TASK CONTEXT:',
+    `- PlanFlow project ID: ${projectId}`,
+    `- Task ID: ${task.taskId}`,
+    `- Title: ${task.name}`,
+  ]
+  if (task.description) lines.push(`- Description: ${task.description}`)
+  if (task.complexity) lines.push(`- Complexity: ${task.complexity}`)
+  if (task.estimatedHours) lines.push(`- Estimated hours: ${task.estimatedHours}`)
+  if (task.dependencies && task.dependencies.length > 0) {
+    lines.push(`- Depends on: ${task.dependencies.join(', ')} (these should already be done)`)
+  }
+
+  lines.push(
+    '',
+    'GATHER FULL CONTEXT before writing any code:',
+    `1. Call planflow_project_plan(projectId: "${projectId}") and read the section for ${task.taskId} — the plan holds the detailed spec and acceptance criteria.`,
+    `2. Call planflow_comments(projectId: "${projectId}", taskId: "${task.taskId}") to read any notes or decisions on this task.`,
+    `3. Use planflow_search / planflow_explore to find the relevant existing code, and read CLAUDE.md and neighbouring files to match the repo's conventions.`,
     '',
     'STRICT RULES:',
     `- Work on task ${task.taskId} ONLY. Do NOT call planflow_task_next. Do NOT choose, start, or implement any other task.`,
-    `- The taskId to pass to every planflow tool is exactly "${task.taskId}" for project "${projectId}". Never substitute a different taskId.`,
-    `- If task ${task.taskId} is already DONE, or does not apply to this repository, STOP immediately and do nothing — do NOT pick another task.`,
+    `- The taskId for every planflow tool is exactly "${task.taskId}". Never substitute a different taskId.`,
+    `- If task ${task.taskId} is already DONE, or genuinely does not apply to this repository, STOP immediately and do nothing — do NOT pick another task.`,
     '',
-    'Steps:',
-    `1. Call planflow_task_start(projectId: "${projectId}", taskId: "${task.taskId}").`,
-    `2. Implement task ${task.taskId} fully on a \`claude/task-${task.taskId}\` branch. Run the build and tests and make them pass.`,
+    'STEPS:',
+    `1. planflow_task_start(projectId: "${projectId}", taskId: "${task.taskId}").`,
+    `2. Implement task ${task.taskId} fully on a \`claude/task-${task.taskId}\` branch, honouring the plan's acceptance criteria. Run the build and tests until they pass.`,
     '3. Open a pull request. Resolve any conflicts so it is mergeable, then MERGE the PR into the default branch yourself.',
-    `4. Only after the PR is merged, call planflow_task_done(projectId: "${projectId}", taskId: "${task.taskId}") with a short summary.`,
-  ]
-    .filter(Boolean)
-    .join('\n')
+    `4. Only after the PR is merged, planflow_task_done(projectId: "${projectId}", taskId: "${task.taskId}") with a short summary of what shipped.`
+  )
+  return lines.join('\n')
 }
 
 // MARK: - Worker

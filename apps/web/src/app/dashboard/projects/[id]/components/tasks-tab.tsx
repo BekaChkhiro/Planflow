@@ -46,6 +46,7 @@ import { useBulkStatusUpdate, useBulkAssign, useBulkDelete } from '@/hooks/use-b
 import { Checkbox } from '@/components/ui/checkbox'
 import type { PresenceStatus } from '@/hooks/use-presence'
 import { Button } from '@/components/ui/button'
+import { AutomationPanel } from './automation-panel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator as _Separator } from '@/components/ui/separator'
@@ -954,6 +955,9 @@ export function TasksTab({
 
   return (
     <div className="space-y-4">
+      {/* Task automation pipeline */}
+      <AutomationPanel projectId={projectId} />
+
       {/* Toolbar */}
       <Card>
         <CardContent className="space-y-4 py-4">

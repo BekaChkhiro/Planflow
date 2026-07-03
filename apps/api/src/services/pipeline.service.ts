@@ -13,6 +13,7 @@ import cron from 'node-cron'
 import { eq } from 'drizzle-orm'
 import { getDbClient, schema } from '../db/index.js'
 import { loggers } from '../lib/logger.js'
+import { encryptSecret, decryptSecret } from '../lib/crypto.js'
 
 const log = loggers.server
 
@@ -64,6 +65,7 @@ export function startPipeline(projectId: string, fireUrl: string, token: string)
     message: 'Starting…',
   }
   pipelines.set(projectId, p)
+  void persist(p)
   void tickOne(projectId)
   return publicState(p)
 }
@@ -73,6 +75,7 @@ export function pausePipeline(projectId: string): PipelineState | null {
   if (!p) return null
   p.status = 'paused'
   p.message = 'Paused'
+  void persist(p)
   return publicState(p)
 }
 
@@ -81,12 +84,72 @@ export function resumePipeline(projectId: string): PipelineState | null {
   if (!p) return null
   p.status = 'running'
   p.message = 'Resuming…'
+  void persist(p)
   void tickOne(projectId)
   return publicState(p)
 }
 
 export function stopPipeline(projectId: string): boolean {
+  void removeFromDb(projectId)
   return pipelines.delete(projectId)
+}
+
+// MARK: - Durable persistence (survives API restarts)
+
+async function persist(p: Pipeline): Promise<void> {
+  const row = {
+    projectId: p.projectId,
+    status: p.status,
+    fireUrl: p.fireUrl,
+    tokenEncrypted: encryptSecret(p.token),
+    currentTaskId: p.currentTaskId ?? null,
+    lastFiredTaskId: p.lastFiredTaskId ?? null,
+    lastFiredAt: p.lastFiredAt ? new Date(p.lastFiredAt) : null,
+    message: p.message ?? null,
+    startedAt: new Date(p.startedAt),
+    updatedAt: new Date(),
+  }
+  try {
+    const db = getDbClient()
+    await db
+      .insert(schema.taskPipelines)
+      .values(row)
+      .onConflictDoUpdate({ target: schema.taskPipelines.projectId, set: row })
+  } catch (e) {
+    log.warn({ err: e }, 'pipeline persist failed (run db:push to create task_pipelines?)')
+  }
+}
+
+async function removeFromDb(projectId: string): Promise<void> {
+  try {
+    await getDbClient().delete(schema.taskPipelines).where(eq(schema.taskPipelines.projectId, projectId))
+  } catch {
+    /* best effort */
+  }
+}
+
+/** Reloads active pipelines from the DB on boot so they resume after a restart. */
+export async function loadPipelinesFromDb(): Promise<void> {
+  try {
+    const rows = await getDbClient().select().from(schema.taskPipelines)
+    for (const r of rows) {
+      if (r.status === 'completed') continue
+      pipelines.set(r.projectId, {
+        projectId: r.projectId,
+        fireUrl: r.fireUrl,
+        token: decryptSecret(r.tokenEncrypted),
+        status: r.status as PipelineStatus,
+        currentTaskId: r.currentTaskId ?? undefined,
+        lastFiredTaskId: r.lastFiredTaskId ?? undefined,
+        lastFiredAt: r.lastFiredAt ? r.lastFiredAt.getTime() : undefined,
+        message: r.message ?? undefined,
+        startedAt: r.startedAt.getTime(),
+      })
+    }
+    if (pipelines.size > 0) log.info({ count: pipelines.size }, 'resumed pipelines from db')
+  } catch (e) {
+    log.warn({ err: e }, 'pipeline load failed (run db:push to create task_pipelines?)')
+  }
 }
 
 export function getPipeline(projectId: string): PipelineState | null {
@@ -179,6 +242,7 @@ async function fireTask(p: Pipeline, task: TaskRow): Promise<void> {
       p.lastFiredTaskId = task.taskId
       p.lastFiredAt = Date.now()
       p.message = `Started ${task.taskId}: ${task.name}`
+      void persist(p)
       log.info({ projectId: p.projectId, taskId: task.taskId }, 'pipeline fired task')
     } else {
       const body = await res.text()
@@ -214,10 +278,13 @@ let worker: cron.ScheduledTask | null = null
 
 export function initPipelineWorker(): void {
   if (worker) return
+  void loadPipelinesFromDb()
   worker = cron.schedule('*/3 * * * *', async () => {
     for (const projectId of pipelines.keys()) {
       try {
         await tickOne(projectId)
+        const p = pipelines.get(projectId)
+        if (p) void persist(p)
       } catch (e) {
         log.error({ projectId, err: e }, 'pipeline tick error')
       }

@@ -142,9 +142,24 @@ export function AutomationPanel({ projectId }: { projectId: string }) {
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold">Auto-run all tasks in sequence</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold">Auto-run all tasks in sequence</p>
+                {config === null ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+                    Not connected
+                  </span>
+                ) : config?.hasToken ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                    Connected
+                  </span>
+                ) : null}
+              </div>
               <p className="text-xs text-muted-foreground">
-                Runs on the PlanFlow server — continues even if you close your browser or laptop.
+                {config?.hasToken
+                  ? 'Routine linked — the pipeline runs on the PlanFlow server, even if you close your browser or laptop.'
+                  : 'Connect a Claude Code routine (⚙️) to run tasks automatically on the server.'}
               </p>
             </>
           )}

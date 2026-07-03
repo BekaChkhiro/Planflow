@@ -34,6 +34,7 @@ import {
   isRedisAvailable,
 } from './lib/redis.js'
 import { configurePush } from './lib/push.js'
+import { handleMcpRequest } from './mcp/http.js'
 import { setupWebSocketServer } from './websocket/index.js'
 import { closePool } from './db/index.js'
 
@@ -86,6 +87,11 @@ app.onError(sentryErrorHandler)
 // =============================================================================
 // MOUNT ROUTES
 // =============================================================================
+
+// Hosted MCP endpoint (public URL, per-user token carried in the URL).
+// Add `https://<host>/mcp/<your-planflow-api-token>` as a claude.ai connector.
+app.all('/mcp/:token', (c) => handleMcpRequest(c))
+app.all('/mcp', (c) => handleMcpRequest(c))
 
 // Health check and docs routes (no prefix)
 app.route('/', healthRoutes)

@@ -20,7 +20,10 @@ export async function handleMcpRequest(c: Context): Promise<Response> {
     )
   }
 
-  const apiBase = url.origin
+  // Call the API on the loopback interface, not the public origin: going back
+  // out through the edge proxy triggers an http→https redirect, and fetch drops
+  // the Authorization header across that redirect (→ "Authentication required").
+  const apiBase = process.env.MCP_SELF_URL || `http://127.0.0.1:${process.env.PORT || 3001}`
   const server = buildMcpServer(apiBase, token)
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless

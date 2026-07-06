@@ -117,6 +117,16 @@ export class PlanflowClient {
   taskAttachments(projectId: string, taskId: string) {
     return this.req(`/projects/${projectId}/tasks/${taskId}/attachments`)
   }
+  addAttachment(
+    projectId: string,
+    taskId: string,
+    source: { url?: string; dataBase64?: string; filename?: string; mimeType?: string }
+  ) {
+    return this.req(`/projects/${projectId}/tasks/${taskId}/attachments/remote`, {
+      method: 'POST',
+      body: JSON.stringify(source),
+    })
+  }
   /** Fetches raw bytes from a presigned download URL (used to embed images). */
   async fetchBytes(url: string): Promise<{ base64: string; mimeType: string }> {
     const res = await fetch(url)

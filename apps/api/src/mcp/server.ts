@@ -113,6 +113,19 @@ export function buildMcpServer(apiBase: string, token: string): McpServer {
     { projectId: z.string(), taskId: z.string() },
     ({ projectId, taskId }) => c.workingOn(projectId, taskId)
   )
+  tool(
+    'planflow_task_add_attachment',
+    'Attach a file or image to a task. Provide EITHER "url" (the server downloads it) OR "dataBase64" (raw bytes, base64-encoded). Use this to attach mockups, screenshots, or reference files so they become part of the task\'s context. Note: cannot capture an image you only see via vision in chat — you must pass a URL or base64 bytes.',
+    {
+      projectId: z.string(),
+      taskId: z.string().describe('Human task ID, e.g. "T1.2"'),
+      url: z.string().optional().describe('Public http(s) URL to fetch the file from'),
+      dataBase64: z.string().optional().describe('Base64-encoded file bytes (data: URIs are accepted)'),
+      filename: z.string().optional().describe('File name, e.g. "mockup.png" (inferred from URL if omitted)'),
+      mimeType: z.string().optional().describe('MIME type, e.g. "image/png" (inferred if omitted)'),
+    },
+    ({ projectId, taskId, ...source }) => c.addAttachment(projectId, taskId, source)
+  )
   // Attachments — returns image files inline as viewable image blocks so the
   // agent can actually SEE mockups/screenshots; other files come back as
   // download links plus metadata.

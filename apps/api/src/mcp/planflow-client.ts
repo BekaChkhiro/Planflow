@@ -113,6 +113,19 @@ export class PlanflowClient {
     return this.req(`/projects/${projectId}/tasks/${taskId}/work`, { method: 'POST', body: '{}' })
   }
 
+  // Attachments
+  taskAttachments(projectId: string, taskId: string) {
+    return this.req(`/projects/${projectId}/tasks/${taskId}/attachments`)
+  }
+  /** Fetches raw bytes from a presigned download URL (used to embed images). */
+  async fetchBytes(url: string): Promise<{ base64: string; mimeType: string }> {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`)
+    const mimeType = res.headers.get('content-type') || 'application/octet-stream'
+    const buf = Buffer.from(await res.arrayBuffer())
+    return { base64: buf.toString('base64'), mimeType }
+  }
+
   // Comments
   comments(projectId: string, taskId: string) {
     return this.req(`/projects/${projectId}/tasks/${taskId}/comments`)

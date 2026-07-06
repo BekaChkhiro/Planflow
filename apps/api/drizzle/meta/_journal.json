@@ -127,6 +127,13 @@
       "when": 1783098211252,
       "tag": "0017_clever_vin_gonzales",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783326078340,
+      "tag": "0018_add_task_details_and_attachments",
+      "breakpoints": true
     }
   ]
 }

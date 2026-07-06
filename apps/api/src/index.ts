@@ -36,6 +36,7 @@ import {
 import { configurePush } from './lib/push.js'
 import { handleMcpRequest } from './mcp/http.js'
 import { pipelineRoutes } from './routes/pipeline.routes.js'
+import { attachmentsRoutes } from './routes/attachments.routes.js'
 import { initPipelineWorker } from './services/pipeline.service.js'
 import { setupWebSocketServer } from './websocket/index.js'
 import { closePool } from './db/index.js'
@@ -148,6 +149,7 @@ app.route('/projects', ragRoutes)
 
 // Sequential task pipeline (server-side orchestrator)
 app.route('/projects', pipelineRoutes)
+app.route('/projects', attachmentsRoutes)
 
 // Integration routes (Slack, Discord, GitHub)
 // Note: This file also contains /organizations/:id/integrations routes

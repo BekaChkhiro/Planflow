@@ -1035,6 +1035,7 @@ projectRoutes.get('/:id/tasks', auth, async (c) => {
         taskId: schema.tasks.taskId,
         name: schema.tasks.name,
         description: schema.tasks.description,
+        details: schema.tasks.details,
         status: schema.tasks.status,
         complexity: schema.tasks.complexity,
         estimatedHours: schema.tasks.estimatedHours,
@@ -1334,6 +1335,7 @@ projectRoutes.patch('/:id/tasks/:taskId', auth, async (c) => {
     }
     if (body.name !== undefined) updateData['name'] = body.name
     if (body.description !== undefined) updateData['description'] = body.description
+    if (body.details !== undefined) updateData['details'] = body.details
     if (body.status !== undefined) updateData['status'] = body.status
     if (body.complexity !== undefined) updateData['complexity'] = body.complexity
     if (body.estimatedHours !== undefined) updateData['estimatedHours'] = body.estimatedHours
@@ -1349,6 +1351,7 @@ projectRoutes.patch('/:id/tasks/:taskId', auth, async (c) => {
         taskId: schema.tasks.taskId,
         name: schema.tasks.name,
         description: schema.tasks.description,
+        details: schema.tasks.details,
         status: schema.tasks.status,
         complexity: schema.tasks.complexity,
         estimatedHours: schema.tasks.estimatedHours,

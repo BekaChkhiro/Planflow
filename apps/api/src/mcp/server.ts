@@ -94,12 +94,13 @@ export function buildMcpServer(apiBase: string, token: string): McpServer {
   )
   tool(
     'planflow_task_edit',
-    'Edit a task\'s fields (name, description, complexity, estimatedHours, dependencies).',
+    'Edit a task\'s fields. "details" is the full rich markdown spec / context for the task (unlimited length) — use it to capture the complete requirements, acceptance criteria, and implementation notes.',
     {
       projectId: z.string(),
       taskId: z.string(),
       name: z.string().optional(),
       description: z.string().optional(),
+      details: z.string().optional().describe('Full rich markdown context / spec for the task'),
       complexity: z.enum(['Low', 'Medium', 'High']).optional(),
       estimatedHours: z.number().optional(),
       dependencies: z.array(z.string()).optional(),
@@ -111,6 +112,46 @@ export function buildMcpServer(apiBase: string, token: string): McpServer {
     'Signal that you are actively working on a task (presence + lock).',
     { projectId: z.string(), taskId: z.string() },
     ({ projectId, taskId }) => c.workingOn(projectId, taskId)
+  )
+  // Attachments — returns image files inline as viewable image blocks so the
+  // agent can actually SEE mockups/screenshots; other files come back as
+  // download links plus metadata.
+  server.tool(
+    'planflow_task_attachments',
+    'Get a task\'s attached files and images. Images are returned inline (viewable); other files are returned as short-lived download URLs. Call this to see design mockups, screenshots, and reference files a task depends on.',
+    { projectId: z.string(), taskId: z.string().describe('Human task ID, e.g. "T1.2"') },
+    (async ({ projectId, taskId }: { projectId: string; taskId: string }) => {
+      try {
+        const res: any = await c.taskAttachments(projectId, taskId)
+        const items: any[] = res?.attachments ?? res ?? []
+        const content: Array<Record<string, unknown>> = []
+        if (!items.length) {
+          return { content: [{ type: 'text', text: 'No attachments on this task.' }] }
+        }
+        const summary = items.map(
+          (a) => `- ${a.filename} (${a.mimeType}, ${Math.round((a.sizeBytes ?? 0) / 1024)} KB)`
+        )
+        content.push({ type: 'text', text: `Attachments for ${taskId}:\n${summary.join('\n')}` })
+        for (const a of items) {
+          if (a.isImage && a.downloadUrl) {
+            try {
+              const { base64, mimeType } = await c.fetchBytes(a.downloadUrl)
+              content.push({ type: 'text', text: `Image: ${a.filename}` })
+              content.push({ type: 'image', data: base64, mimeType })
+              continue
+            } catch {
+              /* fall back to link */
+            }
+          }
+          if (a.downloadUrl) {
+            content.push({ type: 'text', text: `File ${a.filename}: ${a.downloadUrl}` })
+          }
+        }
+        return { content }
+      } catch (e) {
+        return fail(e)
+      }
+    }) as any
   )
   tool(
     'planflow_task_create',

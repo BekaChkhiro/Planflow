@@ -308,13 +308,17 @@ function buildTaskPrompt(projectId: string, task: TaskRow): string {
   if (task.dependencies && task.dependencies.length > 0) {
     lines.push(`- Depends on: ${task.dependencies.join(', ')} (these should already be done)`)
   }
+  if (task.details) {
+    lines.push('', 'FULL SPEC (task details):', task.details)
+  }
 
   lines.push(
     '',
     'GATHER FULL CONTEXT before writing any code:',
     `1. Call planflow_project_plan(projectId: "${projectId}") and read the section for ${task.taskId} — the plan holds the detailed spec and acceptance criteria.`,
     `2. Call planflow_comments(projectId: "${projectId}", taskId: "${task.taskId}") to read any notes or decisions on this task.`,
-    `3. Use planflow_search / planflow_explore to find the relevant existing code, and read CLAUDE.md and neighbouring files to match the repo's conventions.`,
+    `3. Call planflow_task_attachments(projectId: "${projectId}", taskId: "${task.taskId}") to see any design mockups, screenshots, or reference files attached to this task — implement to match them.`,
+    `4. Use planflow_search / planflow_explore to find the relevant existing code, and read CLAUDE.md and neighbouring files to match the repo's conventions.`,
     '',
     'STRICT RULES:',
     `- Work on task ${task.taskId} ONLY. Do NOT call planflow_task_next. Do NOT choose, start, or implement any other task.`,

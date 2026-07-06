@@ -25,6 +25,8 @@ import { CommentsSection } from '@/components/comments'
 import { GitHubLinkSection } from './github-link-section'
 import { GitHubPrSection } from './github-pr-section'
 import { TaskStatusSelector, type TaskStatus } from './task-status-selector'
+import { TaskAttachments } from './task-attachments'
+import { TaskDetailsEditor } from './task-details-editor'
 import type { PresenceStatus } from '@/hooks/use-presence'
 
 // Task type from the project page
@@ -33,6 +35,7 @@ export interface TaskDetail {
   taskId: string
   name: string
   description?: string | null
+  details?: string | null
   complexity: 'Low' | 'Medium' | 'High'
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
   dependencies: string[]
@@ -270,6 +273,18 @@ export function TaskDetailSheet({
                 </section>
               </>
             )}
+
+            {/* Full spec / details (rich markdown, editable) */}
+            <Separator aria-hidden="true" />
+            <TaskDetailsEditor
+              projectId={projectId}
+              taskDisplayId={task.taskId}
+              initialDetails={task.details}
+            />
+
+            {/* Attachments (files & images) */}
+            <Separator aria-hidden="true" />
+            <TaskAttachments projectId={projectId} taskDisplayId={task.taskId} />
 
             {/* GitHub Issue Link Section (T8.3) */}
             <Separator />

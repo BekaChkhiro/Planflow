@@ -38,6 +38,7 @@ export function toDisplayTasks(tasks: Task[]): DisplayTask[] {
       taskId: task.taskId,
       name: task.name,
       description: task.description,
+      details: task.details,
       complexity: task.complexity,
       status: task.status,
       dependencies: task.dependencies,

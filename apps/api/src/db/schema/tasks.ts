@@ -13,6 +13,7 @@ export const tasks = pgTable('tasks', {
   taskId: text('task_id').notNull(), // e.g., "T1.1", "T2.3"
   name: text('name').notNull(),
   description: text('description'),
+  details: text('details'), // full rich markdown context / spec
   status: taskStatusEnum('status').notNull().default('TODO'),
   complexity: taskComplexityEnum('complexity').notNull().default('Medium'),
   estimatedHours: integer('estimated_hours'),

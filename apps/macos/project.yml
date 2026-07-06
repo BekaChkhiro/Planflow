@@ -1,0 +1,38 @@
+name: PlanFlow
+options:
+  bundleIdPrefix: tools.planflow
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  PlanFlow:
+    type: application
+    platform: macOS
+    sources:
+      - path: PlanFlow
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tools.planflow.mac
+        PRODUCT_NAME: PlanFlow
+        INFOPLIST_FILE: PlanFlow/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PlanFlow/Resources/PlanFlow.entitlements
+        ENABLE_APP_SANDBOX: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COMBINE_HIDPI_IMAGES: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"

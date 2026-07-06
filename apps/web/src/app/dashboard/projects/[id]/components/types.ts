@@ -6,6 +6,7 @@ export interface DisplayTask {
   taskId: string
   name: string
   description: string | null
+  details?: string | null
   complexity: 'Low' | 'Medium' | 'High'
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
   dependencies: string[]

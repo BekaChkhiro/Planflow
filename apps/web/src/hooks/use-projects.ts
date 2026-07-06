@@ -373,6 +373,7 @@ export interface Task {
   taskId: string
   name: string
   description: string | null
+  details?: string | null
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
   complexity: 'Low' | 'Medium' | 'High'
   estimatedHours: number | null
